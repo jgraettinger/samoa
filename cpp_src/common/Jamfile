@@ -1,0 +1,15 @@
+
+project common ;
+
+lib lib_common :
+    [ glob-tree *.cpp ]
+    boost_regex
+    boost_system
+    ;
+
+install install :
+    lib_common
+    :
+    <location>$(INSTALL)
+    ;
+

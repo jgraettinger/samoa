@@ -1,0 +1,22 @@
+
+project cpp_src : requirements <include>. ;
+
+build-project samoa ;
+build-project common ;
+
+exe samoa_server :
+    samoa.cpp
+    /common//lib_common
+    /samoa//lib_samoa
+    /boost//headers
+#    /boost/system//boost_system
+    ;
+
+install install :
+    samoa_server
+    /boost/system//boost_system
+    /boost/regex//boost_regex
+    :
+    <location>$(INSTALL)
+    ;
+

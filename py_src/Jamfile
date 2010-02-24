@@ -1,0 +1,5 @@
+
+install install
+ : [ glob-tree *.py : .svn ]
+ : <location>$(INSTALL) <install-source-root>. ;
+

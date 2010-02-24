@@ -1,0 +1,46 @@
+
+COMPONENTS
+
+entry:
+    - key
+    - [values]
+    - [version-clocks]
+    - [rowids]
+    - expire
+
+cache:
+    - MRU of entry
+    * get(key)
+    * set(key)
+
+client:
+    - outgoing buffers
+    * send_response(?)
+    * recv_command(command)
+
+partition:
+    - cache
+    - sqlite backend connection
+    - [peers] (replication-peers)
+    - offline
+
+server:
+    - acceptor
+    - client list
+    - partition list
+
+partition splits reaches N keys:
+    - server proposes partition X split; on commit:
+    - mark partition X as offline
+    - create empty partitions Xa, Xb, ... Xn, marked offline, with new backends & copys of the peer list
+    - iterate over X's keyspace, pushing values to Xa, Xb, ... Xn
+    - add Xa, Xb, ... Xn to message router; remove X
+    - mark Xa, Xb, ... Xn as online
+
+new member:
+    - server proposes new member Y; on commit:
+    - new server added to meta db
+
+repl partition:
+    - server proposes 
+
