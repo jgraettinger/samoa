@@ -208,7 +208,7 @@ public:
         size_t rec_len = key_length + val_length + record::header_size();
         
         // would cause a wrap?
-        if(_tbl.end + rec_len >= _tbl.region_size)
+        if(_tbl.end + rec_len > _tbl.region_size)
             return records_offset() + rec_len <= _tbl.begin;
         
         if(_tbl.wrap && _tbl.end + rec_len > _tbl.begin)
@@ -245,7 +245,7 @@ public:
         size_t rec_len = key_length + val_length + record::header_size();
         
         // need to wrap?
-        if(_tbl.end + rec_len >= _tbl.region_size)
+        if(_tbl.end + rec_len > _tbl.region_size)
         {
             _tbl.wrap = _tbl.end;
             _tbl.end = records_offset();
@@ -338,7 +338,7 @@ public:
         size_t rec_len = key_length + val_length + record::header_size();
         
         // need to wrap?
-        if(_tbl.end + rec_len >= _tbl.region_size)
+        if(_tbl.end + rec_len > _tbl.region_size)
         {
             _tbl.wrap = _tbl.end;
             _tbl.end = records_offset();

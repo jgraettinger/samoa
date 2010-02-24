@@ -9,6 +9,7 @@ exe samoa_server :
     /common//lib_common
     /samoa//lib_samoa
     /site-config//boost_system
+    /site-config//boost_regex
     ;
 
 install install :

@@ -20,7 +20,7 @@ server::server(
     _host(host),
     _port(port),
     _reactor(reactor),
-    _rhash(new char[1<<20](), 1<<20, 1024)
+    _rhash(new char[(1<<20)](), (1<<20), 1024)
 {
     tcp::resolver resolver(_reactor->io_service());
     

@@ -174,8 +174,8 @@ void client::on_data(const boost::system::error_code & ec, size_t read_length)
     
     // DISPATCH 
     
-    for(size_t i = 0; i != 4 && _server->_rhash.migrate_head() &&
-        !_server->_rhash.would_fit(_request->key.size(), _request->req_data_length); ++i);
+    if(!_server->_rhash.migrate_head())
+        _server->_rhash.drop_head();
     
     if(_server->_rhash.would_fit(_request->key.size(), _request->req_data_length))
     {
