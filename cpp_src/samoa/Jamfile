@@ -3,12 +3,9 @@ project samoa ;
 
 lib lib_samoa :
     [ glob-tree *.cpp ]
-    /boost//headers
-    /boost/regex//boost_regex
-    /boost/system//boost_system
-    : : :
-    <library>/boost/system//boost_system
-    <library>/boost/regex//boost_regex
+    /site-config//boost_regex
+    /site-config//boost_system
+    : <link>static
     ;
 
 install install :

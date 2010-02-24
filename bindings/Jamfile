@@ -3,11 +3,9 @@ project bindings
     : requirements
     <include>../cpp_src 
     <include>.
-    <library>boost_python
 ;
 
 install install :
     :
     <location>$(INSTALL)
     ;
-

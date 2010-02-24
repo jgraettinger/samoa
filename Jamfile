@@ -20,6 +20,8 @@ if $(.user_path)
     path-constant INSTALL : $(.user_path) ;
 }
 
+using python ;
+
 build-project cpp_src ;
 build-project bindings ;
 build-project py_src ;

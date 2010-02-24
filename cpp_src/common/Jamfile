@@ -3,8 +3,9 @@ project common ;
 
 lib lib_common :
     [ glob-tree *.cpp ]
-    boost_regex
-    boost_system
+    /site-config//boost_regex
+    /site-config//boost_system
+    : <link>static
     ;
 
 install install :
