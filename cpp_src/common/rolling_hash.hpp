@@ -1,7 +1,9 @@
-#ifndef SAMOA_MAPPED_HASH_HPP
-#define SAMOA_MAPPED_HASH_HPP
+#ifndef COMMON_ROLLING_HASH_HPP
+#define COMMON_ROLLING_HASH_HPP
 
 #include <boost/functional/hash.hpp>
+#include <stdexcept>
+#include <iostream>
 
 #define __RH_EXTRACT(t, size_array, n_bytes) \
     {\
@@ -30,14 +32,19 @@ enum HashState {
 };
 
 template<
-    int OffsetBytes = 4,
-    int KeyLenBytes = 1,
-    int ValLenBytes = 3,
-    int ExpireBytes = 4
+    int OffsetBytes,
+    int KeyLenBytes,
+    int ValLenBytes,
+    int ExpireBytes
 >
 class rolling_hash
 {
 public:
+    
+    static const int offset_bytes = OffsetBytes;
+    static const int key_len_bytes = KeyLenBytes;
+    static const int val_len_bytes = ValLenBytes;
+    static const int expire_bytes = ExpireBytes;
     
     class record
     {
@@ -51,6 +58,9 @@ public:
         
         unsigned int expiry() const
         { size_t t = 0; __RH_EXTRACT(t, _expiry, ExpireBytes); return t; }
+        
+        bool is_dead() const
+        { return expiry() == 1; }
         
         const char * key() const
         { return ((char*)this) + header_size(); }
@@ -108,10 +118,10 @@ public:
         unsigned char _next[OffsetBytes];
         // 0, or offset of prev record's _next offset
         unsigned char _prev[OffsetBytes];
-
+        
         friend class rolling_hash;
     };
-   
+    
     
     rolling_hash(void * region_ptr, size_t region_size, size_t table_size)
      : _region_ptr((unsigned char *) region_ptr),
@@ -126,6 +136,9 @@ public:
         
         if(_tbl.state == FROZEN)
         {
+            std::cerr << "found FROZEN table" << std::endl;
+
+
             // This is an initialized, persisted table
             if(_tbl.region_size != region_size)
                 throw std::runtime_error("rolling_hash::rolling_hash(): "
@@ -133,7 +146,9 @@ public:
             _tbl.state = ACTIVE;
             return;
         }
-        
+        else
+            std::cerr << "NEW table " << _tbl.state << std::endl;
+
         _tbl.state = ACTIVE;
         _tbl.region_size = region_size;
         _tbl.table_size = table_size;
@@ -308,8 +323,25 @@ public:
         if(!_tbl.wrap && _tbl.begin == _tbl.end)
             return 0;
         
-        record * rec = (record*)(_region_ptr + _tbl.begin);
-        return rec->expiry() == 1 ? 0 : rec;
+        return (record*)(_region_ptr + _tbl.begin);
+    }
+    
+    // Given a record, incremente to next record in
+    //  container. Returns 0 if at end.
+    const record * step(const record * cur) const
+    {
+        size_t cur_off = (unsigned char*)cur - _region_ptr;
+        cur_off += record::header_size() + cur->key_length() + cur->value_length();
+        
+        // wrapped?
+        if(cur_off == _tbl.wrap)
+            cur_off = records_offset();
+        
+        // reached end?
+        if(cur_off == _tbl.end)
+            return 0;
+        
+        return (const record*)(_region_ptr + cur_off);
     }
     
     // least recently added/moved record is moved to the tail of the ring,
@@ -398,10 +430,10 @@ public:
     
 private:
     
-    size_t index_offset()
+    size_t index_offset() const
     { return sizeof(table_header); }
     
-    size_t records_offset()
+    size_t records_offset() const
     { return sizeof(table_header) + _tbl.table_size * OffsetBytes; }
     
     struct table_header {

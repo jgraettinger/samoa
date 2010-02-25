@@ -1,6 +1,7 @@
 
 #include "samoa/client.hpp"
 #include "samoa/server.hpp"
+#include "samoa/partition.hpp"
 #include "common/stream_protocol.hpp"
 #include "common/ref_buffer.hpp"
 #include <boost/regex.hpp>
@@ -23,126 +24,119 @@ std::vector<boost::regex> _cmd_re;
 std::vector<command_handler_t> _cmd_handler;
 
 // Canned responses
-const_buffer_region _resp_newline("\r\n");
-const_buffer_region _resp_ok_version("SAMOA v0.1\r\n");
-const_buffer_region _resp_ok_pong("PONG\r\n");
-const_buffer_region _resp_ok_set("OK\r\n");
-const_buffer_region _resp_ok_get_hit("hit ");
-const_buffer_region _resp_ok_get_miss("miss\r\n");
-const_buffer_region _resp_err_no_space("-ERR insufficient space\r\n");
-const_buffer_region _resp_err_cmd_malformed("-ERR command malformed\r\n");
-const_buffer_region _resp_err_cmd_overflow("-ERR command overflow\r\n");
-const_buffer_region _resp_err_data_malformed("-ERR data malformed\r\n");
-const_buffer_region _resp_err_data_overflow("-ERR data overflow\r\n");
+namespace {
+    const_buffer_region _resp_newline("\r\n");
+    const_buffer_region _resp_version("SAMOA v0.1\r\n");
+    const_buffer_region _resp_pong("PONG\r\n");
+    const_buffer_region _resp_ok("OK\r\n");
+    const_buffer_region _resp_err_cmd_malformed("-ERR command malformed\r\n");
+    const_buffer_region _resp_err_cmd_overflow("-ERR command overflow\r\n");
+    const_buffer_region _resp_err_data_malformed("-ERR data malformed\r\n");
+    const_buffer_region _resp_err_data_overflow("-ERR data overflow\r\n");
+};
+
+client::ptr_t client::new_client(
+	const server::ptr_t & server,
+    std::auto_ptr<tcp::socket> sock)
+{
+    if(_cmd_re.empty())
+        build_command_table();
+    
+    client::ptr_t new_client( new client(server, sock));
+    new_client->queue_write(_resp_version);
+    new_client->finish_response();
+    return new_client;
+}
+
+void client::finish_response()
+{
+    // Flush accumulated writes to client
+    assert(!in_write());
+    write_queued( boost::bind(
+        &client::on_finish, shared_from_this(), _1));
+    return;
+}
 
 client::client(
 	const server::ptr_t & server,
     std::auto_ptr<tcp::socket> sock
 ) : 
     common::stream_protocol(sock),
-    _server(server),
-    _close_pending(false)
+    _server(server)
 { }
-
-void client::init()
-{
-    if(_cmd_re.empty())
-        build_command_table();
-    
-    _request.reset( new request(shared_from_this()));
-    
-    _request->resp_type = RESP_OK_VERSION;
-    finish_response();
-    return;
-}
 
 void client::on_ping(const stream_protocol::match_results_t & m)
 {
-    _request->req_type  = REQ_PING;
-    _request->resp_type = RESP_OK_PONG;
+    queue_write( _resp_pong);
     finish_response();
     return;
 }
 void client::on_shutdown(const stream_protocol::match_results_t & m)
 {
     _server->shutdown();
-    // don't finish response, starting another read
+    queue_write(_resp_ok);
+    _request.close_on_finish = true;
+    finish_response();
     return;
 }
 void client::on_malformed(const stream_protocol::match_results_t & m)
 {
-    _request->req_type  = REQ_INVALID;
-    _request->resp_type = RESP_ERR_CMD_MALFORMED;
+    // we may be dealing w/ a human, so don't close
+    queue_write(_resp_err_cmd_malformed);
     finish_response();
+    return;
+}
+void client::on_iter_keys(const stream_protocol::match_results_t & m)
+{
+    _request.req_type = REQ_ITER_KEYS;
+    _server->_partition->handle_request(shared_from_this());
     return;
 }
 void client::on_get(const stream_protocol::match_results_t & m)
 {
-    _request->req_type = distance(m[1].first, m[1].second) == 3 ? \
+    _request.req_type = distance(m[1].first, m[1].second) == 3 ? \
         REQ_GET : REQ_FGET;
     
-    _request->key.resize( distance(m[2].first, m[2].second));
-    copy( m[2].first, m[2].second, _request->key.begin());
+    _request.key.resize( distance(m[2].first, m[2].second));
+    copy( m[2].first, m[2].second, _request.key.begin());
     
-    // DISPATCH 
-    
-    // lookup
-    size_t hint;
-    common::rolling_hash<>::record * rec;
-    _server->_rhash.get(_request->key.begin(), _request->key.end(), rec, hint);
-    
-    if(rec)
-    {
-        _request->resp_type = RESP_OK_GET_HIT;
-        
-        // copy in value
-        const char * val = rec->value();
-        size_t val_len = rec->value_length();
-        _server->_bring.produce_range(val, val + val_len);
-        _request->resp_data_length = _server->_bring.available_read();
-        _server->_bring.get_read_regions( _request->resp_data);
-        _server->_bring.consumed( _server->_bring.available_read());
-    }
-    else
-    {
-        _request->resp_type = RESP_OK_GET_MISS;
-    }
-    
-    finish_response();
+    _server->_partition->handle_request(shared_from_this());
     return;
 }
 void client::on_set(const stream_protocol::match_results_t & m)
 {
-    _request->req_type = REQ_SET;
+    _request.req_type = REQ_SET;
     
-    _request->key.resize( distance(m[1].first, m[1].second));
-    copy( m[1].first, m[1].second, _request->key.begin());
+    _request.key.resize( distance(m[1].first, m[1].second));
+    copy( m[1].first, m[1].second, _request.key.begin());
     
     size_t data_length_size = distance(m[2].first, m[2].second);
     
     char buf[21];
     if(data_length_size + 1 >= sizeof(buf))
     {
-        _request->resp_type = RESP_ERR_DATA_OVERFLOW;
+        queue_write(_resp_err_data_overflow);
+        _request.close_on_finish = true;
         finish_response();
         return;
     }
     
     buf[data_length_size] = '\0';
     copy( m[2].first, m[2].second, buf);
-    sscanf(buf, "%lu", &_request->req_data_length);
+    sscanf(buf, "%lu", &_request.req_data_length);
     
-    if(_request->req_data_length > MAX_DATA_SIZE)
+    if(_request.req_data_length > MAX_DATA_SIZE)
     {
-        _request->resp_type = RESP_ERR_DATA_OVERFLOW;
+        queue_write(_resp_err_data_overflow);
+        _request.close_on_finish = true;
         finish_response();
         return;
     }
     
     // schedule a read of data + "\r\n"
     read_data(
-        _request->req_data_length + 2,
-        _request->req_data,
+        _request.req_data_length + 2,
+        _request.req_data,
         boost::bind(
             &client::on_data,
             shared_from_this(),
@@ -158,7 +152,7 @@ void client::on_data(const boost::system::error_code & ec, size_t read_length)
         return;
     }
     
-    buffer_regions_t::iterator it = --(_request->req_data.end());
+    buffer_regions_t::iterator it = --(_request.req_data.end());
     
     // trim & extract trailing 2 characters
     char c2 = it->rgetc(), c1 = it->rgetc();
@@ -167,76 +161,13 @@ void client::on_data(const boost::system::error_code & ec, size_t read_length)
     
     if(c1 != '\r' || c2 != '\n')
     {
-        _request->resp_type = RESP_ERR_DATA_MALFORMED;
+        queue_write(_resp_err_data_malformed);
+        _request.close_on_finish = true;
         finish_response();
         return;
     }
     
-    // DISPATCH 
-    
-    if(!_server->_rhash.migrate_head())
-        _server->_rhash.drop_head();
-    
-    if(_server->_rhash.would_fit(_request->key.size(), _request->req_data_length))
-    {
-        _server->_rhash.set(
-            _request->key.begin(), _request->key.end(),
-            buffers_iterator_t::begin(_request->req_data),
-            buffers_iterator_t::end(_request->req_data));
-        _request->resp_type = RESP_OK_SET;
-    }
-    else
-        _request->resp_type = RESP_ERR_NO_SPACE;
-    
-    finish_response();
-    return;
-}
-
-void client::finish_response()
-{
-    if(_request->resp_type == RESP_OK_VERSION)
-        queue_write(_resp_ok_version);
-    else if(_request->resp_type == RESP_OK_PONG)
-        queue_write(_resp_ok_pong);
-    else if(_request->resp_type == RESP_OK_SET)
-        queue_write(_resp_ok_set);
-    else if(_request->resp_type == RESP_OK_GET_HIT)
-    {
-        char buf[21];
-        sprintf(buf, "%lu", _request->resp_data_length);
-        queue_write(_resp_ok_get_hit);
-        queue_write(buf);
-        queue_write(_resp_newline);
-        queue_write(_request->resp_data);
-        queue_write(_resp_newline);
-    }
-    else if(_request->resp_type == RESP_OK_GET_MISS)
-        queue_write(_resp_ok_get_miss);
-    else if(_request->resp_type == RESP_ERR_NO_SPACE)
-        queue_write(_resp_err_no_space);
-    else if(_request->resp_type == RESP_ERR_CMD_MALFORMED)
-        queue_write(_resp_err_cmd_malformed);
-    else if(_request->resp_type == RESP_ERR_CMD_OVERFLOW)
-    {
-        queue_write(_resp_err_cmd_overflow);
-        _close_pending = true;
-    }
-    else if(_request->resp_type == RESP_ERR_DATA_OVERFLOW)
-    {
-        queue_write(_resp_err_data_overflow);
-        _close_pending = true;
-    }
-    else if(_request->resp_type == RESP_ERR_DATA_MALFORMED)
-    {
-        queue_write(_resp_err_data_malformed);
-        _close_pending = true;
-    }
-    
-    // Flush accumulated writes to client
-    assert(!in_write());
-    write_queued( boost::bind(
-        &client::on_write, shared_from_this(), _1));
-    
+    _server->_partition->handle_request(shared_from_this());
     return;
 }
 
@@ -247,7 +178,8 @@ void client::on_command(
 {
     if(ec == boost::system::errc::value_too_large)
     {
-        _request->resp_type = RESP_ERR_CMD_OVERFLOW;
+        queue_write(_resp_err_cmd_overflow);
+        _request.close_on_finish = true;
         finish_response();
         return;
     }
@@ -260,21 +192,22 @@ void client::on_command(
     // de-reference pointer to member method, & dispatch
     (this->*(_cmd_handler[matched_re_ind]))(m);
 }
-void client::on_write( const boost::system::error_code & ec)
+
+void client::on_finish(const boost::system::error_code & ec)
 {
     if(ec) {
         std::cerr << "client write error: " << ec.message() << std::endl;
         socket().close();
     }
     
-    if(_close_pending)
+    if(_request.close_on_finish)
     {
         socket().close();
         return;
     }
     
     // Set up for next request
-    _request->reset();
+    _request.reset();
     
     // Note: we issue the read operation here, rather than
     //  in finish_response(), because this guarantees that
@@ -312,7 +245,11 @@ void client::build_command_table()
     _cmd_re.push_back(boost::regex(
         "shutdown\r\n"));
     _cmd_handler.push_back( &client::on_shutdown);
-
+    
+    _cmd_re.push_back(boost::regex(
+        "iter_keys\r\n"));
+    _cmd_handler.push_back( &client::on_iter_keys);
+    
     // a full line not matching elsewhere is malformed
     _cmd_re.push_back(boost::regex(
         "^.*?\r\n"));

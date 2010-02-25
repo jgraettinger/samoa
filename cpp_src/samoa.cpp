@@ -1,7 +1,10 @@
 
 #include "samoa/server.hpp"
+#include "samoa/partition.hpp"
 #include "common/reactor.hpp"
 #include <boost/asio.hpp>
+
+#include <iostream>
 
 using namespace std;
 using namespace boost;
@@ -16,7 +19,27 @@ int main(int argc, const char ** argv)
         100,
         r
     ));
-
+    
+    /*
+    srv->_partition.reset(
+        new samoa::partition(
+            "test_mapped_file",
+            1L << 30,
+            1L << 22)
+    );
+    */
+    
+    srv->_partition.reset(
+        new samoa::partition(
+            "test_mapped_file",
+            1L << 25,
+            1L << 17)
+    );
+    
     r->run();
+    srv.reset();
+    r.reset();
+    
+    cerr << "run returned" << endl;
     return 0;
 }

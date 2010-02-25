@@ -8,7 +8,6 @@
 #include <boost/asio.hpp>
 #include <string>
 
-#include "common/rolling_hash.hpp"
 #include "common/buffer_region.hpp"
 
 namespace samoa {
@@ -32,8 +31,7 @@ public:
     
     void shutdown();
     
-    common::rolling_hash<> _rhash;
-    common::buffer_ring _bring;
+    partition_ptr_t _partition;
     
 private:
     

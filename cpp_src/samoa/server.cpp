@@ -19,8 +19,7 @@ server::server(
 ) :
     _host(host),
     _port(port),
-    _reactor(reactor),
-    _rhash(new char[(1<<20)](), (1<<20), 1024)
+    _reactor(reactor)
 {
     tcp::resolver resolver(_reactor->io_service());
     
@@ -100,9 +99,7 @@ void server::on_accept(const boost::system::error_code & ec)
     // Create a client to service the socket
     // Lifetime is managed by client's use in callbacks. Eg, it's
     //  auto-destroyed when it falls out of event handler state
-    client::ptr_t clnt(
-        new client(shared_from_this(), _next_sock));
-    clnt->init();
+    client::new_client(shared_from_this(), _next_sock);
     
     // Next connection to accept
     _next_sock.reset( new tcp::socket(_reactor->io_service()));

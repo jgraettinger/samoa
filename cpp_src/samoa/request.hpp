@@ -19,40 +19,34 @@ enum request_type {
     REQ_PING,
     REQ_GET,
     REQ_FGET,
-    REQ_SET
-};
-
-enum response_type {
-    
-    RESP_INVALID,
-    
-    RESP_OK_VERSION,
-    RESP_OK_PONG,
-    RESP_OK_SET,
-    RESP_OK_GET_HIT,
-    RESP_OK_GET_MISS,
-    
-    RESP_ERR_NO_SPACE,
-    RESP_ERR_CMD_MALFORMED,
-    
-    // the connection will
-    //  close after returning these
-    RESP_ERR_CMD_OVERFLOW,
-    RESP_ERR_DATA_MALFORMED,
-    RESP_ERR_DATA_OVERFLOW
+    REQ_SET,
+    REQ_ITER_KEYS
 };
 
 struct request {
     
     typedef boost::shared_ptr<request> ptr_t;
     
-    request( const client_ptr_t & client);
+    request()
+     :  req_type(REQ_INVALID),
+        req_data_length(0),
+        close_on_finish(false),
+        cur_rec(0)
+    { }
     
     // re-inits request to just-constructed state
-    void reset();
+    void reset()
+    {
+        req_type = REQ_INVALID;
+        req_data_length  = 0;
+        key.clear();
+        req_data.clear();
+        close_on_finish = false;
+        cur_rec = 0;
+        return;
+    }
     
     request_type  req_type;
-    response_type resp_type;
     
     // potential arguments of the request
     std::vector<char> key;
@@ -60,11 +54,8 @@ struct request {
     common::buffer_regions_t  req_data;
     
     // potential arguments of the response
-    size_t resp_data_length;
-    common::const_buffer_regions_t  resp_data;
-    
-    // client which issued/owns the request
-    const client_ptr_t client;
+    bool close_on_finish;
+    const rolling_hash_t::record * cur_rec;
 };
 
 };

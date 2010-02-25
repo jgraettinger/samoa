@@ -16,31 +16,36 @@ using namespace common;
 
 class client :
     public boost::enable_shared_from_this<client>,
-    protected stream_protocol
+    public stream_protocol
 {
 public:
     
     typedef boost::shared_ptr<client> ptr_t;
+    
+    // Creates a new client object, & initiates a read operation
+    static ptr_t new_client(
+        const server_ptr_t &,
+        std::auto_ptr<boost::asio::ip::tcp::socket>
+    );
+    
+    // Writes remaining response content to client,
+    //  and initiates read of the next request (if applicable)
+    void finish_response();
+    
+    request & get_request()
+    { return _request; }
+    
+private:
     
     client(
         const server_ptr_t &,
         std::auto_ptr<boost::asio::ip::tcp::socket>
     );
     
-    // Initiates socket operations for this client;
-    //  could be folded into ctor, except shared_from_this()
-    //  requires external owning shared_ptr
-    void init();
-    
-    // writes the response context in the client's
-    //  request object back to the client
-    void finish_response();
-    
-private:
-    
     // individual command handlers
     void on_ping( const stream_protocol::match_results_t &);
     void on_shutdown( const stream_protocol::match_results_t &);
+    void on_iter_keys( const stream_protocol::match_results_t &);
     void on_get( const stream_protocol::match_results_t &);
     void on_set( const stream_protocol::match_results_t &);
     void on_malformed( const stream_protocol::match_results_t &);
@@ -55,18 +60,15 @@ private:
         size_t matched_re_ind
     );
     
-    // write completion handler
-    //  listening for the next request does not begin until
-    //  writeback of the previous request complets.
-    void on_write( const boost::system::error_code & ec);
+    // common handler for write completion of current request
+    //  depending on request flags, may start another read
+    //  or close the connection
+    void on_finish(const boost::system::error_code & ec);
     
     // strong pointer to server
     server_ptr_t _server;
     
-    // reusable request container
-    request::ptr_t _request;
-    
-    bool _close_pending;
+    request _request;
     
     static void build_command_table();
 };
