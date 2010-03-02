@@ -1,5 +1,5 @@
-#ifndef SAMOA_CLIENT_HPP
-#define SAMOA_CLIENT_HPP
+#ifndef SAMOA_CLIENT_PROTOCOL_HPP
+#define SAMOA_CLIENT_PROTOCOL_HPP
 
 #include "samoa/fwd.hpp"
 #include "samoa/request.hpp"
@@ -14,16 +14,16 @@ namespace samoa {
 
 using namespace common;
 
-class client :
-    public boost::enable_shared_from_this<client>,
+class client_protocol :
+    public boost::enable_shared_from_this<client_protocol>,
     public stream_protocol
 {
 public:
     
-    typedef boost::shared_ptr<client> ptr_t;
+    typedef boost::shared_ptr<client_protocol> ptr_t;
     
-    // Creates a new client object, & initiates a read operation
-    static ptr_t new_client(
+    // Creates a new client_protocol object, & initiates a read operation
+    static ptr_t new_client_protocol(
         const server_ptr_t &,
         std::auto_ptr<boost::asio::ip::tcp::socket>
     );
@@ -37,7 +37,7 @@ public:
     
 private:
     
-    client(
+    client_protocol(
         const server_ptr_t &,
         std::auto_ptr<boost::asio::ip::tcp::socket>
     );

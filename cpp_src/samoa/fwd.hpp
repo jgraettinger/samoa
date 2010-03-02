@@ -10,8 +10,8 @@ namespace samoa {
 
 class server;
 typedef boost::shared_ptr<server> server_ptr_t;
-class client;
-typedef boost::shared_ptr<client> client_ptr_t;
+class client_protocol;
+typedef boost::shared_ptr<client_protocol> client_protocol_ptr_t;
 struct request;
 typedef boost::shared_ptr<request> request_ptr_t;
 

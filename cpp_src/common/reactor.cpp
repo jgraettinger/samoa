@@ -1,5 +1,7 @@
+
 #include "common/reactor.hpp"
 #include <iostream>
+#include <Python.h>
 
 using namespace std;
 
@@ -7,6 +9,8 @@ namespace common {
 
 void reactor::run()
 {
+    Py_BEGIN_ALLOW_THREADS; 
+    
     bool running = true;
     while(running)
     {
@@ -22,6 +26,8 @@ void reactor::run()
             cerr << "Caught: " << e.what() << endl;
         }
     }
+    
+    Py_END_ALLOW_THREADS; 
 }
 
 }

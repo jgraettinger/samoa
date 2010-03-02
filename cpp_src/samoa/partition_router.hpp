@@ -3,16 +3,19 @@
 
 #include "samoa/fwd.hpp"
 #include <boost/asio.hpp>
+#include <boost/shared_ptr.hpp>
 
 namespace samoa {
 
 class partition_router {
 public:
     
-    partition_router(io_service &);
+    typedef boost::shared_ptr<partition_router> ptr_t;
+
+    partition_router(boost::asio::io_service &);
     
-    void route_request(const client_ptr_t &);
-    
+    void route_request(const client_protocol_ptr_t &)
+    { }
 };
 
 };

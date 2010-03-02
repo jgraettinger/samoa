@@ -1,7 +1,7 @@
 
 #include "samoa/partition.hpp"
 #include "samoa/request.hpp"
-#include "samoa/client.hpp"
+#include "samoa/client_protocol.hpp"
 #include "samoa/fwd.hpp"
 #include "common/mapped_rolling_hash.hpp"
 #include "common/buffer_region.hpp"
@@ -25,12 +25,17 @@ typedef common::mapped_rolling_hash<
     rolling_hash_t::expire_bytes
 > mapped_rolling_hash_t;
 
-partition::partition(const std::string & file, size_t region_size, size_t table_size)
- : _table( mapped_rolling_hash_t::open_mapped_rolling_hash(file, region_size, table_size))
-{
-}
+partition::partition(
+    const std::string & uuid,
+    const std::string & file,
+    size_t region_size,
+    size_t table_size
+) : _uuid(uuid),
+    _table( mapped_rolling_hash_t::open_mapped_rolling_hash(
+        file, region_size, table_size))
+{ }
 
-void partition::handle_request(const client_ptr_t & client)
+void partition::handle_request(const client_protocol_ptr_t & client)
 {
     request & req = client->get_request();
     
@@ -62,7 +67,7 @@ void partition::handle_request(const client_ptr_t & client)
     else if(req.req_type == REQ_SET)
     {
         // step any iterating clients which are on head
-        for(std::set<client_ptr_t>::iterator it = _iterating_clients.begin();
+        for(std::set<client_protocol_ptr_t>::iterator it = _iterating_clients.begin();
             it != _iterating_clients.end(); ++it)
         {
             const mapped_rolling_hash_t::record * & cur_rec = (*it)->get_request().cur_rec;
@@ -101,7 +106,7 @@ void partition::handle_request(const client_ptr_t & client)
 
 void partition::on_iteration(
     const boost::system::error_code & ec,
-    const client_ptr_t & client)
+    const client_protocol_ptr_t & client)
 {
     if(ec)
     {

@@ -5,6 +5,8 @@ project bindings
     <include>.
 ;
 
+build-project samoa ;
+
 install install :
     :
     <location>$(INSTALL)

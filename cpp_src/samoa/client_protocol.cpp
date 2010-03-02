@@ -1,5 +1,5 @@
 
-#include "samoa/client.hpp"
+#include "samoa/client_protocol.hpp"
 #include "samoa/server.hpp"
 #include "samoa/partition.hpp"
 #include "common/stream_protocol.hpp"
@@ -15,7 +15,7 @@ using boost::asio::ip::tcp;
 using namespace common;
 
 // Common member-method signature for command handlers
-typedef void (client::*command_handler_t)(
+typedef void (client_protocol::*command_handler_t)(
     const stream_protocol::match_results_t &);
 
 // Regex's for parsing client commands
@@ -35,29 +35,29 @@ namespace {
     const_buffer_region _resp_err_data_overflow("-ERR data overflow\r\n");
 };
 
-client::ptr_t client::new_client(
+client_protocol::ptr_t client_protocol::new_client_protocol(
 	const server::ptr_t & server,
     std::auto_ptr<tcp::socket> sock)
 {
     if(_cmd_re.empty())
         build_command_table();
     
-    client::ptr_t new_client( new client(server, sock));
+    client_protocol::ptr_t new_client( new client_protocol(server, sock));
     new_client->queue_write(_resp_version);
     new_client->finish_response();
     return new_client;
 }
 
-void client::finish_response()
+void client_protocol::finish_response()
 {
     // Flush accumulated writes to client
     assert(!in_write());
     write_queued( boost::bind(
-        &client::on_finish, shared_from_this(), _1));
+        &client_protocol::on_finish, shared_from_this(), _1));
     return;
 }
 
-client::client(
+client_protocol::client_protocol(
 	const server::ptr_t & server,
     std::auto_ptr<tcp::socket> sock
 ) : 
@@ -65,13 +65,13 @@ client::client(
     _server(server)
 { }
 
-void client::on_ping(const stream_protocol::match_results_t & m)
+void client_protocol::on_ping(const stream_protocol::match_results_t & m)
 {
     queue_write( _resp_pong);
     finish_response();
     return;
 }
-void client::on_shutdown(const stream_protocol::match_results_t & m)
+void client_protocol::on_shutdown(const stream_protocol::match_results_t & m)
 {
     _server->shutdown();
     queue_write(_resp_ok);
@@ -79,20 +79,20 @@ void client::on_shutdown(const stream_protocol::match_results_t & m)
     finish_response();
     return;
 }
-void client::on_malformed(const stream_protocol::match_results_t & m)
+void client_protocol::on_malformed(const stream_protocol::match_results_t & m)
 {
     // we may be dealing w/ a human, so don't close
     queue_write(_resp_err_cmd_malformed);
     finish_response();
     return;
 }
-void client::on_iter_keys(const stream_protocol::match_results_t & m)
+void client_protocol::on_iter_keys(const stream_protocol::match_results_t & m)
 {
     _request.req_type = REQ_ITER_KEYS;
     _server->_partition->handle_request(shared_from_this());
     return;
 }
-void client::on_get(const stream_protocol::match_results_t & m)
+void client_protocol::on_get(const stream_protocol::match_results_t & m)
 {
     _request.req_type = distance(m[1].first, m[1].second) == 3 ? \
         REQ_GET : REQ_FGET;
@@ -103,7 +103,7 @@ void client::on_get(const stream_protocol::match_results_t & m)
     _server->_partition->handle_request(shared_from_this());
     return;
 }
-void client::on_set(const stream_protocol::match_results_t & m)
+void client_protocol::on_set(const stream_protocol::match_results_t & m)
 {
     _request.req_type = REQ_SET;
     
@@ -138,14 +138,14 @@ void client::on_set(const stream_protocol::match_results_t & m)
         _request.req_data_length + 2,
         _request.req_data,
         boost::bind(
-            &client::on_data,
+            &client_protocol::on_data,
             shared_from_this(),
             _1, _2
         )
     );
     return;
 }
-void client::on_data(const boost::system::error_code & ec, size_t read_length)
+void client_protocol::on_data(const boost::system::error_code & ec, size_t read_length)
 {
     if(ec) {
         std::cerr << "client read error: " << ec.message() << std::endl;
@@ -171,7 +171,7 @@ void client::on_data(const boost::system::error_code & ec, size_t read_length)
     return;
 }
 
-void client::on_command(
+void client_protocol::on_command(
     const boost::system::error_code & ec,
     const stream_protocol::match_results_t & m,
     size_t matched_re_ind)
@@ -193,7 +193,7 @@ void client::on_command(
     (this->*(_cmd_handler[matched_re_ind]))(m);
 }
 
-void client::on_finish(const boost::system::error_code & ec)
+void client_protocol::on_finish(const boost::system::error_code & ec)
 {
     if(ec) {
         std::cerr << "client write error: " << ec.message() << std::endl;
@@ -219,7 +219,7 @@ void client::on_finish(const boost::system::error_code & ec)
         _cmd_re.begin(), _cmd_re.end(),
         MAX_COMMAND_SIZE,
         boost::bind(
-            &client::on_command,
+            &client_protocol::on_command,
             shared_from_this(),
             _1, _2, _3
         )
@@ -228,34 +228,35 @@ void client::on_finish(const boost::system::error_code & ec)
 }
 
 // Populates _cmd_re & _cmd_handler
-void client::build_command_table()
+void client_protocol::build_command_table()
 {
     _cmd_re.push_back(boost::regex(
         "^(?:PING|ping)\r\n"));
-    _cmd_handler.push_back( &client::on_ping);
+    _cmd_handler.push_back( &client_protocol::on_ping);
     
     _cmd_re.push_back(boost::regex(
         "^(FGET|fget|GET|get) ([^ ]+)\r\n"));
-    _cmd_handler.push_back( &client::on_get);
+    _cmd_handler.push_back( &client_protocol::on_get);
     
     _cmd_re.push_back(boost::regex(
         "^(?:SET|set) ([^ ]+) ([\\d+]+)\r\n"));
-    _cmd_handler.push_back( &client::on_set);
+    _cmd_handler.push_back( &client_protocol::on_set);
     
     _cmd_re.push_back(boost::regex(
         "shutdown\r\n"));
-    _cmd_handler.push_back( &client::on_shutdown);
+    _cmd_handler.push_back( &client_protocol::on_shutdown);
     
     _cmd_re.push_back(boost::regex(
         "iter_keys\r\n"));
-    _cmd_handler.push_back( &client::on_iter_keys);
+    _cmd_handler.push_back( &client_protocol::on_iter_keys);
     
     // a full line not matching elsewhere is malformed
     _cmd_re.push_back(boost::regex(
         "^.*?\r\n"));
-    _cmd_handler.push_back( &client::on_malformed);
+    _cmd_handler.push_back( &client_protocol::on_malformed);
     
     return;
 }
 
-} // end namespace samoa 
+} // end namespace samoa
+

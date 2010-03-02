@@ -16,17 +16,29 @@ class partition :
 {
 public:
     
-    partition(const std::string & file, size_t region_size, size_t table_size);
+    typedef boost::shared_ptr<partition> ptr_t;
     
-    void handle_request(const client_ptr_t &);
+    partition(
+        const std::string & uuid,
+        const std::string & file,
+        size_t region_size,
+        size_t table_size
+    );
+    
+    const std::string & get_uuid()
+    { return _uuid; }
+    
+    void handle_request(const client_protocol_ptr_t &);
     
 private:
     
-    void on_iteration(const boost::system::error_code & ec, const client_ptr_t &);
+    void on_iteration(const boost::system::error_code & ec, const client_protocol_ptr_t &);
+    
+    std::string _uuid;
     
     rolling_hash_ptr_t _table;
     
-    std::set<client_ptr_t> _iterating_clients;
+    std::set<client_protocol_ptr_t> _iterating_clients;
 };
 
 };

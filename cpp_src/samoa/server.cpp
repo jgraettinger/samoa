@@ -1,6 +1,6 @@
 
 #include "samoa/server.hpp"
-#include "samoa/client.hpp"
+#include "samoa/client_protocol.hpp"
 #include "common/ref_buffer.hpp"
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
@@ -99,7 +99,7 @@ void server::on_accept(const boost::system::error_code & ec)
     // Create a client to service the socket
     // Lifetime is managed by client's use in callbacks. Eg, it's
     //  auto-destroyed when it falls out of event handler state
-    client::new_client(shared_from_this(), _next_sock);
+    client_protocol::new_client_protocol(shared_from_this(), _next_sock);
     
     // Next connection to accept
     _next_sock.reset( new tcp::socket(_reactor->io_service()));

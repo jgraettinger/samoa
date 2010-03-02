@@ -5,6 +5,7 @@ lib lib_common :
     [ glob-tree *.cpp ]
     /site-config//boost_regex
     /site-config//boost_system
+    /python//python
     : <link>static
     ;
 
