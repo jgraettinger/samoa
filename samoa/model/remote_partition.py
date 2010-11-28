@@ -17,10 +17,6 @@ class RemotePartition(MetaTableBase):
     table = sa.relationship(Table,
         backref = sa.backref('remote_partitions'))
 
-    # default initialization
-    is_local = False
-    _peer = None
-
     def __init__(
             self,
             uid,
@@ -32,14 +28,5 @@ class RemotePartition(MetaTableBase):
         self.ring_pos = ring_pos
         self.remote_host = remote_host
         self.remote_port = remote_port
-        return
-
-    def start(self, server):
-        key = (self.remote_host, self.remote_port)
-
-        self._peer = server.peers.get(key)
-        if not self._peer:
-            self._peer = server.peers[key] = samoa.RemoteServer(
-                self.remote_host, self.remote_port)
         return
 
