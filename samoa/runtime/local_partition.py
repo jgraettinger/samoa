@@ -3,11 +3,14 @@ import samoa
 
 class LocalPartition(object):
 
-    def __init__(self, server, model):
+    is_local = True
+    is_online = True
+
+    def __init__(self, model):
         self.uid = model.uid
         self.ring_pos = model.ring_pos
-        self._table = samoa.MappedRollingHash(
-            model.table_path, model.table_size, model.index_size)
+        self._table = samoa.MappedRollingHash.open(
+            str(model.table_path), model.table_size, model.index_size)
         return
 
     def get(self, key):

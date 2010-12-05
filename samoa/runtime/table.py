@@ -7,21 +7,21 @@ from local_partition import LocalPartition
 
 class Table(object):
 
-    def __init__(self, server, model):
+    def __init__(self, model, peer_pool):
 
         self.uid = model.uid
         self.ring_size = model.ring_size
         self.repl_factor = model.repl_factor
         self._ring = []
 
-        for partition_model in self.local_partitions:
+        for partition_model in model.local_partitions:
             if partition_model.dropped:
                 continue
 
             partition = LocalPartition(partition_model)
             self._ring.append((partition.ring_pos, partition.uid, partition))
 
-        for partition in self.remote_partitions:
+        for partition in model.remote_partitions:
             if partition_model.dropped:
                 continue
 
@@ -36,7 +36,4 @@ class Table(object):
 
         for i in xrange(self.repl_factor):
             yield self._ring[(start_ind + i) % len(self._ring)][2]
-
-
-
 

@@ -1,21 +1,21 @@
 
 import getty
 import gevent.socket as socket
-import sqlalchemy
-import samoa
 
-import meta_db
-import config
+import model
+import runtime
 
 class Server(object):
 
     @getty.requires(
-        port = config.Config('port'),
-        meta_db = meta_db.MetaDB)
-    def __init__(self, port, meta_db):
+        port = getty.Config('port'),
+        tables = runtime.TableSet,
+        peers = runtime.PeerPool,
+        meta_db = model.Meta)
+    def __init__(self, port, tables, peers, meta_db):
 
-        self.peers = {}
-        self.tables = {}
+        self.tables = tables
+        self.peers = peers
 
         self.srv_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.srv_sock.bind(('', port))
@@ -34,5 +34,5 @@ class Server(object):
         while self.srv_sock:
 
             client_sock, _ = self.srv_sock.accept()
-            samoa.remote_client.RemoteClient(self, client_sock)
+            runtime.RemoteClient(self, client_sock)
 

@@ -1,0 +1,8 @@
+*.pyc
+*.so
+*.swp
+Getty.egg-info/
+Samoa.egg-info/
+build/
+env/
+distribute*tar.gz

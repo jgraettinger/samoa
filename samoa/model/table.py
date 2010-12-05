@@ -1,12 +1,9 @@
 
-
 import sqlalchemy as sa
-from meta_db import MetaTableBase
 
-from remote_partition import RemotePartition
-from local_partition import LocalPartition
+from base import ModelBase
 
-class Table(MetaTableBase):
+class Table(ModelBase):
     __tablename__ = 'table'
 
     # mapped attributes
@@ -20,7 +17,9 @@ class Table(MetaTableBase):
     # RemotePartition maps relationship 'table', with
     #   backreference 'remote_partitions'
 
-    def __init__(self, uid, ring_size, repl_factor, dropped = False):
+    def __init__(self, uid, repl_factor = 1,
+        ring_size = (1 << 32), dropped = False):
+
         self.uid = uid
         self.dropped = dropped
         self.ring_size = ring_size

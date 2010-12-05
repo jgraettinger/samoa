@@ -1,21 +1,23 @@
 
 import sqlalchemy as sa
-import samoa
-from meta_db import MetaTableBase
+import sqlalchemy.orm
 
+from base import ModelBase
 from table import Table
 
-class RemotePartition(MetaTableBase):
+class RemotePartition(ModelBase):
     __tablename__ = 'remote_partion'
 
     # mapped attributes
+    table_uid = sa.Column(sa.String, sa.ForeignKey('table.uid'))
     uid = sa.Column(sa.String, primary_key = True)
+    dropped = sa.Column(sa.Boolean, default = False)
     ring_pos = sa.Column(sa.Integer, nullable = True)
     remote_host = sa.Column(sa.String, nullable = True)
     remote_port = sa.Column(sa.Integer, nullable = True)
 
-    table = sa.relationship(Table,
-        backref = sa.backref('remote_partitions'))
+    table = sa.orm.relationship(Table,
+        backref = sa.orm.backref('remote_partitions'))
 
     def __init__(
             self,
