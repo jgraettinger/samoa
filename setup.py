@@ -18,6 +18,24 @@ extensions = [
         libraries = ['boost_python'],
         extra_compile_args = ['-O0', '-g'],
     ),
+
+    # samoa._core
+    setuptools.extension.Extension(
+        name = 'samoa._core',
+        sources = enum_files('samoa/core', '.cpp'),
+        include_dirs = ['.'],
+        libraries = ['boost_python'],
+        extra_compile_args = ['-O0', '-g'],
+    ),
+
+    # samoa._server
+    setuptools.extension.Extension(
+        name = 'samoa._server',
+        sources = enum_files('samoa/server', '.cpp'),
+        include_dirs = ['.'],
+        libraries = ['boost_python'],
+        extra_compile_args = ['-O0', '-g'],
+    ),
 ]
 
 setuptools.setup(

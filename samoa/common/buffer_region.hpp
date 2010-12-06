@@ -2,7 +2,7 @@
 #ifndef COMMON_BUFFER_REGION
 #define COMMON_BUFFER_REGION
 
-#include "common/ref_buffer.hpp"
+#include "samoa/common/ref_buffer.hpp"
 #include <boost/asio.hpp>
 
 namespace common {
