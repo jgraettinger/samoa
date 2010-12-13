@@ -1,0 +1,12 @@
+
+python-extension _server :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_regex
+    /root//boost_python
+;
+
+install dist : _server : <location>$(INSTALL)/samoa/server ;
+

@@ -1,0 +1,9 @@
+
+project bindings
+    : requirements
+    <include>../cpp_src 
+    <include>.
+;
+
+build-project samoa ;
+

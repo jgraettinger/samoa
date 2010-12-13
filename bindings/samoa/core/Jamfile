@@ -1,0 +1,13 @@
+
+# runthread.cpp is built into a seprate shared-library
+#   see bindings/samoa/Jamfile
+python-extension _core :
+    [ glob *.cpp : runthread.cpp coros.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _core : <location>$(INSTALL)/samoa/core ;
+

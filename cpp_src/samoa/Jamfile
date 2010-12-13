@@ -1,0 +1,11 @@
+
+project samoa ;
+
+lib libsamoa :
+    [ glob-tree *.cpp ]
+    /root//boost_system
+    : <link>shared
+    ;
+
+install dist : libsamoa : <location>$(INSTALL) ;
+

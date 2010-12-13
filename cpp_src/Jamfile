@@ -1,0 +1,5 @@
+
+project cpp_src : requirements <include>. ;
+
+build-project samoa ;
+
