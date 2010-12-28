@@ -5,14 +5,15 @@ project pysamoa ;
 #  library other extensions will link against
 lib libpysamoa :
     ./core/runthread.cpp
-    ./core/coros.cpp
+    ./core/coroutine.cpp
+    ./core/future.cpp
     /python//python
     : <link>shared ;
 
 install dist : libpysamoa : <location>$(INSTALL) ;
 
 python-extension _samoa :
-    [ glob *.cpp : pythread.cpp ]
+    [ glob *.cpp : runthread.cpp coroutine.cpp future.cpp ]
     /samoa//libsamoa
     libpysamoa
     /root//boost_system

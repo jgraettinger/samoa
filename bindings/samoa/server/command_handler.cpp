@@ -2,8 +2,8 @@
 #include "samoa/server/command_handler.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
-#include "samoa/core/runthread.hpp"
-#include "samoa/core/coros.hpp"
+#include "samoa/core/scoped_python.hpp"
+#include "samoa/core/coroutine.hpp"
 #include <boost/python.hpp>
 #include <iostream>
 
@@ -28,9 +28,9 @@ public:
         // is res a generator?
         if(PyGen_Check(res.ptr()))
         {
-            core::generator_scope gen_scope(res);
-
-            gen_scope.send_value(object());
+            // start a new coroutine
+            core::coroutine::ptr_t coro(new core::coroutine(res));
+            coro->start();
         }
         else if(res.ptr() != Py_None)
         {

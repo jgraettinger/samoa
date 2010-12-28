@@ -9,7 +9,6 @@ namespace core {
 inline stream_protocol::stream_protocol(
     std::auto_ptr<boost::asio::ip::tcp::socket> & sock
 ) :
-    _sock_write_ind(0),
     _in_read(false),
     _in_write(false),
     _r_ring(),
@@ -24,6 +23,9 @@ void stream_protocol::read_regex(
     size_t max_read_length,
     const  Callback & callback)
 {
+    assert(!_in_read);
+    _in_read = true;
+
     on_regex_read(
         boost::system::error_code(),
         0, regex, max_read_length,
@@ -40,6 +42,9 @@ void stream_protocol::read_until(
     size_t max_read_length,
     const Callback & callback)
 {
+    assert(!_in_read);
+    _in_read = true;
+
     on_delim_read(
         boost::system::error_code(),
         0, delim_char, max_read_length,
@@ -53,12 +58,14 @@ void stream_protocol::read_until(
 template<typename Callback>
 void stream_protocol::read_data(
     size_t read_length,
-    buffer_regions_t & data_regions,
     const Callback & callback)
 {
+    assert(!_in_read);
+    _in_read = true;
+
     on_data_read(
         boost::system::error_code(),
-        0, read_length, data_regions,
+        0, read_length,
         // wrap to avoid eval as boost::bind
         //  func composition
         boost::protect(callback));
@@ -81,7 +88,7 @@ void stream_protocol::queue_write(const Iterator & begin, const Iterator & end)
     assert(_w_ring.available_read() == 0);
     _w_ring.produce_range(begin, end);
     _w_ring.get_read_regions(_sock_write_regions);
-    _w_ring.consumed( _w_ring.available_read());
+    _w_ring.consumed(_w_ring.available_read());
     return;
 }
 
@@ -94,8 +101,7 @@ void stream_protocol::write_queued(const Callback & callback)
     on_write(boost::system::error_code(), 0,
         // wrap to avoid eval as boost::bind
         //   func composition
-        boost::protect(callback)
-    );
+        boost::protect(callback));
     return;
 }
 
@@ -109,6 +115,7 @@ void stream_protocol::on_regex_read(
 {
     if(ec)
     {
+        _in_read = false;
         callback(ec, match_results_t());
         return;
     }
@@ -116,13 +123,13 @@ void stream_protocol::on_regex_read(
     post_socket_read(bytes_transferred);
 
     // Identify regions to match against
-    _match_regions.clear();
-    _r_ring.get_read_regions(_match_regions, max_read_length);
+    _result_regions.clear();
+    _r_ring.get_read_regions(_result_regions, max_read_length);
 
     // contiguous iteration facade
     //   over non-contiguous buffers
-    buffers_iterator_t begin(boost::asio::buffers_begin(_match_regions));
-    buffers_iterator_t end(boost::asio::buffers_end(_match_regions));
+    buffers_iterator_t begin(boost::asio::buffers_begin(_result_regions));
+    buffers_iterator_t end(boost::asio::buffers_end(_result_regions));
 
     match_results_t match;
 
@@ -131,6 +138,7 @@ void stream_protocol::on_regex_read(
     {
         // mark match as delivered
         _r_ring.consumed(std::distance(begin, match[0].second));
+        _in_read = false;
         // call back to client w/ matches
         callback(ec, match);
         return;
@@ -140,6 +148,7 @@ void stream_protocol::on_regex_read(
     if(_r_ring.available_read() >= max_read_length)
     {
         // No remaining bytes to read; signal an error
+        _in_read = false;
         callback(boost::system::errc::make_error_code(
             boost::system::errc::value_too_large), match_results_t());
         return;
@@ -168,6 +177,7 @@ void stream_protocol::on_delim_read(
 {
     if(ec)
     {
+        _in_read = false;
         callback(ec, buffers_iterator_t(), buffers_iterator_t());
         return;
     }
@@ -175,13 +185,13 @@ void stream_protocol::on_delim_read(
     post_socket_read(bytes_transferred);
 
     // Identify regions to match against
-    _match_regions.clear();
-    _r_ring.get_read_regions(_match_regions, max_read_length);
+    _result_regions.clear();
+    _r_ring.get_read_regions(_result_regions, max_read_length);
 
     // contiguous iteration facade
     //   over non-contiguous buffers
-    buffers_iterator_t begin(boost::asio::buffers_begin(_match_regions));
-    buffers_iterator_t end(boost::asio::buffers_end(_match_regions));
+    buffers_iterator_t begin(boost::asio::buffers_begin(_result_regions));
+    buffers_iterator_t end(boost::asio::buffers_end(_result_regions));
 
     buffers_iterator_t match = std::find(begin, end, delim);
 
@@ -192,6 +202,7 @@ void stream_protocol::on_delim_read(
         // mark match as delivered
         _r_ring.consumed(std::distance(begin, match));
         // call back to client w/ matches
+        _in_read = false;
         callback(ec, begin, match);
         return;
     }
@@ -200,6 +211,7 @@ void stream_protocol::on_delim_read(
     if(_r_ring.available_read() >= max_read_length)
     {
         // No remaining bytes to read; signal an error
+        _in_read = false;
         callback(boost::system::errc::make_error_code(
             boost::system::errc::value_too_large),
             buffers_iterator_t(), buffers_iterator_t());
@@ -224,13 +236,12 @@ void stream_protocol::on_data_read(
     const  boost::system::error_code & ec,
     size_t bytes_transferred,
     size_t read_length,
-    buffer_regions_t & data_regions,
-    const  Callback & callback
-)
+    const  Callback & callback)
 {
     if(ec)
     {
-        callback(ec, 0);
+        _in_read = false;
+        callback(ec, 0, buffer_regions_t());
         return;
     }
 
@@ -241,11 +252,13 @@ void stream_protocol::on_data_read(
         // read finished
 
         // extract data regions
-        _r_ring.get_read_regions(data_regions, read_length);
+        _result_regions.clear();
+        _r_ring.get_read_regions(_result_regions, read_length);
         // mark as delivered
         _r_ring.consumed(read_length);
         // call back to client
-        callback(ec, read_length);
+        _in_read = false;
+        callback(ec, read_length, _result_regions);
         return;
     }
 
@@ -258,7 +271,7 @@ void stream_protocol::on_data_read(
         boost::bind(&stream_protocol::template on_data_read<Callback>, this,
             boost::asio::placeholders::error,
             boost::asio::placeholders::bytes_transferred,
-            read_length, boost::ref(data_regions), callback));
+            read_length, callback));
 
     return;
 }
@@ -268,48 +281,39 @@ template<typename Callback>
 void stream_protocol::on_write(
     const  boost::system::error_code & ec,
     size_t bytes_transferred,
-    const  Callback & callback
-)
+    const  Callback & callback)
 {
-    if(ec)
+    if(!ec && !bytes_transferred)
     {
-        callback(ec);
+        // special case indicating a write operation
+        //  should be started. we do this in the callback
+        //  rather than in write_queued() because the
+        //  result type of boost::protect(callback) is
+        //  tough to get a hold of
+
+        boost::asio::async_write(socket(), _sock_write_regions,
+            boost::bind(&stream_protocol::template on_write<Callback>,
+            this,
+            boost::asio::placeholders::error,
+            boost::asio::placeholders::bytes_transferred,
+            callback));
+        return;
     }
 
     // temp
-    if(bytes_transferred)
+    if(!ec)
     {
         size_t pending = 0;
-        for(size_t i = 0; i != _sock_write_ind; ++i)
+        for(size_t i = 0; i != _sock_write_regions.size(); ++i)
             pending += _sock_write_regions[i].size();
         assert(pending == bytes_transferred);
     }
     // end temp
 
-    _sock_write_regions.erase(
-        _sock_write_regions.begin(),
-        _sock_write_regions.begin() + _sock_write_ind
-    );
-    _sock_write_ind = 0;
+    _sock_write_regions.clear();
     _in_write = false;
 
-    if(_sock_write_regions.empty())
-    {
-        // No more to write
-        callback(ec);
-        return;
-    }
-
-    _in_write = true;
-    _sock_write_ind = _sock_write_regions.size();
-    boost::asio::async_write(socket(), _sock_write_regions,
-        boost::bind(&stream_protocol::template on_write<Callback>,
-            this,
-            boost::asio::placeholders::error,
-            boost::asio::placeholders::bytes_transferred,
-            callback));
-
-    return;
+    callback(ec, bytes_transferred);
 }
 
 inline void stream_protocol::pre_socket_read(size_t read_target)
@@ -322,14 +326,12 @@ inline void stream_protocol::pre_socket_read(size_t read_target)
     _r_ring.get_write_regions(_sock_read_regions,
         read_target - _r_ring.available_read());
 
-    _in_read = true;
     return;
 }
 
 inline void stream_protocol::post_socket_read(size_t bytes_read)
 {
     _r_ring.produced(bytes_read);
-    _in_read = false;
     return;
 }
 

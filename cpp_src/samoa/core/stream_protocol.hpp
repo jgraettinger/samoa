@@ -41,6 +41,8 @@ public:
     //  callback(boost::system::error_code,
     //      stream_protocol::match_results_t);
     //
+    // Note that results are invalidated 
+    //  at the start of the next read operation.
     template<typename Callback>
     void read_regex(
         const  boost::regex &,
@@ -57,6 +59,8 @@ public:
     //      core::buffers_iterator_t begin,
     //      core::buffers_iterator_t end);
     //
+    // Note that results are invalidated
+    //  at the start of the next read operation.
     template<typename Callback>
     void read_until(
         char   delim_char,
@@ -66,33 +70,28 @@ public:
     // Initiates an asynchronous read of read_length
     //  bytes from the socket.
     //
-    // Resulting data is returned by appending buffers
-    //  to output-argument data_regions, which must have
-    //  lifetime >= the read operation.
-    //
     // Callback signature:
     //
-    //   callback(boost::system::error_code, size_t read_length)
+    //   callback(boost::system::error_code,
+    //       size_t read_length,
+    //       const buffer_regions_t &);
     //
     // Note: read_length is returned for convienence only.
-    //   The operation will either read the entire amound of
+    //   The operation will either read the entire amount of
     //   requested data, or will return with an error.
     //
+    //  Result buffer_regions_t is invalidated at the start
+    //   of the next read operation.
     template<typename Callback>
     void read_data(
         size_t read_length,
-        buffer_regions_t & data_regions,
         const Callback & callback);
 
     // queue_write(*) - schedule buffer for writing to the client,
     //  using gather-IO.
     //
-    // NOTE! If there is no current write operation, queue_write
-    //  *DOES NOT* start one. Check the value of in_write() to
-    //  see if one should be manually started.
-    // However, Iff a write operation is in progress, it will
-    //  iteratively consume all queued buffer.
-
+    // It is an error to call queue_write() while a
+    //  write operation is in progress.
     void queue_write(const const_buffer_region &);
     void queue_write(const const_buffer_regions_t &);
 
@@ -102,9 +101,18 @@ public:
     void queue_write(const std::string & str)
     { queue_write(str.begin(), str.end()); }
 
-    // Initiates an asynchronous write of all queued buffer.
-    //  Will iteratively consume any queued buffer, calling
-    //  back only when none remains.
+    // Initiates an asynchronous write of queued buffer
+    //  regions to the socket.
+    //
+    // Callback signature:
+    //
+    //   callback(boost::system::error_code,
+    //       size_t write_length)
+    //
+    // Note: write_length is returned for convienence only.
+    //   The operation will either write the entire amount of
+    //   requested data, or will return with an error.
+    //
     template<typename Callback>
     void write_queued(const Callback & callback);
 
@@ -131,7 +139,6 @@ private:
         const  boost::system::error_code & ec,
         size_t bytes_transferred,
         size_t read_length,
-        buffer_regions_t & data_regions,
         const  Callback & callback);
 
     template<typename Callback>
@@ -149,12 +156,8 @@ private:
     buffer_regions_t       _sock_read_regions;
     const_buffer_regions_t _sock_write_regions;
 
-    // end index passed to last socket op
-    //  (more may have been added since)
-    size_t _sock_write_ind;
-
     //  Reusable array of regions to match over
-    buffer_regions_t _match_regions;
+    buffer_regions_t _result_regions;
 
     bool _in_read, _in_write;
 

@@ -6,6 +6,7 @@ import samoa.server
 import getty
 import random
 
+re1 = samoa.core.StreamProtocol.compile_regex('(foobar+)(baz+)\r\n')
 
 class Scope(object):
 
@@ -19,10 +20,14 @@ class Get(samoa.server.CommandHandler):
     def handle(self, client):
         print "Get.handle() called %r %r" % (self, client)
         s = Scope()
-        res1 = yield client.read_until('\n', 100)
-        print "res1: %r" % res1
-        res2 = yield client.read_until('\n', 100)
+        res1 = yield client.read_regex(re1, 100)
+        print "res1: %r" % (res1,)
+        res2 = yield client.read_data(5)
         print "res2: %r" % res2
+        client.queue_write('you wrote: ')
+        client.queue_write('%r and %r\r\n' % (res1, res2))
+        res3 = yield client.write_queued()
+        print "write %d bytes" % res3
         client.start_next_request()
 
 port = 54321

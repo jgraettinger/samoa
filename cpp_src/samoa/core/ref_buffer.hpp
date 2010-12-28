@@ -4,6 +4,7 @@
 #include <boost/detail/atomic_count.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
+#include <new>
 
 namespace samoa {
 namespace core {
@@ -30,9 +31,8 @@ public:
     
     static ptr_t aquire_ref_buffer(size_t size)
     {
-        char * buf = new char[sizeof(ref_buffer) + size];
-        new (buf) ref_buffer(size);
-        return ptr_t( (ref_buffer*) buf);
+        void * buf = new char[sizeof(ref_buffer) + size];
+        return ptr_t(new (buf) ref_buffer(size));
     }
     
 private:
