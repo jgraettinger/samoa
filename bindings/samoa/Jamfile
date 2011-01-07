@@ -1,21 +1,8 @@
 
-project pysamoa ;
-
-# Provide the global run-thread variable as a shared
-#  library other extensions will link against
-lib libpysamoa :
-    ./core/runthread.cpp
-    ./core/coroutine.cpp
-    ./core/future.cpp
-    /python//python
-    : <link>shared ;
-
-install dist : libpysamoa : <location>$(INSTALL) ;
-
 python-extension _samoa :
-    [ glob *.cpp : runthread.cpp coroutine.cpp future.cpp ]
+    [ glob *.cpp ]
     /samoa//libsamoa
-    libpysamoa
+    /pysamoa//libpysamoa
     /root//boost_system
     /root//boost_regex
     /root//boost_python
@@ -24,5 +11,5 @@ python-extension _samoa :
 build-project server ;
 build-project core ;
 
-install dist2 : _samoa : <location>$(INSTALL)/samoa ;
+install dist : _samoa : <location>$(INSTALL)/samoa ;
 

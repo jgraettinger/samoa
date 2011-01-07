@@ -1,14 +1,12 @@
-
-#ifndef SAMOA_CORE_FUTURE_HPP
-#define SAMOA_CORE_FUTURE_HPP
+#ifndef PYSAMOA_FUTURE_HPP
+#define PYSAMOA_FUTURE_HPP
 
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include <boost/python.hpp>
 #include <boost/shared_ptr.hpp>
 
-namespace samoa {
-namespace core {
+namespace pysamoa {
 
 namespace bpl = boost::python;
 
@@ -32,16 +30,16 @@ public:
     //  (Not worth the complexity at the moment)
     void on_buffer_result(
         const boost::system::error_code & ec,
-        const buffers_iterator_t & begin,
-        const buffers_iterator_t & end);
+        const samoa::core::buffers_iterator_t & begin,
+        const samoa::core::buffers_iterator_t & end);
 
     void on_regex_match_result(
         const boost::system::error_code & ec,
-        const stream_protocol::match_results_t & match);
+        const samoa::core::stream_protocol::match_results_t & match);
 
     void on_data_result(
         const boost::system::error_code & ec,
-        size_t length, const buffer_regions_t & regions);
+        size_t length, const samoa::core::buffer_regions_t & regions);
 
     void on_length_result(
         const boost::system::error_code & ec, size_t length);
@@ -61,8 +59,7 @@ private:
     coroutine_ptr_t _coroutine;
 };
 
-};
-};
+}
 
 #endif
 

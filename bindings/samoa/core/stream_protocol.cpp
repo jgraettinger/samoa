@@ -1,8 +1,8 @@
 
 #include <boost/python.hpp>
 #include "samoa/core/stream_protocol.hpp"
-#include "samoa/core/scoped_python.hpp"
-#include "samoa/core/future.hpp"
+#include "pysamoa/scoped_python.hpp"
+#include "pysamoa/future.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/bind/protect.hpp>
 #include <boost/bind.hpp>
@@ -12,6 +12,7 @@ namespace samoa {
 namespace core {
 
 namespace bpl = boost::python;
+using namespace pysamoa;
 
 boost::regex py_compile_regex(const bpl::str & re)
 {

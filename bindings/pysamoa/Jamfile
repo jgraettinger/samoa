@@ -1,0 +1,12 @@
+
+project pysamoa ;
+
+lib libpysamoa :
+    ./runthread.cpp
+    ./coroutine.cpp
+    ./future.cpp
+    /python//python
+    : <link>shared ;
+
+install dist : libpysamoa : <location>$(INSTALL) ;
+

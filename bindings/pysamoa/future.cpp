@@ -1,12 +1,12 @@
 
-#include "samoa/core/future.hpp"
-#include "samoa/core/coroutine.hpp"
-#include "samoa/core/scoped_python.hpp"
+#include "future.hpp"
+#include "coroutine.hpp"
+#include "scoped_python.hpp"
 #include <boost/python.hpp>
 #include <iostream>
 
-namespace samoa {
-namespace core {
+namespace pysamoa {
+using namespace samoa::core;
 
 future::future()
  : _called(false), _error(false)
@@ -172,6 +172,5 @@ void make_future_bindings()
         "Future", bpl::no_init);
 }
 
-};
-};
+}
 

@@ -1,12 +1,11 @@
-#ifndef SAMOA_CORE_COROUTINE_HPP
-#define SAMOA_CORE_COROUTINE_HPP
+#ifndef PYSAMOA_COROUTINE_HPP
+#define PYSAMOA_COROUTINE_HPP
 
 #include <boost/python.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
 
-namespace samoa {
-namespace core {
+namespace pysamoa {
 
 namespace bpl = boost::python;
 
@@ -37,7 +36,6 @@ private:
     bpl::object _generator;
 };
 
-}
 }
 
 #endif

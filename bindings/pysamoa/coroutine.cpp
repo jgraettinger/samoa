@@ -4,10 +4,9 @@
 #include <boost/python.hpp>
 #include <iostream>
 
-namespace samoa {
-namespace core {
-
+namespace pysamoa {
 namespace bpl = boost::python;
+using namespace samoa::core;
 
 // Precondition: Python GIL is held (Py_INCREF called under the hood)
 coroutine::coroutine(const bpl::object & generator)
@@ -74,6 +73,6 @@ void coroutine::error(
         std::cerr << "coroutine::error() got StopIteration" << std::endl;
     }
 }
-}
+
 }
 

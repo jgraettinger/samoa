@@ -1,13 +1,12 @@
-#ifndef SAMOA_CORE_SCOPED_PYTHON_HPP
-#define SAMOA_CORE_SCOPED_PYTHON_HPP
+#ifndef PYSAMOA_SCOPED_PYTHON_HPP
+#define PYSAMOA_SCOPED_PYTHON_HPP
 
 #include <exception>
 #include <boost/python.hpp>
 #include <boost/detail/atomic_count.hpp>
 #include <Python.h>
 
-namespace samoa {
-namespace core {
+namespace pysamoa {
 
 // Python thread which entered proactor.run()
 extern PyThreadState * _run_thread;
@@ -55,7 +54,6 @@ public:
     }
 };
 
-}
 }
 
 #endif

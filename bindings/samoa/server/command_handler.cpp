@@ -2,8 +2,8 @@
 #include "samoa/server/command_handler.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
-#include "samoa/core/scoped_python.hpp"
-#include "samoa/core/coroutine.hpp"
+#include "pysamoa/scoped_python.hpp"
+#include "pysamoa/coroutine.hpp"
 #include <boost/python.hpp>
 #include <iostream>
 
@@ -20,7 +20,7 @@ public:
 
     void handle(const client::ptr_t & client)
     {
-        core::scoped_python block;
+        pysamoa::scoped_python block;
 
         // call handler
         object res = this->get_override("handle")(client);
@@ -29,7 +29,7 @@ public:
         if(PyGen_Check(res.ptr()))
         {
             // start a new coroutine
-            core::coroutine::ptr_t coro(new core::coroutine(res));
+            pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(res));
             coro->start();
         }
         else if(res.ptr() != Py_None)
