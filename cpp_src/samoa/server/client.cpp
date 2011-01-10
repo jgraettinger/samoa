@@ -11,7 +11,7 @@ namespace server {
 using namespace boost::asio;
 
 client::client(context::ptr_t context, protocol::ptr_t protocol,
-    std::auto_ptr<ip::tcp::socket> sock)
+    std::unique_ptr<ip::tcp::socket> & sock)
  : core::stream_protocol(sock),
    _context(context),
    _protocol(protocol)

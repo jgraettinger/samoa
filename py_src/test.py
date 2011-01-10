@@ -1,10 +1,11 @@
 
 import sys
 import logging
-import gevent
 import getty
 import random
 
+
+import samoa.core
 import samoa.model
 import samoa.module
 import samoa.server
@@ -45,7 +46,6 @@ except:
     pass
 
 server = inj.get_instance(samoa.server.Server)
-gevent.spawn(server.service_loop)
 
 remote_srv = samoa.runtime.remote_server.RemoteServer('localhost', port)
 

@@ -16,23 +16,21 @@ using namespace boost;
 
 listener::listener(std::string host, std::string port, unsigned listen_backlog,
     context::ptr_t ctxt, protocol::ptr_t prot)
- : _host(host), _port(port), _context(ctxt), _protocol(prot)
+ : _context(ctxt), _protocol(prot)
 {
     core::proactor::ptr_t proactor = _context->get_proactor();
 
-    /*
     ip::tcp::resolver resolver(proactor->get_nonblocking_io_service());
 
     // Blocks, & throws on resolution failure
     ip::tcp::endpoint ep = *resolver.resolve(
         ip::tcp::resolver::query(host, port));
-    */
 
     // Create & listen on accepting socket, reusing port
     _accept_sock = std::auto_ptr<ip::tcp::acceptor>(new ip::tcp::acceptor(
-        proactor->get_nonblocking_io_service(), ip::tcp::endpoint(ip::tcp::v4(), 54321), true));
+        proactor->get_nonblocking_io_service(), ep));
 
-    //_accept_sock->listen(listen_backlog);
+    _accept_sock->listen(listen_backlog);
 
     // Next connection to accept
     on_accept(boost::system::error_code());
@@ -52,6 +50,12 @@ void listener::cancel()
     _context->get_proactor()->get_nonblocking_io_service().post(
         boost::bind(&listener::on_cancel, shared_from_this()));
 }
+
+std::string listener::get_address()
+{ return _accept_sock->local_endpoint().address().to_string(); }
+
+unsigned listener::get_port()
+{ return _accept_sock->local_endpoint().port(); }
 
 void listener::on_accept(const boost::system::error_code & ec)
 {

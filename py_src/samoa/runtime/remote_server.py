@@ -1,4 +1,4 @@
-
+"""
 import logging
 import gevent.event
 import gevent.queue
@@ -101,4 +101,4 @@ class RemoteServer(object):
                 # initiate reconnection
                 gevent.spawn_later(1, self._service_loop)
                 return 
-
+"""

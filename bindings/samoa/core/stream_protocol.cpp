@@ -35,13 +35,13 @@ future::ptr_t py_read_regex(stream_protocol & p,
     return f;
 }
     
-future::ptr_t py_read_until(stream_protocol & p,
+future::ptr_t py_read_line(stream_protocol & p,
     char delim_char, size_t max_read_length)
 {
     future::ptr_t f(new future());
 
-    p.read_until(delim_char, max_read_length,
-        boost::bind(&future::on_buffer_result, f, _1, _2, _3));
+    p.read_line(boost::bind(&future::on_buffer_result, f, _1, _2, _3),
+        delim_char, max_read_length);
     return f;
 }
 
@@ -84,7 +84,9 @@ void make_stream_protocol_bindings()
         .staticmethod("compile_regex")
         .def("read_regex", &py_read_regex)
         .def("read_data", &py_read_data)
-        .def("read_until", &py_read_until)
+        .def("read_line", &py_read_line, (
+            bpl::arg("delim_char") = '\n',
+            bpl::arg("max_read_length") = 1024))
         .def("queue_write", &py_queue_write)
         .def("write_queued", &py_write_queued);
 }

@@ -11,6 +11,7 @@ namespace samoa {
 namespace server {
 
 using namespace boost::python;
+using namespace std;
 
 class py_command_handler :
     public command_handler, public wrapper<command_handler> 
@@ -22,21 +23,23 @@ public:
     {
         pysamoa::scoped_python block;
 
-        // call handler
-        object res = this->get_override("handle")(client);
+        object handler = this->get_override("handle");
+        object result = handler(client);
 
-        // is res a generator?
-        if(PyGen_Check(res.ptr()))
+        // is result a generator?
+        if(PyGen_Check(result.ptr()))
         {
             // start a new coroutine
-            pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(res));
-            coro->start();
+            pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(result));
+            coro->next();
         }
-        else if(res.ptr() != Py_None)
+        else if(result.ptr() != Py_None)
         {
-            std::string msg = extract<std::string>(res.attr("__repr__")());
-            throw std::runtime_error("Expected either generator or "
-                "Py_None, but got: " + msg);
+            string msg = extract<string>(result.attr("__repr__")());
+            string h_msg = extract<string>(handler.attr("__repr__")());
+            throw runtime_error("command_handler.handle(): expected "
+                "handler to return either a generator or None, "
+                "but got:\n\t" + msg + "\n<handler was " + h_msg + ">");
         }
     }
 };

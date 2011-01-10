@@ -3,6 +3,7 @@
 
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/core/stream_protocol.hpp"
+#include "samoa/client/server.hpp"
 #include <boost/python.hpp>
 #include <boost/shared_ptr.hpp>
 
@@ -43,6 +44,10 @@ public:
 
     void on_length_result(
         const boost::system::error_code & ec, size_t length);
+
+    void on_server_result(
+        const boost::system::error_code & ec,
+        samoa::client::server::ptr_t);
 
 private:
 

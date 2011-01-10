@@ -10,7 +10,9 @@ using namespace samoa::core;
 
 future::future()
  : _called(false), _error(false)
-{ }
+{
+    std::cerr << "future " << (size_t)this << " created" << std::endl;
+}
 
 future::~future()
 {
@@ -19,9 +21,11 @@ future::~future()
 
     _result = _exc_type = _exc_msg = bpl::object();
     _coroutine.reset();
+
+    std::cerr << "future " << (size_t)this << " destroyed" << std::endl;
 }
 
-// Precondition: Python GIL is held
+// precondition: Python GIL is held
 void future::set_yielding_coroutine(const coroutine::ptr_t & coro)
 {
     _coroutine = coro;
@@ -53,7 +57,7 @@ void future::on_buffer_result(
     {
         // save exception
         _exc_type = bpl::object(
-            (bpl::detail::borrowed_reference) PyExc_RuntimeError);
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
         _exc_msg = bpl::str(ec.message());
         _error = true;
     }
@@ -77,7 +81,7 @@ void future::on_regex_match_result(
     {
         // save exception
         _exc_type = bpl::object(
-            (bpl::detail::borrowed_reference) PyExc_RuntimeError);
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
         _exc_msg = bpl::str(ec.message());
         _error = true;
     }
@@ -100,7 +104,7 @@ void future::on_regex_match_result(
             PyTuple_SET_ITEM(tuple, i, str);
         }
 
-        _result = bpl::object((bpl::detail::new_reference) tuple);
+        _result = bpl::object(bpl::handle<>(tuple));
     }
 
     _called = true;
@@ -117,7 +121,7 @@ void future::on_data_result(
     {
         // save exception
         _exc_type = bpl::object(
-            (bpl::detail::borrowed_reference) PyExc_RuntimeError);
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
         _exc_msg = bpl::str(ec.message());
         _error = true;
     }
@@ -136,7 +140,7 @@ void future::on_data_result(
             buf_ptr += regions[i].size();
         }
 
-        _result = bpl::object((bpl::detail::new_reference) buf);
+        _result = bpl::object(bpl::handle<>(buf));
     }
 
     _called = true;
@@ -152,24 +156,38 @@ void future::on_length_result(
     {
         // save exception
         _exc_type = bpl::object(
-            (bpl::detail::borrowed_reference) PyExc_RuntimeError);
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
         _exc_msg = bpl::str(ec.message());
         _error = true;
     }
     else {
         PyObject * len = PyInt_FromSize_t(length);
-        _result = bpl::object((bpl::detail::new_reference) len);
+        _result = bpl::object(bpl::handle<>(len));
     }
 
     _called = true;
     send_result();
 }
 
-
-void make_future_bindings()
+void future::on_server_result(
+    const boost::system::error_code & ec, samoa::client::server::ptr_t srv)
 {
-    bpl::class_<future, future::ptr_t, boost::noncopyable>(
-        "Future", bpl::no_init);
+    scoped_python block;
+
+    if(ec)
+    {
+        // save exception
+        _exc_type = bpl::object(
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
+        _exc_msg = bpl::str(ec.message());
+        _error = true;
+    }
+    else {
+        _result = bpl::object(srv);
+    }
+
+    _called = true;
+    send_result();
 }
 
 }

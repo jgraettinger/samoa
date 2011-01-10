@@ -4,6 +4,7 @@
 #include <boost/python.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
+#include <vector>
 
 namespace pysamoa {
 
@@ -14,6 +15,7 @@ class coroutine :
     private boost::noncopyable
 {
 public:
+
     typedef boost::shared_ptr<coroutine> ptr_t;
 
     // Precondition: Python GIL is held (Py_INCREF called under the hood)
@@ -23,7 +25,7 @@ public:
     ~coroutine();
 
     // Precondition: Python GIL is held
-    void start();
+    void next();
 
     // Precondition: Python GIL is held
     void send(const bpl::object & arg);
@@ -33,7 +35,15 @@ public:
 
 private:
 
-    bpl::object _generator;
+    void reenter(bpl::object arg);
+
+    std::vector<bpl::object> _stack;
+    std::vector<bpl::object> _frame_return;
+
+    bool _exception_set;
+    bpl::object _exc_type;
+    bpl::object _exc_val;
+    bpl::object _exc_traceback;
 };
 
 }

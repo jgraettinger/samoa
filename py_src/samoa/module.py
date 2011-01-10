@@ -1,6 +1,7 @@
 
 import getty
 
+import samoa.core
 import samoa.server
 import samoa.model
 import samoa.runtime

@@ -25,12 +25,13 @@ public:
 
     void cancel();
 
+    std::string get_address();
+    unsigned get_port();
+
 private:
 
     void on_accept(const boost::system::error_code & ec);
     void on_cancel();
-
-    const std::string _host, _port;
 
     context_ptr_t  _context;
     protocol_ptr_t _protocol;
@@ -39,7 +40,7 @@ private:
     std::auto_ptr<boost::asio::ip::tcp::acceptor> _accept_sock;
     
     // Next connection to accept
-    std::auto_ptr<boost::asio::ip::tcp::socket> _next_sock;
+    std::unique_ptr<boost::asio::ip::tcp::socket> _next_sock;
 };
 
 }

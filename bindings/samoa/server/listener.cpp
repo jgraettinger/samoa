@@ -15,7 +15,9 @@ void make_listener_bindings()
         "Listener", init<std::string, std::string, unsigned,
             context::ptr_t, protocol::ptr_t>(args("host", "port",
             "listen_backlog", "context", "protocol")))
-        .def("cancel", &listener::cancel);
+        .def("cancel", &listener::cancel)
+        .add_property("address", &listener::get_address)
+        .add_property("port", &listener::get_port);
 }
 
 }

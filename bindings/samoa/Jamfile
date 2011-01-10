@@ -8,8 +8,9 @@ python-extension _samoa :
     /root//boost_python
 ;
 
-build-project server ;
 build-project core ;
+build-project server ;
+build-project client ;
 
 install dist : _samoa : <location>$(INSTALL)/samoa ;
 

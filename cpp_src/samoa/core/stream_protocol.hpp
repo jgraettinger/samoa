@@ -20,7 +20,7 @@ public:
     typedef boost::match_results<buffers_iterator_t
         > match_results_t;
 
-    stream_protocol(std::auto_ptr<boost::asio::ip::tcp::socket> & sock);
+    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
 
     // Underlying socket
     boost::asio::ip::tcp::socket & socket()
@@ -62,10 +62,10 @@ public:
     // Note that results are invalidated
     //  at the start of the next read operation.
     template<typename Callback>
-    void read_until(
-        char   delim_char,
-        size_t max_read_length,
-        const  Callback & callback);
+    void read_line(
+        const Callback & callback,
+        char   delim_char = '\n',
+        size_t max_read_length = 1024);
 
     // Initiates an asynchronous read of read_length
     //  bytes from the socket.
@@ -162,7 +162,7 @@ private:
     bool _in_read, _in_write;
 
     buffer_ring _r_ring, _w_ring;
-    std::auto_ptr<boost::asio::ip::tcp::socket> _sock;
+    std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
 };
 
 }

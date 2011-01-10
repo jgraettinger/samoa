@@ -1,6 +1,6 @@
 
 project root
-    : requirements <threading>multi
+    : requirements <threading>multi <cxxflags>-std=c++0x
     : default-build debug 
     : build-dir build
 ;
@@ -33,4 +33,3 @@ lib boost_regex ;
 build-project cpp_src ;
 build-project bindings ;
 build-project py_src ;
-

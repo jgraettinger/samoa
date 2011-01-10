@@ -1,4 +1,4 @@
-
+"""
 import logging
 import gevent.event
 import gevent.socket as socket
@@ -49,4 +49,4 @@ class RemoteClient(object):
             except Exception, e:
                 self.log.exception('While servicing request: %r' % cmd)
                 cmd.error_to_stream(self.sock.send, e)
-
+"""

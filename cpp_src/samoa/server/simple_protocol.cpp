@@ -11,23 +11,17 @@ namespace server {
 
 // Canned responses
 namespace {
-    const size_t MAX_COMMAND_LENGTH = 128;
     core::const_buffer_region _resp_newline("\r\n");
-    core::const_buffer_region _resp_version("SAMOA v0.1\r\n");
     core::const_buffer_region _resp_err_cmd_overflow("-ERR command overflow\r\n");
     core::const_buffer_region _resp_err_cmd_unknown("-ERR command unknown\r\n");
 };
 
 void simple_protocol::start(const client::ptr_t & client)
-{
-    client->queue_write(_resp_version);
-    client->write_queued(boost::bind(&simple_protocol::on_write,
-        shared_from_this(), client, _1, false));
-}
+{ next_request(client); }
 
 void simple_protocol::next_request(const client::ptr_t & client)
 {
-    client->read_until('\n', MAX_COMMAND_LENGTH, boost::bind(
+    client->read_line(boost::bind(
         &simple_protocol::on_command, shared_from_this(),
         client, _1, _2, _3));
 }

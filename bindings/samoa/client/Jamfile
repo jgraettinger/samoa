@@ -1,0 +1,11 @@
+
+python-extension _client :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _client : <location>$(INSTALL)/samoa/client ;
+

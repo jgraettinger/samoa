@@ -7,13 +7,13 @@ namespace samoa {
 namespace core {
 
 inline stream_protocol::stream_protocol(
-    std::auto_ptr<boost::asio::ip::tcp::socket> & sock
+    std::unique_ptr<boost::asio::ip::tcp::socket> & sock
 ) :
     _in_read(false),
     _in_write(false),
     _r_ring(),
     _w_ring(),
-    _sock(sock)
+    _sock(std::move(sock))
 { }
 
 
@@ -37,10 +37,10 @@ void stream_protocol::read_regex(
 }
 
 template<typename Callback>
-void stream_protocol::read_until(
-    char delim_char,
-    size_t max_read_length,
-    const Callback & callback)
+void stream_protocol::read_line(
+    const Callback & callback,
+    char delim_char /* = '\n' */,
+    size_t max_read_length /* = 1024 */)
 {
     assert(!_in_read);
     _in_read = true;

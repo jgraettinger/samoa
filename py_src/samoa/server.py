@@ -1,4 +1,4 @@
-
+"""
 import getty
 import gevent.socket as socket
 
@@ -35,4 +35,4 @@ class Server(object):
 
             client_sock, _ = self.srv_sock.accept()
             runtime.RemoteClient(self, client_sock)
-
+"""

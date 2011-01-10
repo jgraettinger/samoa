@@ -13,7 +13,7 @@ using namespace boost::python;
 void make_client_bindings()
 {
     class_<client, client::ptr_t, boost::noncopyable,
-            bases<core::stream_protocol> >("client", no_init)
+            bases<core::stream_protocol> >("Client", no_init)
         .def("start_next_request", &client::start_next_request)
         .add_property("context", make_function(&client::get_context,
             return_value_policy<copy_const_reference>()))

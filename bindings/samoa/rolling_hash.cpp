@@ -6,9 +6,6 @@ namespace samoa {
 
 namespace bpl = boost::python;
 
-boost::python::object none_obj( 
-    ((struct boost::python::detail::borrowed_reference_t *) ((void*) Py_None)));
-
 struct py_rolling_hash_iter
 {
     rolling_hash * hash;
@@ -52,7 +49,7 @@ bpl::object py_get(rolling_hash * hash, const bpl::str & key)
     if(rec)
         return bpl::str(rec->value(), rec->value() + rec->value_length());
     else
-        return none_obj;
+        return bpl::object();
 }
 
 void py_set(rolling_hash * hash, const bpl::str & key, const bpl::str & val)
@@ -83,7 +80,7 @@ bpl::object py_head(rolling_hash * hash)
             bpl::str(head->key(), head->key() + head->key_length()),
             bpl::str(head->value(), head->value() + head->value_length()));
 
-    return none_obj;
+    return bpl::object();
 }
 
 void make_rolling_hash_bindings()
