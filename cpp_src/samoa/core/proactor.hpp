@@ -5,6 +5,7 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/function.hpp>
 
 namespace samoa {
 namespace core {
@@ -18,6 +19,9 @@ public:
     typedef boost::shared_ptr<proactor> ptr_t;
 
     proactor();
+
+    typedef boost::function<void ()> run_later_callback_t;
+    void run_later(const run_later_callback_t &, unsigned delay_ms);
 
     boost::asio::io_service & get_nonblocking_io_service()
     { return _io_service; }

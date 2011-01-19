@@ -11,18 +11,12 @@ namespace core {
 using namespace boost::python;
 using namespace std;
 
-void on_py_run_later(const boost::system::error_code & ec, object target)
+void on_py_run_later(const object & callback)
 {
-    if(ec)
-    {
-        cerr << "on_py_run_later(): " << ec.message() << endl;
-        return;
-    }
-
     pysamoa::scoped_python block;
 
-    // invoke target
-    object result = target();
+    // invoke callback
+    object result = callback();
 
     if(PyGen_Check(result.ptr()))
     {
@@ -33,29 +27,16 @@ void on_py_run_later(const boost::system::error_code & ec, object target)
     else if(result.ptr() != Py_None)
     {
         string msg = extract<string>(result.attr("__repr__")());
-        string t_msg = extract<string>(target.attr("__repr__")());
+        string t_msg = extract<string>(callback.attr("__repr__")());
         throw runtime_error("Proactor.run_later(): expected "
-            "target to return either a generator or None, "
-            "but got:\n\t" + msg + "\n<target was " + t_msg + ">");
+            "callback to return either a generator or None, "
+            "but got:\n\t" + msg + "\n<callback was " + t_msg + ">");
     }
 }
 
-void py_run_later(proactor & p, object target, unsigned delay_ms)
+void py_run_later(proactor & p, const object & callback, unsigned delay_ms)
 {
-    if(delay_ms)
-    {
-        boost::asio::deadline_timer t(p.get_nonblocking_io_service(),
-            boost::posix_time::milliseconds(delay_ms));
-
-        t.async_wait(boost::bind(&on_py_run_later,
-            _1, target));
-    }
-    else
-    {
-        // post to proactor io_service for immediate dispatch
-        p.get_nonblocking_io_service().post(boost::bind(&on_py_run_later,
-            boost::system::error_code(), target));
-    }
+    p.run_later(boost::bind(&on_py_run_later, callback), delay_ms);
 }
 
 void py_shutdown(proactor & p)
@@ -122,7 +103,7 @@ void make_proactor_bindings()
         "Proactor", init<>())
         .def("run", &py_run)
         .def("run_later", &py_run_later, (
-            boost::python::arg("target"), boost::python::arg("delay_ms") = 0))
+            boost::python::arg("callback"), boost::python::arg("delay_ms") = 0))
         .def("shutdown", &py_shutdown);
 }
 

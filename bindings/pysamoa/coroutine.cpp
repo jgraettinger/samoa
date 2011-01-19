@@ -10,8 +10,7 @@ using namespace std;
 
 // Precondition: Python GIL is held (Py_INCREF called under the hood)
 coroutine::coroutine(const bpl::object & generator)
- : _exception_set(false),
-   _stack(generator, 1)
+ : _stack(1, generator), _exception_set(false)
 {
     std::cerr << "coro " << (size_t)this << " created" << std::endl;
 }

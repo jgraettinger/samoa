@@ -26,14 +26,13 @@ class TestBasic(unittest.TestCase):
         injector = module.configure(getty.Injector())
 
         self.proactor = injector.get_instance(samoa.core.Proactor)
-        context = injector.get_instance(samoa.server.Context)
-        protocol = injector.get_instance(samoa.server.SimpleProtocol)
+        self.context = injector.get_instance(samoa.server.Context)
+        self.protocol = injector.get_instance(samoa.server.SimpleProtocol)
 
-        protocol.add_command_handler('echo', samoa.command.echo.Echo())
-        protocol.add_command_handler('shutdown', samoa.command.shutdown.Shutdown())
-
-        self.listener = samoa.server.Listener(
-            '0.0.0.0', '0', 1, context, protocol)
+        self.protocol.add_command_handler('echo',
+            samoa.command.echo.Echo())
+        self.protocol.add_command_handler('shutdown',
+            samoa.command.shutdown.Shutdown())
 
         return
 
@@ -55,7 +54,10 @@ class TestBasic(unittest.TestCase):
 
             self.listener.cancel()
 
-        self.proactor.run_later(test)
+        self.listener = samoa.server.Listener(
+            '0.0.0.0', '0', 1, self.context, self.protocol)
+
+        self.proactor.run_later(test, 0)
         self.proactor.run()
 
     def test_shutdown(self):
@@ -72,7 +74,20 @@ class TestBasic(unittest.TestCase):
             response = yield cmd.request(server)
             self.assertFalse(True)
 
-        self.proactor.run_later(test)
+        self.listener = samoa.server.Listener(
+            '0.0.0.0', '0', 1, self.context, self.protocol)
+
+        self.proactor.run_later(test, 1)
         self.proactor.run()
 
+    def test_run_later(self):
+
+        val = []
+
+        def test():
+            val.append(1)
+
+        self.proactor.run_later(test, 1)
+        self.proactor.run()
+        self.assertTrue(val)
 

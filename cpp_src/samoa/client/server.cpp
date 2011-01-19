@@ -1,6 +1,5 @@
 
 #include "samoa/client/server.hpp"
-#include "coroutine.hpp"
 #include <iostream>
 
 namespace samoa {
