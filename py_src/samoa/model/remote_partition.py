@@ -19,13 +19,9 @@ class RemotePartition(ModelBase):
     table = sa.orm.relationship(Table,
         backref = sa.orm.backref('remote_partitions'))
 
-    def __init__(
-            self,
-            uid,
-            ring_pos,
-            remote_host,
-            remote_port
-        ):
+    def __init__(self, table_uid, uid, ring_pos, remote_host, remote_port):
+
+        self.table_uid = table_uid
         self.uid = uid
         self.ring_pos = ring_pos
         self.remote_host = remote_host

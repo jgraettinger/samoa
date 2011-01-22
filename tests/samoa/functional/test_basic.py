@@ -1,10 +1,6 @@
 
 import logging
 logging.basicConfig(level = logging.INFO)
-log = logging.getLogger('foobar')
-log.info('test')
-
-logging.error('foobar')
 
 import time
 import threading

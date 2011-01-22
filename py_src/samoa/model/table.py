@@ -6,6 +6,8 @@ from base import ModelBase
 class Table(ModelBase):
     __tablename__ = 'table'
 
+    DEFAULT_RING_SIZE = (1 << 32)
+
     # mapped attributes
     uid = sa.Column(sa.String, primary_key = True)
     dropped = sa.Column(sa.Boolean, default = False)
@@ -18,7 +20,7 @@ class Table(ModelBase):
     #   backreference 'remote_partitions'
 
     def __init__(self, uid, repl_factor = 1,
-        ring_size = (1 << 32), dropped = False):
+        ring_size = DEFAULT_RING_SIZE, dropped = False):
 
         self.uid = uid
         self.dropped = dropped

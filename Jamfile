@@ -20,14 +20,14 @@ if $(.user_path)
     path-constant INSTALL : $(.user_path) ;
 }
 
-using python : 2.6 : : /usr/include/python2.6_d : : <python-debugging>on ;
-lib boost_python : /home/johng/boost_1_40_0/stage/lib/libboost_python.so.1.40.0 ;
+#using python : 2.6 : : /usr/include/python2.6_d : : <python-debugging>on ;
+#lib boost_python : /home/johng/boost_1_40_0/stage/lib/libboost_python.so.1.40.0 ;
 
-#using python : 2.6 ;
+using python : 2.6 ;
 
 # external libraries we'll need
 lib boost_system ;
-#lib boost_python ;
+lib boost_python ;
 lib boost_regex ;
 
 build-project cpp_src ;
