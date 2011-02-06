@@ -17,6 +17,7 @@ class py_command_handler :
     public command_handler, public wrapper<command_handler> 
 {
 public:
+
     typedef boost::shared_ptr<py_command_handler> ptr_t;
 
     void handle(const client::ptr_t & client)

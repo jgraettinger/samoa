@@ -5,6 +5,7 @@
 #include "samoa/core/buffer_region.hpp"
 #include <boost/regex.hpp>
 #include <boost/asio.hpp>
+#include <boost/function.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/bind/protect.hpp>
 #include <boost/bind.hpp>
@@ -13,79 +14,90 @@
 namespace samoa {
 namespace core {
 
-class stream_protocol : private boost::noncopyable
+class stream_protocol_read_interface
+    : private boost::noncopyable
 {
 public:
+
+    stream_protocol_read_interface();
 
     typedef boost::match_results<buffers_iterator_t
         > match_results_t;
 
-    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
+    // match_results_t argument is invalidated by
+    //  the next call to read_*
+    typedef boost::function<
+        void(const boost::system::error_code &,
+            const match_results_t &)
+    > read_regex_callback_t;
 
-    // Underlying socket
-    boost::asio::ip::tcp::socket & socket()
-    { return *_sock; }
-
-    // Is currently in a read operation?
-    bool in_read() const
-    { return _in_read; }
-
-    // Is currently in a write operation?
-    bool in_write() const
-    { return _in_write; }
-
-    // Initiates an asynchronous read of the regex
-    //
-    // Callback signature:
-    //
-    //  callback(boost::system::error_code,
-    //      stream_protocol::match_results_t);
-    //
-    // Note that results are invalidated 
-    //  at the start of the next read operation.
-    template<typename Callback>
     void read_regex(
         const  boost::regex &,
         size_t max_read_length,
-        const  Callback & callback
-    );
+        const  read_regex_callback_t &); 
 
-    // Initiates an asynchronous read to the
-    //   delimiating character
-    //
-    // Callback signature:
-    //
-    //  callback(boost::system::error_code,
-    //      core::buffers_iterator_t begin,
-    //      core::buffers_iterator_t end);
-    //
-    // Note that results are invalidated
-    //  at the start of the next read operation.
-    template<typename Callback>
+    // iteration range is invalidated by
+    //  the next call to read_*
+    typedef boost::function<
+        void(const boost::system::error_code &,
+            const buffers_iterator_t & begin,
+            const buffers_iterator_t & end)
+    > read_line_callback_t;
+
     void read_line(
-        const Callback & callback,
+        const  read_line_callback_t &,
         char   delim_char = '\n',
         size_t max_read_length = 1024);
 
-    // Initiates an asynchronous read of read_length
-    //  bytes from the socket.
-    //
-    // Callback signature:
-    //
-    //   callback(boost::system::error_code,
-    //       size_t read_length,
-    //       const buffer_regions_t &);
-    //
-    // Note: read_length is returned for convienence only.
-    //   The operation will either read the entire amount of
-    //   requested data, or will return with an error.
-    //
-    //  Result buffer_regions_t is invalidated at the start
-    //   of the next read operation.
-    template<typename Callback>
+    // buffer_regions_t argument is invalidated by
+    //  the next call to read_*
+    typedef boost::function<
+        void(const boost::system::error_code &,
+            size_t, const buffer_regions_t &)
+    > read_data_callback_t;
+
     void read_data(
         size_t read_length,
-        const Callback & callback);
+        const read_data_callback_t &);
+
+private:
+
+    void pre_socket_read(size_t read_target);
+    void post_socket_read(size_t bytes_read);
+
+    void on_regex_read(
+        const  boost::system::error_code & ec,
+        size_t bytes_transferred,
+        const  boost::regex & regex,
+        size_t max_read_length,
+        const  read_regex_callback_t &);
+
+    void on_read_line(
+        const  boost::system::error_code & ec,
+        size_t bytes_transferred,
+        char   delim,
+        size_t max_read_length,
+        const  read_line_callback_t &);
+
+    void on_read_data(
+        const  boost::system::error_code & ec,
+        size_t bytes_transferred,
+        size_t read_length,
+        const  read_data_callback_t &);
+
+    bool _in_read;
+    buffer_ring _r_ring;
+    buffer_regions_t _r_regions;
+};
+
+class stream_protocol_write_interface
+    : private boost::noncopyable
+{
+public:
+
+    stream_protocol_write_interface();
+
+    bool has_queued_writes() const;
 
     // queue_write(*) - schedule buffer for writing to the client,
     //  using gather-IO.
@@ -101,6 +113,10 @@ public:
     void queue_write(const std::string & str)
     { queue_write(str.begin(), str.end()); }
 
+    typedef boost::function<
+        void(const boost::system::error_code &, size_t)
+    > write_queued_callback_t;
+
     // Initiates an asynchronous write of queued buffer
     //  regions to the socket.
     //
@@ -113,55 +129,58 @@ public:
     //   The operation will either write the entire amount of
     //   requested data, or will return with an error.
     //
-    template<typename Callback>
-    void write_queued(const Callback & callback);
+    void write_queued(const write_queued_callback_t &);
 
 private:
 
-    template<typename Callback>
-    void on_regex_read(
+    void on_write_queued(
         const  boost::system::error_code & ec,
         size_t bytes_transferred,
-        const  boost::regex & regex,
-        size_t max_read_length,
-        const  Callback & callback);
+        const  write_queued_callback_t &);
 
-    template<typename Callback>
-    void on_delim_read(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
-        char   delim,
-        size_t max_read_length,
-        const  Callback & callback);
+    bool _in_write;
+    buffer_ring _w_ring;
+    const_buffer_regions_t _w_regions;
+};
 
-    template<typename Callback>
-    void on_data_read(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
-        size_t read_length,
-        const  Callback & callback);
+class stream_protocol :
+    protected stream_protocol_read_interface,
+    protected stream_protocol_write_interface
+{
+public:
 
-    template<typename Callback>
-    void on_write(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
-        const  Callback & callback
-    );
+    stream_protocol_read_interface::match_results_t;
 
-    void pre_socket_read(size_t read_target);
+    typedef stream_protocol_read_interface read_interface_t;
+    typedef stream_protocol_write_interface write_interface_t;
 
-    void post_socket_read(size_t bytes_read);
+    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
 
-    // Reusable containers of regions for pending socket ops
-    buffer_regions_t       _sock_read_regions;
-    const_buffer_regions_t _sock_write_regions;
+    std::string get_local_address();
+    std::string get_remote_address();
 
-    //  Reusable array of regions to match over
-    buffer_regions_t _result_regions;
+    unsigned get_local_port();
+    unsigned get_remote_port();
 
-    bool _in_read, _in_write;
+    void close();
 
-    buffer_ring _r_ring, _w_ring;
+protected:
+
+    read_interface_t & read_interface()
+    { return *this; }
+
+    write_interface_t & write_interface()
+    { return *this; }
+
+    // Underlying socket
+    boost::asio::ip::tcp::socket & get_socket()
+    { return *_sock; }
+
+private:
+
+    friend class stream_protocol_read_interface;
+    friend class stream_protocol_write_interface;
+
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
 };
 

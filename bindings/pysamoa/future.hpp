@@ -1,9 +1,9 @@
 #ifndef PYSAMOA_FUTURE_HPP
 #define PYSAMOA_FUTURE_HPP
 
+#include "samoa/client/fwd.hpp"
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/core/stream_protocol.hpp"
-#include "samoa/client/server.hpp"
 #include <boost/python.hpp>
 #include <boost/shared_ptr.hpp>
 
@@ -22,6 +22,7 @@ public:
     typedef boost::shared_ptr<future> ptr_t;
 
     future();
+    future(const bpl::object & result);
     ~future();
 
     // Precondition: Python GIL is held
@@ -45,9 +46,25 @@ public:
     void on_length_result(
         const boost::system::error_code & ec, size_t length);
 
-    void on_server_result(
+    void on_server_connect(
         const boost::system::error_code & ec,
-        samoa::client::server::ptr_t);
+        samoa::client::server_ptr_t);
+
+    void on_server_request(
+        const boost::system::error_code & ec,
+        samoa::client::server_request_interface);
+
+    void on_server_response(
+        const boost::system::error_code & ec,
+        samoa::client::server_response_interface);
+
+    // precondition: Python GIL is held
+    void on_error(
+        const bpl::object & exception_type,
+        const bpl::object & exception);
+
+    // precondition: Python GIL is held
+    void on_result(const bpl::object & result);
 
 private:
 

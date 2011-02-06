@@ -37,7 +37,7 @@ inline void entering_python()
     PyEval_RestoreThread(_run_thread);
 }
 
-struct scoped_python
+class scoped_python
 {
 public:
 
@@ -54,6 +54,34 @@ public:
     }
 };
 
-}
+class set_run_thread
+{
+public:
+
+    set_run_thread()
+    {
+        if(_run_thread)
+        {
+            throw std::runtime_error("set_run_thread(): Another python thread "
+                "is already acting as the run thread");
+        }
+
+        // Release the GIL, and save this thread state. Future calls
+        //  in to python from proactor handlers will call from this
+        //  thread context.
+        _run_thread = PyEval_SaveThread();
+    }
+
+    ~set_run_thread()
+    {
+        // Obtain the GIL & restore this thread state. Clear the
+        //  _run_thread variable so that this or other threads
+        //  may invoke Proactor.run()
+        PyEval_RestoreThread(_run_thread);
+        _run_thread = 0;
+    }
+};
+
+} // end pysamoa
 
 #endif

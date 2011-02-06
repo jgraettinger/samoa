@@ -12,7 +12,8 @@ using namespace std;
 coroutine::coroutine(const bpl::object & generator)
  : _stack(1, generator), _exception_set(false)
 {
-    std::cerr << "coro " << (size_t)this << " created" << std::endl;
+    string repr = bpl::extract<string>(bpl::str(generator));
+    std::cerr << "coro " << (size_t)this << " created " << repr << std::endl;
 }
 
 coroutine::~coroutine()

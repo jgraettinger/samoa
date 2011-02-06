@@ -2,8 +2,9 @@
 project samoa ;
 
 lib libsamoa :
-    [ glob-tree *.cpp ]
+    [ glob-tree *.cpp ] $(BUILD)/generated/cpp_src/samoa/core/protobuf/samoa.pb.cc
     /root//boost_system
+    /root//protobuf
     : <link>shared
     ;
 

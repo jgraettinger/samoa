@@ -2,108 +2,86 @@
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
 #include <boost/python.hpp>
+#include <boost/python/operators.hpp>
 #include <Python.h>
 #include <iostream>
 
 namespace samoa {
 namespace core {
 
-using namespace boost::python;
+namespace bpl = boost::python;
 using namespace std;
 
-void on_py_run_later(const object & callback)
+void on_py_run_later(const bpl::object & callable,
+    const bpl::tuple & args, const bpl::dict & kwargs)
 {
     pysamoa::scoped_python block;
 
-    // invoke callback
-    object result = callback();
+    // invoke callable
+    bpl::object result = callable(*args, **kwargs);
 
     if(PyGen_Check(result.ptr()))
     {
-        // start a new coroutine
+        // result is a generator => start a new coroutine
         pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(result));
         coro->next();
     }
     else if(result.ptr() != Py_None)
     {
-        string msg = extract<string>(result.attr("__repr__")());
-        string t_msg = extract<string>(callback.attr("__repr__")());
+        string s_res = bpl::extract<string>(bpl::str(result));
+        string s_callable = bpl::extract<string>(bpl::str(callable));
+        string s_args = bpl::extract<string>(bpl::str(args));
+        string s_kwargs = bpl::extract<string>(bpl::str(kwargs));
+
         throw runtime_error("Proactor.run_later(): expected "
-            "callback to return either a generator or None, "
-            "but got:\n\t" + msg + "\n<callback was " + t_msg + ">");
+            "callable to return either a generator or None, "
+            "but got:\n\t" + s_res + "\n<callable was " + s_callable + ">\n"
+            "<args were " + s_args + ">\n"
+            "<kwargs were " + s_kwargs + ">\n");
     }
 }
 
-void py_run_later(proactor & p, const object & callback, unsigned delay_ms)
+void py_run_later(proactor & p, const bpl::object & callable,
+    unsigned delay_ms, const bpl::tuple & args, const bpl::dict & kwargs)
 {
-    p.run_later(boost::bind(&on_py_run_later, callback), delay_ms);
+    p.run_later(boost::bind(&on_py_run_later,
+        callable, args, kwargs), delay_ms);
+}
+
+void py_spawn(proactor & p, const bpl::object & callable,
+    const bpl::tuple & args, const bpl::dict & kwargs)
+{
+    p.run_later(boost::bind(&on_py_run_later, callable, args, kwargs), 0);
 }
 
 void py_shutdown(proactor & p)
 {
-    PyErr_SetNone(PyExc_KeyboardInterrupt);
-    throw_error_already_set();
+    p.get_nonblocking_io_service().stop();
 }
 
 void py_run(proactor & p)
 {
-    if(pysamoa::_run_thread)
-    {
-        throw runtime_error("Another python thread has "
-            "already invoked Proactor.run()");
-    }
+    pysamoa::set_run_thread guard;
 
-    // Release the GIL, and save this thread state. Future calls
-    //  in to python from proactor handlers will call from this
-    //  thread context.
-    pysamoa::_run_thread = PyEval_SaveThread();
-
-    bool running = true;
-    while(running)
-    {
-        try
-        {
-            p.get_nonblocking_io_service().run();
-            // clean exit => no more work
-            running = false;
-            p.get_nonblocking_io_service().reset();
-        }
-        catch(error_already_set) {
-
-            // restore python thread, so we can read exception state
-            pysamoa::scoped_python block;
-
-            if(PyErr_ExceptionMatches(PyExc_KeyboardInterrupt))
-            {
-                running = false;
-                cerr << "Shutting down..." << endl;
-                PyErr_Clear();
-            }
-            else {
-                cerr << "<Caught by Proactor.run()>:" << endl;
-                PyErr_PrintEx(0);
-            }
-        }
-        catch(const exception & e)
-        {
-            cerr << "Caught: " << e.what() << endl;
-        }
-    }
-
-    // Obtain the GIL & restore this thread state. Clear the
-    //  pysamoa::_run_thread variable so that this or other threads
-    //  may invoke Proactor.run()
-    PyEval_RestoreThread(pysamoa::_run_thread);
-    pysamoa::_run_thread = 0;
+    p.get_nonblocking_io_service().run();
+    // clean exit => no more work
+    p.get_nonblocking_io_service().reset();
 }
 
 void make_proactor_bindings()
 {
-    class_<proactor, proactor::ptr_t, boost::noncopyable>(
-        "Proactor", init<>())
+    bpl::class_<proactor, proactor::ptr_t, boost::noncopyable>(
+        "Proactor", bpl::init<>())
         .def("run", &py_run)
         .def("run_later", &py_run_later, (
-            boost::python::arg("callback"), boost::python::arg("delay_ms") = 0))
+            bpl::arg("callable"),
+            bpl::arg("delay_ms") = 0,
+            bpl::arg("args") = bpl::tuple(),
+            bpl::arg("kwargs") = bpl::dict()))
+        .def("spawn", &py_spawn, (
+            bpl::arg("callable"),
+            bpl::arg("args") = bpl::tuple(),
+            bpl::arg("kwargs") = bpl::dict()))
         .def("shutdown", &py_shutdown);
 }
 

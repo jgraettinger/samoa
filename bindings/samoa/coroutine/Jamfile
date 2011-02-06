@@ -1,0 +1,11 @@
+
+python-extension _coroutine :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _coroutine : <location>$(INSTALL)/samoa/coroutine ;
+

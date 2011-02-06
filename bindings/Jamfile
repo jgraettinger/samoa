@@ -1,9 +1,6 @@
 
 project bindings
-    : requirements
-    <include>../cpp_src 
-    <include>.
-;
+    : requirements <include>. ;
 
 build-project pysamoa ;
 build-project samoa ;

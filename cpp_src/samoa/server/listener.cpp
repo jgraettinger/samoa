@@ -4,6 +4,7 @@
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
+#include <boost/smart_ptr/make_shared.hpp>
 #include <boost/asio.hpp>
 
 #include <iostream>
@@ -77,9 +78,10 @@ void listener::on_accept(const boost::system::error_code & ec)
         // Create a client to service the socket
         // Lifetime is managed by client's use in callbacks. Eg, it's
         //  auto-destroyed when it falls out of event handler state
-        client::ptr_t c(new client(_context, _protocol, _next_sock));
+        client::ptr_t c(boost::make_shared<client>(
+            _context, _protocol, _next_sock));
 
-        _protocol->start(c);
+        c->init();
     }
 
     // Next connection to accept

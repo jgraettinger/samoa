@@ -1,0 +1,69 @@
+
+package samoa.core.protobuf;
+
+enum CommandType {
+    
+    // Present only in SamoaResponse
+    ERROR = 5;
+    
+    PING = 1;
+    SHUTDOWN = 2;
+    GET = 3;
+    SET = 4;
+};
+
+// Returned by Samoa to indicate an error in the operation
+message Error {
+    required string type = 1;
+    optional string message = 2;
+    required bool closing = 3;
+};
+
+// Operations
+
+message PingRequest {
+    required int64 value_len = 1 [default = 0];
+};
+message PingResponse {
+    required int64 value_len = 1 [default = 0];
+}
+
+message GetRequest {
+    required string key = 1;
+    optional bool allow_blocking = 2 [default = true];
+};
+message GetResponse {
+    required bool  found = 1;
+    optional int64 value_length = 2;
+};
+
+message SetRequest {
+    required string table_uid = 1;
+    required string key = 2;
+    required bool   replace = 3 [default = true];
+    required int64  value_length = 4;
+};
+message SetResponse {
+    required bool   replaced = 1;
+};
+
+message SamoaRequest {
+    required CommandType type = 1;
+
+    optional PingRequest      ping = 2;
+    optional GetRequest       get = 4;
+    optional SetRequest       set = 5;
+
+    // generates an error response
+    optional Error            error = 6;
+};
+
+message SamoaResponse {
+    required CommandType type = 1;
+
+    optional Error         error = 2;
+    optional PingResponse  ping = 3;
+    optional GetResponse   get = 4;
+    optional SetResponse   set = 5;
+};
+

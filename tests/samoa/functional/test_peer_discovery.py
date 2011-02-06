@@ -12,7 +12,7 @@ import samoa.model
 import samoa.core
 import samoa.client
 import samoa.server
-import samoa.command.echo
+import samoa.core.protobuf
 import samoa.command.shutdown
 
 
@@ -22,10 +22,9 @@ class TestPeerDiscovery(unittest.TestCase):
 
         self.proactor = samoa.core.Proactor()
 
-        self.protocol = samoa.server.SimpleProtocol()
-        self.protocol.add_command_handler('echo',
-            samoa.command.echo.Echo())
-        self.protocol.add_command_handler('shutdown',
+        self.protocol = samoa.server.Protocol()
+        self.protocol.set_command_handler(
+            samoa.core.protobuf.CommandType.SHUTDOWN,
             samoa.command.shutdown.Shutdown())
 
         self.table_uid = 'test_table'

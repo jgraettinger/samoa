@@ -1,0 +1,315 @@
+#!/usr/bin/python
+
+import sys
+import os.path
+
+import plugin_pb2
+from google.protobuf.descriptor_pb2 import \
+    FieldDescriptorProto as FieldDesc
+
+def generate_enum(enum_type, cpp_header, package):
+
+    source = [MSG_HEAD % cpp_header]
+    args = {'enum_name': enum_type.name}
+
+    # namespace components
+    for component in package:
+        source.append('namespace %s {' % component)
+
+    # begin enum definition
+    source.append(ENUM_DEFINITION % args)
+
+    # value enumeration
+    for value in enum_type.value:
+
+        args['value_name'] = value.name
+        source.append(ENUM_VALUE % args)
+
+    source.append(';\n}\n')
+
+    # close namespace
+    for component in package:
+        source.append('}')
+
+    return source
+
+def generate_message(msg_type, cpp_header, package):
+
+    source = [MSG_HEAD % cpp_header]
+    args = {'msg_name': msg_type.name}
+
+    # namespace components
+    for component in package:
+        source.append('namespace %s {' % component)
+
+    # field methods enumeration
+    for field in msg_type.field:
+
+        args['field_name'] = field.name
+        key = (field.label, type_map[field.type])
+
+        template = method_templates.get(key)
+
+        if template:
+            source.append(template % args)
+
+    # binding class definition
+    source.append(MSG_DEFINITION % args)
+
+    # field bindings enumeration
+    for field in msg_type.field:
+
+        args['field_name'] = field.name
+        key = (field.label, type_map[field.type])
+
+        template = binding_templates.get(key)
+
+        if template:
+            source.append(template % args)
+        else:
+            print >> sys.stderr, "Don't know how to generate "\
+                "bindings for %s" % str(field)
+
+    source.append(';\n}\n')
+
+    # close namespace
+    for component in package:
+        source.append('}')
+
+    return source
+
+def generate_module(module_name, generated_names, package):
+
+    source = ["#include <boost/python.hpp>\n"]
+
+    # namespace components
+    for component in package:
+        source.append('namespace %s {' % component)
+
+    for name in generated_names:
+        source.append('    void make_%s_bindings();' % name)
+
+    for component in package:
+        source.append('}')
+
+    source.append('\nBOOST_PYTHON_MODULE(_%s)' % module_name)
+    source.append('{')
+
+    scope = '::'.join(package)
+
+    for name in generated_names:
+        source.append('    %s::make_%s_bindings();' % (scope, name))
+    source.append('}')
+
+    return source
+
+
+def main():
+
+    cg_req = plugin_pb2.CodeGeneratorRequest()
+    cg_req.ParseFromString(sys.stdin.read())
+
+    #print >> sys.stderr, cg_req
+
+    files_to_generate = set(cg_req.file_to_generate)
+
+    cg_resp = plugin_pb2.CodeGeneratorResponse()
+
+    for proto_file in cg_req.proto_file:
+
+        if proto_file.name not in files_to_generate:
+            continue
+
+        # base name of input proto file
+        name = proto_file.name.split('.')[0]
+
+        # package namespace components
+        package = proto_file.package.split('.')
+
+        # expected location of generated cpp header
+        cpp_header = package + ['%s.pb.h' % name]
+        cpp_header = os.path.join(*cpp_header)
+
+        # path template for generated Message / Enum sources
+        msg_path = '/'.join([name, '%s.cpp'])
+
+        generated_names = []
+
+        # Enumerate enumerations
+        for enum_type in proto_file.enum_type:
+
+            ofile = cg_resp.file.add()
+            ofile.name = msg_path % enum_type.name
+
+            ofile.content = '\n'.join(
+                generate_enum(enum_type, cpp_header, package))
+
+            generated_names.append(enum_type.name)
+
+        # Enumerate messages
+        for msg_type in proto_file.message_type:
+
+            ofile = cg_resp.file.add()
+            ofile.name = msg_path % msg_type.name
+
+            ofile.content = '\n'.join(
+                generate_message(msg_type, cpp_header, package))
+
+            generated_names.append(msg_type.name)
+
+        # Generate top-level module
+        ofile = cg_resp.file.add()
+        ofile.name = '_%s.cpp' % name
+
+        ofile.content = '\n'.join(
+            generate_module(name, generated_names, package))
+
+    sys.stdout.write(cg_resp.SerializeToString())
+
+MSG_HEAD = """
+#include "%s"
+#include <boost/python.hpp>
+
+namespace bpl = boost::python;
+"""[1:]
+
+ENUM_DEFINITION = """
+
+namespace bpl = boost::python;
+
+void make_%(enum_name)s_bindings()
+{
+    bpl::enum_<%(enum_name)s> binder("%(enum_name)s");
+"""[1:-1]
+
+ENUM_VALUE = """
+    binder.value("%(value_name)s", %(value_name)s);
+"""[1:-1]
+
+MSG_DEFINITION = """
+std::string py_SerializeToString(%(msg_name)s & msg)
+{
+    std::string result;
+    msg.SerializeToString(&result);
+    return result;
+}
+
+void make_%(msg_name)s_bindings()
+{
+    bpl::class_<%(msg_name)s> binder("%(msg_name)s");
+
+    void (%(msg_name)s::*copy_from_ptr)(const %(msg_name)s &) = \\
+        &%(msg_name)s::CopyFrom;
+
+    // TODO(johng): My preference would be for __slots__-like behavior
+    //   on wrapped Message classes. The mechanics of boost::python
+    //   make this difficult.
+
+    // Common message methods
+    binder.def("__str__", &%(msg_name)s::DebugString);
+    binder.def("IsInitialized", &%(msg_name)s::IsInitialized);
+    binder.def("Clear", &%(msg_name)s::Clear);
+    binder.def("CopyFrom", copy_from_ptr);
+    binder.def("SerializeToString", &py_SerializeToString);
+    binder.def("ParseFromString", &%(msg_name)s::ParseFromString);
+
+"""[1:-1]
+
+
+type_map = {
+    FieldDesc.TYPE_DOUBLE:   'basic',
+    FieldDesc.TYPE_FLOAT:    'basic',
+    FieldDesc.TYPE_INT64:    'basic',
+    FieldDesc.TYPE_UINT64:   'basic',
+    FieldDesc.TYPE_INT32:    'basic',
+    FieldDesc.TYPE_FIXED64:  'basic',
+    FieldDesc.TYPE_FIXED32:  'basic',
+    FieldDesc.TYPE_BOOL:     'basic',
+    FieldDesc.TYPE_UINT32:   'basic',
+    FieldDesc.TYPE_SFIXED32: 'basic',
+    FieldDesc.TYPE_SFIXED64: 'basic',
+    FieldDesc.TYPE_SINT32:   'basic',
+    FieldDesc.TYPE_SINT64:   'basic',
+    FieldDesc.TYPE_ENUM:     'basic',
+
+    FieldDesc.TYPE_STRING:   'str',
+    FieldDesc.TYPE_BYTES:    'str',
+
+    FieldDesc.TYPE_MESSAGE:  'message',
+}
+
+method_templates = {}
+
+method_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = \
+method_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = \
+method_templates[(FieldDesc.LABEL_OPTIONAL, 'message')] = \
+method_templates[(FieldDesc.LABEL_REQUIRED, 'message')] = """
+bpl::object py_%(field_name)s(%(msg_name)s & msg)
+{
+    if(msg.has_%(field_name)s())
+    {
+        return bpl::object(msg.%(field_name)s());
+    }
+    // return None
+    return bpl::object();
+}
+""" 
+
+binding_templates = {}
+
+# BASIC types
+
+binding_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = """
+    binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
+    binder.add_property("%(field_name)s",
+        &py_%(field_name)s,
+        &%(msg_name)s::set_%(field_name)s);
+"""[1:-1]
+
+binding_templates[(FieldDesc.LABEL_REQUIRED, 'basic')] = """
+    binder.add_property("%(field_name)s",
+        &%(msg_name)s::%(field_name)s,
+        &%(msg_name)s::set_%(field_name)s);
+"""[1:-1]
+
+# STRING types
+
+binding_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = """
+    void (%(msg_name)s::*set_%(field_name)s_ptr)(const std::string &) = \\
+        &%(msg_name)s::set_%(field_name)s;
+
+    binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
+    binder.add_property("%(field_name)s",
+        &py_%(field_name)s,
+        set_%(field_name)s_ptr);
+"""[:-1]
+
+binding_templates[(FieldDesc.LABEL_REQUIRED, 'str')] = """
+    void (%(msg_name)s::*set_%(field_name)s_ptr)(const std::string &) = \\
+        &%(msg_name)s::set_%(field_name)s;
+
+    binder.add_property("%(field_name)s",
+        bpl::make_function(
+            &%(msg_name)s::%(field_name)s,
+            bpl::return_value_policy<bpl::copy_const_reference>()),
+        set_%(field_name)s_ptr);
+"""[:-1]
+
+# MESSAGE type
+
+binding_templates[(FieldDesc.LABEL_OPTIONAL, 'message')] = """
+    binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
+    binder.add_property("%(field_name)s", &py_%(field_name)s);
+    binder.def("mutable_%(field_name)s", &%(msg_name)s::mutable_%(field_name)s,
+        bpl::return_value_policy<bpl::reference_existing_object>());
+"""[1:-1]
+
+binding_templates[(FieldDesc.LABEL_REQUIRED, 'message')] = """
+    binder.add_property("%(field_name)s", &py_%(field_name)s);
+    binder.def("mutable_%(field_name)s", &%(msg_name)s::mutable_%(field_name)s,
+        bpl::return_value_policy<bpl::reference_existing_object>());
+"""[1:-1]
+
+if __name__ == '__main__':
+    main()
+

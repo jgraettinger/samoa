@@ -1,8 +1,8 @@
 
-# runthread.cpp is built into a seprate shared-library
-#   see bindings/samoa/Jamfile
+build-project protobuf ;
+
 python-extension _core :
-    [ glob *.cpp : runthread.cpp coros.cpp ]
+    [ glob *.cpp ]
     /samoa//libsamoa
     /pysamoa//libpysamoa
     /root//boost_system

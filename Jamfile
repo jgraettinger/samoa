@@ -1,8 +1,11 @@
 
+path-constant ROOT : . ;
+path-constant BUILD : build ;
+
 project root
     : requirements <threading>multi <cxxflags>-std=c++0x
     : default-build debug 
-    : build-dir build
+    : build-dir $(BUILD) 
 ;
 
 # Figure out where to install to.
@@ -29,7 +32,9 @@ using python : 2.6 ;
 lib boost_system ;
 lib boost_python ;
 lib boost_regex ;
+lib protobuf ;
 
+build-project proto_src ;
 build-project cpp_src ;
 build-project bindings ;
 build-project py_src ;

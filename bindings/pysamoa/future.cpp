@@ -2,16 +2,25 @@
 #include "future.hpp"
 #include "coroutine.hpp"
 #include "scoped_python.hpp"
+#include "samoa/client/server.hpp"
 #include <boost/python.hpp>
 #include <iostream>
 
 namespace pysamoa {
+
+namespace bpl = boost::python;
 using namespace samoa::core;
 
 future::future()
  : _called(false), _error(false)
 {
     std::cerr << "future " << (size_t)this << " created" << std::endl;
+}
+
+future::future(const bpl::object & result)
+ : _called(true), _error(false), _result(result)
+{
+    std::cerr << "*precalled* future " << (size_t)this << " created" << std::endl;
 }
 
 future::~future()
@@ -44,6 +53,11 @@ void future::send_result()
         _coroutine->error(_exc_type, _exc_msg);
     else
         _coroutine->send(_result);
+
+    // clear held references to break cycles
+    _result = bpl::object();
+    _exc_type = bpl::object();
+    _exc_msg = bpl::object();
 }
 
 void future::on_buffer_result(
@@ -169,7 +183,7 @@ void future::on_length_result(
     send_result();
 }
 
-void future::on_server_result(
+void future::on_server_connect(
     const boost::system::error_code & ec, samoa::client::server::ptr_t srv)
 {
     scoped_python block;
@@ -185,6 +199,69 @@ void future::on_server_result(
     else {
         _result = bpl::object(srv);
     }
+
+    _called = true;
+    send_result();
+}
+
+void future::on_server_request(
+    const boost::system::error_code & ec,
+    samoa::client::server::request_interface req_int)
+{
+    scoped_python block;
+
+    if(ec)
+    {
+        // save exception
+        _exc_type = bpl::object(
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
+        _exc_msg = bpl::str(ec.message());
+        _error = true;
+    }
+    else {
+        _result = bpl::object(req_int);
+    }
+
+    _called = true;
+    send_result();
+}
+
+void future::on_server_response(
+    const boost::system::error_code & ec,
+    samoa::client::server::response_interface resp_int)
+{
+    scoped_python block;
+
+    if(ec)
+    {
+        // save exception
+        _exc_type = bpl::object(
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
+        _exc_msg = bpl::str(ec.message());
+        _error = true;
+    }
+    else {
+        _result = bpl::object(resp_int);
+    }
+
+    _called = true;
+    send_result();
+}
+
+void future::on_error(
+    const bpl::object & exc_type, const bpl::object & exc)
+{
+    _exc_type = exc_type;
+    _exc_msg = exc;
+    _error = true;
+
+    _called = true;
+    send_result();
+}
+
+void future::on_result(const bpl::object & result)
+{
+    _result = result;
 
     _called = true;
     send_result();

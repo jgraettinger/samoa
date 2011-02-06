@@ -10,13 +10,11 @@ using namespace boost::python;
 
 void make_protocol_bindings()
 {
-    command_handler::ptr_t (protocol::*get_cmd_handler_ptr)(
-        const std::string &) const = &protocol::get_command_handler;
-
     class_<protocol, protocol::ptr_t, boost::noncopyable>(
-        "Protocol", no_init)
-        .def("add_command_handler", &protocol::add_command_handler)
-        .def("get_command_handler", get_cmd_handler_ptr);
+        "Protocol", init<>())
+        .def("set_command_handler", &protocol::set_command_handler)
+        .def("get_command_handler", &protocol::get_command_handler,
+            return_value_policy<copy_const_reference>());
 }
 
 }

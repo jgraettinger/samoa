@@ -1,11 +1,8 @@
 
 import getty
+from context import Context
 
-import samoa.core
-from _server import *
-
-getty.Extension(Context).requires(
-    proactor = samoa.core.Proactor)
+from _server import Listener, Protocol, CommandHandler
 
 getty.Extension(Listener).requires(
     host = getty.Config('host'),

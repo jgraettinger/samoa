@@ -11,7 +11,9 @@ import samoa.module
 import samoa.core
 import samoa.client
 import samoa.server
-import samoa.command.echo
+import samoa.core.protobuf
+import samoa.command.error
+import samoa.command.ping
 import samoa.command.shutdown
 
 class TestBasic(unittest.TestCase):
@@ -23,11 +25,16 @@ class TestBasic(unittest.TestCase):
 
         self.proactor = injector.get_instance(samoa.core.Proactor)
         self.context = injector.get_instance(samoa.server.Context)
-        self.protocol = injector.get_instance(samoa.server.SimpleProtocol)
+        self.protocol = injector.get_instance(samoa.server.Protocol)
 
-        self.protocol.add_command_handler('echo',
-            samoa.command.echo.Echo())
-        self.protocol.add_command_handler('shutdown',
+        self.protocol.set_command_handler(
+            samoa.core.protobuf.CommandType.ERROR,
+            samoa.command.error.Error())
+        self.protocol.set_command_handler(
+            samoa.core.protobuf.CommandType.PING,
+            samoa.command.ping.Ping())
+        self.protocol.set_command_handler(
+            samoa.core.protobuf.CommandType.SHUTDOWN,
             samoa.command.shutdown.Shutdown())
 
         return
@@ -35,18 +42,41 @@ class TestBasic(unittest.TestCase):
     def tearDown(self):
         return
 
-    def test_echo(self):
+    def test_error(self):
 
         def test():
 
             server = yield samoa.client.Server.connect_to(
                 self.proactor, 'localhost', str(self.listener.port))
 
-            cmd = samoa.command.echo.Echo()
-            cmd.data = 'ping'
+            cmd = samoa.command.error.Error(
+                'test_error', 'hello, world')
+
+            try:
+                response = yield cmd.request(server)
+                self.assertFalse(True)
+            except Exception, e:
+                print "Caught: %r" % e
+
+            self.listener.cancel()
+
+        self.listener = samoa.server.Listener(
+            '0.0.0.0', '0', 1, self.context, self.protocol)
+
+        self.proactor.run_later(test, 0)
+        self.proactor.run()
+
+    def test_ping(self):
+
+        def test():
+
+            server = yield samoa.client.Server.connect_to(
+                self.proactor, 'localhost', str(self.listener.port))
+
+            cmd = samoa.command.ping.Ping('hello, world')
             response = yield cmd.request(server)
 
-            self.assertEquals(response, 'ping')
+            self.assertEquals(response, 'hello, world')
 
             self.listener.cancel()
 

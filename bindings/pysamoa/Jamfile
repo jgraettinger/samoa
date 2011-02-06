@@ -5,6 +5,7 @@ lib libpysamoa :
     ./runthread.cpp
     ./coroutine.cpp
     ./future.cpp
+    /samoa//libsamoa
     /python//python
     : <link>shared ;
 

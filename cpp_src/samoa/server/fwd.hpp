@@ -1,5 +1,5 @@
-#ifndef SERVER_FWD_HPP
-#define SERVER_FWD_HPP
+#ifndef SAMOA_SERVER_FWD_HPP
+#define SAMOA_SERVER_FWD_HPP
 
 #include <boost/shared_ptr.hpp>
 

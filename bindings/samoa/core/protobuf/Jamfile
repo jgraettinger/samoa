@@ -1,0 +1,10 @@
+
+python-extension _samoa :
+    [ glob $(BUILD)/generated/bindings/samoa/core/protobuf/samoa/*.cpp ]
+       $(BUILD)/generated/bindings/samoa/core/protobuf/_samoa.cpp
+    /samoa//libsamoa
+    /root//boost_python
+;
+
+install dist : _samoa : <location>$(INSTALL)/samoa/core/protobuf ;
+

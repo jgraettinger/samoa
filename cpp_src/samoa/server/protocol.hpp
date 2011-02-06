@@ -2,8 +2,6 @@
 #define SAMOA_SERVER_PROTOCOL_HPP
 
 #include "samoa/server/fwd.hpp"
-#include "samoa/core/buffer_region.hpp"
-#include <boost/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <vector>
@@ -17,26 +15,22 @@ public:
 
     typedef boost::shared_ptr<protocol> ptr_t;
 
-    protocol() {}
+    void set_command_handler(unsigned operation_type,
+        const command_handler_ptr_t & handler)
+    {
+        if(_handler_table.size() <= operation_type)
+            _handler_table.resize(operation_type * 2);
+    
+        _handler_table[operation_type] = handler;
+    }
 
-    virtual ~protocol() {}
-
-    virtual void start(const client_ptr_t & client) = 0;
-
-    virtual void next_request(const client_ptr_t & client) = 0;
-
-    void add_command_handler(const std::string & cmd_name,
-        const command_handler_ptr_t & handler);
-
-    command_handler_ptr_t get_command_handler(
-        const core::buffers_iterator_t & cmd_begin,
-        const core::buffers_iterator_t & cmd_end) const;
-
-    command_handler_ptr_t get_command_handler(const std::string &) const;
+    const command_handler_ptr_t & get_command_handler(
+        unsigned operation_type)
+    { return _handler_table.at(operation_type); }
 
 private:
 
-    std::vector<std::pair<std::string, command_handler_ptr_t> > _cmd_table;
+    std::vector<command_handler_ptr_t> _handler_table;
 };
 
 }

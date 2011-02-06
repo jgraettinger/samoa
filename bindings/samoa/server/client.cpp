@@ -8,17 +8,27 @@
 namespace samoa {
 namespace server {
 
-using namespace boost::python;
+namespace bpl = boost::python;
 
 void make_client_bindings()
 {
-    class_<client, client::ptr_t, boost::noncopyable,
-            bases<core::stream_protocol> >("Client", no_init)
-        .def("start_next_request", &client::start_next_request)
-        .add_property("context", make_function(&client::get_context,
-            return_value_policy<copy_const_reference>()))
-        .add_property("protocol", make_function(&client::get_protocol,
-            return_value_policy<copy_const_reference>()));
+    bpl::class_<client, client::ptr_t, boost::noncopyable,
+            bpl::bases<core::stream_protocol> >("Client", bpl::no_init)
+        .def("get_context", &client::get_context,
+            bpl::return_value_policy<bpl::copy_const_reference>())
+        .def("get_protocol", &client::get_protocol,
+            bpl::return_value_policy<bpl::copy_const_reference>())
+        .def("get_request", &client::get_request,
+            bpl::return_value_policy<bpl::reference_existing_object>())
+        .def("read_interface", &client::read_interface,
+            bpl::return_value_policy<bpl::reference_existing_object>())
+        .def("get_response", &client::get_response,
+            bpl::return_value_policy<bpl::reference_existing_object>())
+        .def("set_error", &client::set_error)
+        .def("start_response", &client::start_response)
+        .def("write_interface", &client::write_interface,
+            bpl::return_value_policy<bpl::reference_existing_object>())
+        .def("finish_response", &client::finish_response);
 }
 
 }

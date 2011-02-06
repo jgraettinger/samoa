@@ -1,5 +1,10 @@
 
-project cpp_src : requirements <include>. ;
+# We include $(BUILD) because sources (namely, protobuf) are generated
+#  into the build directory rather than polluting the source-tree
+
+project cpp_src
+    : requirements  <include>. <include>$(BUILD)/generated/cpp_src
+    : usage-requirements <include>. <include>$(BUILD)/generated/cpp_src ;
 
 build-project samoa ;
 
