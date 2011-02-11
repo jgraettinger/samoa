@@ -4,7 +4,7 @@ import samoa.core
 import samoa.coroutine
 import samoa.client
 
-class ConnectionManager(object):
+class ServerPool(object):
 
     @getty.requires(proactor = samoa.core.Proactor)
     def __init__(self, proactor):
@@ -21,11 +21,15 @@ class ConnectionManager(object):
 
         return
 
-    def get_connection(self, remote_host, remote_port):
+    def request(self, remote_host, remote_port, request):
 
         # Case 1: we have a connection
-        key = (remote_host, remote_port)
+        key = (remote_host, str(remote_port))
         if key in self._connections:
+            
+            try:
+                
+
             return samoa.coroutine.Future(self._connections[key])
 
         # Case 2: we're already connecting
@@ -50,22 +54,14 @@ class ConnectionManager(object):
 
     def _connect_coro(self, remote_host, remote_port):
 
-        key = (remote_host, remote_port)
-
-        server, error = None, None
-        try:
-            server = yield samoa.client.Server.connect_to(
-                self._proactor, remote_host, remote_port)
-
-        except Exception, e:
-            error = e
-
+        key = (remote_host, str(remote_port))
         event = self._pending[key]
 
-        if error:
-            event.on_error(error)
-            return
+        try:
+            self._connections[key] = yield samoa.client.Server.connect_to(
+                self._proactor, remote_host, str(remote_port))
+            event.on_result(self._connections[key])
 
-        self._connections[key] = server
-        event.on_result(server)
-        return
+        except Exception, e:
+            event.on_error(error)
+

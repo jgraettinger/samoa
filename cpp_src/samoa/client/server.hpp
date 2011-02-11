@@ -106,6 +106,12 @@ public:
     //  to the server, and is passed a request_interface instance
     void schedule_request(const request_callback_t &);
 
+    unsigned get_timeout_ms()
+    { return _timeout_ms; }
+
+    void set_timeout_ms(unsigned timeout_ms)
+    { _timeout_ms = timeout_ms; }
+
 private:
 
     friend class server_request_interface;
@@ -164,6 +170,10 @@ private:
 
     std::list<request_callback_t> _request_queue;
     std::list<response_callback_t> _response_queue;
+
+    bool _ignore_timeout;
+    unsigned _timeout_ms;
+    boost::asio::deadline_timer _timeout_timer;
 
     friend class server_priv;
 };

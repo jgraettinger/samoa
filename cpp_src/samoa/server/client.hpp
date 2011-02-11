@@ -68,6 +68,12 @@ public:
     //   the connection was closing)
     void finish_response();
 
+    unsigned get_timeout_ms()
+    { return _timeout_ms; }
+
+    void set_timeout_ms(unsigned timeout_ms)
+    { _timeout_ms = timeout_ms; }
+
 private:
 
     context_ptr_t _context;
@@ -81,6 +87,10 @@ private:
     core::zero_copy_output_adapter _proto_out_adapter;
     core::zero_copy_input_adapter  _proto_in_adapter;
 
+    bool _ignore_timeout;
+    unsigned _timeout_ms;
+    boost::asio::deadline_timer _timeout_timer;
+
     void on_request_length(
         const boost::system::error_code &, const core::buffer_regions_t &);
 
@@ -88,6 +98,9 @@ private:
         const boost::system::error_code &, const core::buffer_regions_t &);
 
     void on_response_finish(
+        const boost::system::error_code &);
+
+    void on_timeout(
         const boost::system::error_code &);
 };
 

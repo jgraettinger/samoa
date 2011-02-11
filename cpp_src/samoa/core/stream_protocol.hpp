@@ -162,6 +162,8 @@ public:
     unsigned get_local_port();
     unsigned get_remote_port();
 
+    bool is_open();
+
     void close();
 
 protected:

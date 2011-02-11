@@ -6,7 +6,8 @@ import samoa.module
 import samoa.core
 import samoa.client
 import samoa.server
-import samoa.command.echo
+import samoa.core.protobuf
+import samoa.command.ping
 
 class TestConnectionManager(unittest.TestCase):
 
@@ -17,10 +18,10 @@ class TestConnectionManager(unittest.TestCase):
 
         self.proactor = self.injector.get_instance(samoa.core.Proactor)
         self.context = self.injector.get_instance(samoa.server.Context)
-        self.protocol = self.injector.get_instance(samoa.server.SimpleProtocol)
+        self.protocol = self.injector.get_instance(samoa.server.Protocol)
 
-        self.protocol.add_command_handler('echo',
-            samoa.command.echo.Echo())
+        self.protocol.set_command_handler(samoa.core.protobuf.CommandType.PING,
+            samoa.command.ping.Ping())
 
         self.listener = samoa.server.Listener(
             '0.0.0.0', '0', 1, self.context, self.protocol)

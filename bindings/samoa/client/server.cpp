@@ -64,7 +64,9 @@ void make_server_bindings()
             bpl::bases<core::stream_protocol> >("Server", bpl::no_init)
         .def("connect_to", &py_connect_to)
         .staticmethod("connect_to")
-        .def("schedule_request", &py_schedule_request);
+        .def("schedule_request", &py_schedule_request)
+        .def("get_timeout_ms", &server::get_timeout_ms)
+        .def("set_timeout_ms", &server::set_timeout_ms);
 }
 
 }

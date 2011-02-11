@@ -314,6 +314,11 @@ unsigned stream_protocol::get_local_port()
 unsigned stream_protocol::get_remote_port()
 { return get_socket().remote_endpoint().port(); }
 
+bool stream_protocol::is_open()
+{
+    return _sock->is_open();
+}
+
 void stream_protocol::close()
 {
     _sock->close();

@@ -9,6 +9,9 @@ namespace client {
 using namespace boost::asio;
 using namespace std;
 
+// default timeout of 1 minute
+unsigned default_timeout_ms = 60 * 1000;
+
 ///////////////////////////////////////////////////////////////////////////////
 // Connection & construction 
 
@@ -58,7 +61,9 @@ server::server(const core::proactor::ptr_t & proactor,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock)
  :  core::stream_protocol(sock),
     _proactor(proactor),
-    _strand(get_socket().get_io_service())
+    _strand(get_socket().get_io_service()),
+    _timeout_ms(default_timeout_ms),
+    _timeout_timer(get_socket().get_io_service())
 { }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -284,19 +289,62 @@ void server::queue_response(const server::response_callback_t & callback)
             boost::bind(callback, _error, null_int));
         return;
     }
+
+    if(_response_queue.empty())
+    {
+        // start a new timeout period
+        _timeout_timer.expires_from_now(
+            boost::posix_time::milliseconds(_timeout_ms));
+        _timeout_timer.async_wait(_strand.wrap(boost::bind(
+            &server::errored, shared_from_this(), _1)));
+
+        _ignore_timeout = false; 
+    }
+
     _response_queue.push_back(callback);
 }
 
 void server::deque_response()
 {
     assert(!_response_queue.empty());
+
+    // invoke callback
     response_interface resp_int(shared_from_this());
     _proactor->get_nonblocking_io_service().post(boost::bind(
         _response_queue.front(), boost::system::error_code(), resp_int));
+
+    // remove callback from queue
+    _response_queue.pop_front();
+
+    // ignore a timeout, as we've recieved a
+    //   response during the timeout period
+    _ignore_timeout = true;
 }
 
 void server::errored(const boost::system::error_code & ec)
 {
+    std::cerr << ec.value() << ec << std::endl;
+
+    if(false && _ignore_timeout)
+    {
+        // _timeout_timer expired, but we've recieved
+        //   responses during the timeout period
+
+        if(!_response_queue.empty())
+        {
+            // if there are remaining queued respones,
+            //   start a new timeout interval
+
+            _timeout_timer.expires_from_now(
+                boost::posix_time::milliseconds(_timeout_ms));
+            _timeout_timer.async_wait(_strand.wrap(boost::bind(
+                &server::errored, shared_from_this(), _1)));
+
+            _ignore_timeout = false; 
+        }
+        return;
+    }
+
     _error = ec;
     response_interface null_resp_int((ptr_t()));
     request_interface  null_req_int((ptr_t()));
@@ -307,7 +355,7 @@ void server::errored(const boost::system::error_code & ec)
             _response_queue.front(), _error, null_resp_int));
         _response_queue.pop_front();
     }
-    while(!_response_queue.empty())
+    while(!_request_queue.empty())
     {
         _proactor->get_nonblocking_io_service().post(boost::bind(
             _request_queue.front(), _error, null_req_int));
