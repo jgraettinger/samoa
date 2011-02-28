@@ -21,15 +21,15 @@ listener::listener(std::string host, std::string port, unsigned listen_backlog,
 {
     core::proactor::ptr_t proactor = _context->get_proactor();
 
-    ip::tcp::resolver resolver(proactor->get_nonblocking_io_service());
+    ip::tcp::resolver resolver(proactor->serial_io_service());
 
     // Blocks, & throws on resolution failure
     ip::tcp::endpoint ep = *resolver.resolve(
         ip::tcp::resolver::query(host, port));
 
     // Create & listen on accepting socket, reusing port
-    _accept_sock = std::auto_ptr<ip::tcp::acceptor>(new ip::tcp::acceptor(
-        proactor->get_nonblocking_io_service(), ep));
+    _accept_sock.reset(new ip::tcp::acceptor(
+        proactor->serial_io_service(), ep));
 
     _accept_sock->listen(listen_backlog);
 
@@ -48,7 +48,7 @@ void listener::cancel()
 {
     std::cerr << "listener::cancel()" << std::endl;
 
-    _context->get_proactor()->get_nonblocking_io_service().post(
+    _accept_sock->get_io_service().dispatch(
         boost::bind(&listener::on_cancel, shared_from_this()));
 }
 
@@ -86,7 +86,7 @@ void listener::on_accept(const boost::system::error_code & ec)
 
     // Next connection to accept
     _next_sock.reset(new ip::tcp::socket(
-        _context->get_proactor()->get_nonblocking_io_service()));
+        _context->get_proactor()->serial_io_service()));
 
     // Schedule call on accept. Note that bound handler
     // DOES NOT have a smart-pointer. This means, when

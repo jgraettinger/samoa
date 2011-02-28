@@ -8,25 +8,21 @@ class Ping(samoa.command.Command):
         samoa.command.Command.__init__(self)
         self.value = value
 
-    def request(self, server):
+    def _write_request(self, request, server):
 
-        req_proxy = yield server.schedule_request()
+        request.type = protobuf.CommandType.PING
+        request.mutable_ping().value_len = len(self.value)
 
-        req = req_proxy.get_request()
-        req.type = protobuf.CommandType.PING
-        req.mutable_ping().value_len = len(self.value)
-
-        req_proxy.start_request()
+        server.start_request()
 
         if self.value:
-            req_proxy.write_interface().queue_write(self.value)
+            server.write_interface().queue_write(self.value)
+        yield
 
-        resp_proxy = yield req_proxy.finish_request()
+    def _read_response(self, response, server):
 
-        self.check_for_error(resp_proxy)
-        ping = resp_proxy.get_response().ping
-
-        value = yield resp_proxy.read_interface().read_data(ping.value_len)
+        value = yield server.read_interface().read_data(
+            response.ping.value_len)
         yield value
 
     @classmethod

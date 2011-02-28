@@ -15,7 +15,7 @@ using namespace std;
 void on_py_run_later(const bpl::object & callable,
     const bpl::tuple & args, const bpl::dict & kwargs)
 {
-    pysamoa::scoped_python block;
+    pysamoa::python_scoped_lock block;
 
     // invoke callable
     bpl::object result = callable(*args, **kwargs);
@@ -54,25 +54,19 @@ void py_spawn(proactor & p, const bpl::object & callable,
     p.run_later(boost::bind(&on_py_run_later, callable, args, kwargs), 0);
 }
 
-void py_shutdown(proactor & p)
+void py_run(proactor & p, bool exit_when_idle)
 {
-    p.get_nonblocking_io_service().stop();
-}
+    pysamoa::python_scoped_unlock unlock;
 
-void py_run(proactor & p)
-{
-    pysamoa::set_run_thread guard;
-
-    p.get_nonblocking_io_service().run();
-    // clean exit => no more work
-    p.get_nonblocking_io_service().reset();
+    p.run(exit_when_idle);
 }
 
 void make_proactor_bindings()
 {
     bpl::class_<proactor, proactor::ptr_t, boost::noncopyable>(
         "Proactor", bpl::init<>())
-        .def("run", &py_run)
+        .def("run", &py_run, (
+            bpl::arg("exit_when_idle") = true))
         .def("run_later", &py_run_later, (
             bpl::arg("callable"),
             bpl::arg("delay_ms") = 0,
@@ -82,7 +76,7 @@ void make_proactor_bindings()
             bpl::arg("callable"),
             bpl::arg("args") = bpl::tuple(),
             bpl::arg("kwargs") = bpl::dict()))
-        .def("shutdown", &py_shutdown);
+        .def("shutdown", &proactor::shutdown);
 }
 
 }

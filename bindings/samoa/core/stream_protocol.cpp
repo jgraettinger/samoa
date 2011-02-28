@@ -97,6 +97,7 @@ void make_stream_protocol_bindings()
     bpl::class_<stream_protocol, boost::noncopyable>(
 		"StreamProtocol", bpl::no_init)
         .def("compile_regex", &py_compile_regex)
+        .def("is_open", &stream_protocol::is_open)
         .def("close", &stream_protocol::close)
         .add_property("local_address", &stream_protocol::get_local_address)
         .add_property("remote_address", &stream_protocol::get_remote_address)

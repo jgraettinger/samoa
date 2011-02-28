@@ -48,6 +48,9 @@ public:
     //   response core::protobuf::SamoaResponse has been recieved
     void finish_request(const server_response_callback_t &);
 
+    // Returns an unusable (semantically null) instance
+    static server_request_interface null_instance();
+
 private:
 
     // only server may construct, though anybody may copy
@@ -60,6 +63,8 @@ private:
 class server_response_interface
 {
 public:
+
+    server_response_interface();
 
     const core::protobuf::SamoaResponse & get_response() const;
 
@@ -112,6 +117,8 @@ public:
     void set_timeout_ms(unsigned timeout_ms)
     { _timeout_ms = timeout_ms; }
 
+    void close();
+
 private:
 
     friend class server_request_interface;
@@ -125,6 +132,11 @@ private:
     server(const core::proactor::ptr_t &,
         std::unique_ptr<boost::asio::ip::tcp::socket> &);
 
+    void on_schedule_request(const request_callback_t &);
+
+    void on_request_written(const boost::system::error_code &,
+        const response_callback_t &);
+
     void on_response_length(
         const boost::system::error_code &, const core::buffer_regions_t &);
 
@@ -132,36 +144,13 @@ private:
     void on_response_body(
         const boost::system::error_code &, const core::buffer_regions_t &);
 
-    ///////////////////////////////////////////////////
-    // SYNCHRONIZED by _strand
-
-    // add request to queue. if queue is empty,
-    //   dispatch to pop_request
-    void queue_request(const request_callback_t &);
-
-    // deqeues a scheduled request handler, and calls back to it
-    //  used as a write-completion handler for the previous request
-    void deque_request(const boost::system::error_code &);
-
-    // adds response callback to queue.
-    void queue_response(const response_callback_t &);
-
-    // called by on_response_body, once a
-    //  protobuf response has already been parsed
-    void deque_response();
-
-    // sets a connection error, and calls-back to
-    //   queued requests & responses with _error 
-    void errored(const boost::system::error_code &);
-
-    ///////////////////////////////////////////////////
-
-    core::proactor::ptr_t _proactor;
-    boost::asio::strand _strand;
+    void on_error(boost::system::error_code);
 
     boost::system::error_code _error;
 
-    bool _start_called;
+    bool _in_request;
+    bool _start_request_called;
+
     core::protobuf::SamoaRequest   _request;
     core::protobuf::SamoaResponse _response;
 
@@ -175,7 +164,7 @@ private:
     unsigned _timeout_ms;
     boost::asio::deadline_timer _timeout_timer;
 
-    friend class server_priv;
+    friend class server_private_ctor;
 };
 
 }

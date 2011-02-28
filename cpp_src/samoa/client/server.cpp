@@ -16,11 +16,11 @@ unsigned default_timeout_ms = 60 * 1000;
 // Connection & construction 
 
 // private, friend constructor-class for use with boost::make_shared
-class server_priv : public server
+class server_private_ctor : public server
 {
 public:
 
-    server_priv(const core::proactor::ptr_t & proactor,
+    server_private_ctor(const core::proactor::ptr_t & proactor,
         std::unique_ptr<ip::tcp::socket> & sock)
      : server(proactor, sock)
     { }
@@ -47,7 +47,7 @@ public:
     { callback(ec, ptr_t()); }
     else
     { 
-        ptr_t p(boost::make_shared<server_priv>(proactor, sock));
+        ptr_t p(boost::make_shared<server_private_ctor>(proactor, sock));
 
         // start initial response read
         p->read_data(2, boost::bind(
@@ -59,11 +59,11 @@ public:
 
 server::server(const core::proactor::ptr_t & proactor,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock)
- :  core::stream_protocol(sock),
-    _proactor(proactor),
-    _strand(get_socket().get_io_service()),
+ :  core::stream_protocol(proactor, sock),
+    _in_request(false),
+    _start_request_called(false),
     _timeout_ms(default_timeout_ms),
-    _timeout_timer(get_socket().get_io_service())
+    _timeout_timer(get_io_service())
 { }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -75,7 +75,6 @@ server_request_interface::server_request_interface(const server::ptr_t & p)
     if(_srv)
     {
         assert(!_srv->has_queued_writes());
-        _srv->_start_called = false;
     }
 }
 
@@ -84,10 +83,10 @@ core::protobuf::SamoaRequest & server_request_interface::get_request()
 
 void server_request_interface::start_request()
 {
-    if(_srv->_start_called)
+    if(_srv->_start_request_called)
         return;
 
-    _srv->_start_called = true;
+    _srv->_start_request_called = true;
 
     if(_srv->has_queued_writes())
     {
@@ -110,7 +109,7 @@ void server_request_interface::start_request()
     uint16_t len = htons((uint16_t)_srv->_proto_out_adapter.ByteCount());
     _srv->queue_write((char*)&len, ((char*)&len) + 2);
 
-    // write serialized output regions
+    // queue write of serialized output regions
     _srv->queue_write(_srv->_proto_out_adapter.output_regions());
 
     // clear state for next operation
@@ -120,7 +119,7 @@ void server_request_interface::start_request()
 core::stream_protocol::write_interface_t &
     server_request_interface::write_interface()
 {
-    if(!_srv->_start_called)
+    if(!_srv->_start_request_called)
     {
         throw std::runtime_error(
             "server::request_interface::write_interface(): "
@@ -132,27 +131,27 @@ core::stream_protocol::write_interface_t &
 void server_request_interface::finish_request(
     const server::response_callback_t & callback)
 {
-    // synchronized call to queue_response
-    _srv->_strand.dispatch(boost::bind(
-        &server::queue_response, _srv, callback));
-
-    start_request();
+    if(!_srv->_start_request_called)
+        start_request();
 
     // requestor may have written additional data,
     //   and already waited for those writes to finish
     if(_srv->has_queued_writes())
     {
-        // write remaining data / synchronized call to deque_request
-        _srv->write_queued(_srv->_strand.wrap(
-            boost::bind(&server::deque_request, _srv, _1)));
+        _srv->write_queued(boost::bind(
+            &server::on_request_written, _srv, _1, callback));
     }
     else
     {
-        // synchronized call to deque_request 
-        _srv->_strand.dispatch(boost::bind(&server::deque_request,
-            _srv, boost::system::error_code()));
+        // write already completed; dispatch directly
+        _srv->get_io_service().dispatch(boost::bind(
+            &server::on_request_written, _srv,
+            boost::system::error_code(), callback));
     }
 }
+
+server_request_interface server_request_interface::null_instance()
+{ return server_request_interface((server_ptr_t())); }
 
 ///////////////////////////////////////////////////////////////////////////////
 //  server::response_interface
@@ -170,18 +169,105 @@ core::stream_protocol::read_interface_t &
 
 void server_response_interface::finish_response()
 {
-    // start next response read
-    _srv->read_data(2, boost::bind(
-        &server::on_response_length, _srv, _1, _3));
+    if(!_srv->_response.closing())
+    {
+        // start next response read
+        _srv->read_data(2, boost::bind(
+            &server::on_response_length, _srv, _1, _3));
+    }
+    else
+    {
+        // server indicated it's closing it's
+        //   connection: close ours too
+        _srv->close();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-//  server
+//  server interface
 
 void server::schedule_request(const server::request_callback_t & callback)
 {
-    _strand.dispatch(boost::bind(&server::queue_request,
-        shared_from_this(), callback));
+    get_io_service().dispatch(boost::bind(
+        &server::on_schedule_request, shared_from_this(), callback));
+}
+
+void server::close()
+{
+    _timeout_timer.cancel();
+    core::stream_protocol::close();
+}
+
+void server::on_schedule_request(const server::request_callback_t & callback)
+{
+    if(_error)
+    {
+        // a connection error is already set; return failure
+        request_interface null_int((ptr_t()));
+        callback(_error, null_int);
+        return;
+    }
+
+    if(_in_request)
+    {
+        // we're in the process of writing a request already
+        _request_queue.push_back(callback);
+    }
+    else
+    {
+        _in_request = true;
+
+        // no requests are currently being written-- start one
+        get_io_service().post(boost::bind(callback,
+            boost::system::error_code(),
+            request_interface(shared_from_this())));
+    }
+}
+
+void server::on_request_written(const boost::system::error_code & ec,
+    const server::response_callback_t & callback)
+{
+    if(_error)
+    {
+        // a connection error is already set; return failure
+        response_interface null_int((ptr_t()));
+        callback(_error, null_int);
+        return;
+    }
+
+    _response_queue.push_back(callback);
+
+    if(ec)
+    {
+        on_error(ec);
+        return;
+    }
+
+    // this is the first pending response; start a new timeout period
+    if(_response_queue.size() == 1)
+    {
+        _timeout_timer.expires_from_now(
+            boost::posix_time::milliseconds(_timeout_ms));
+        _timeout_timer.async_wait(boost::bind(
+            &server::on_error, shared_from_this(), _1));
+
+        _ignore_timeout = false; 
+    }
+
+    _start_request_called = false;
+
+    // start another request, if any are pending
+    if(!_request_queue.empty())
+    {
+        request_callback_t callback = _request_queue.front();
+        _request_queue.pop_front();
+
+        get_io_service().post(boost::bind(callback,
+            boost::system::error_code(),
+            request_interface(shared_from_this())));
+    }
+    else
+        _in_request = false;
 }
 
 void server::on_response_length(const boost::system::error_code & ec,
@@ -189,20 +275,19 @@ void server::on_response_length(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        // synchronized call to errored
-        _strand.dispatch(boost::bind(
-            &server::errored, shared_from_this(), ec));
+        on_error(ec);
         return;
     }
 
+    // parse upcoming protobuf message length
     uint16_t len;
     std::copy(
         boost::asio::buffers_begin(read_body),
         boost::asio::buffers_end(read_body),
         (char*) &len);
 
-    read_data(ntohs(len), boost::bind(&server::on_response_body,
-        shared_from_this(), _1, _3));
+    read_data(ntohs(len), boost::bind(
+        &server::on_response_body, shared_from_this(), _1, _3));
 }
 
 void server::on_response_body(const boost::system::error_code & ec,
@@ -210,108 +295,24 @@ void server::on_response_body(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        // synchronized call to errored
-        _strand.dispatch(boost::bind(
-            &server::errored, shared_from_this(), ec));
+        on_error(ec);
         return;
     }
 
     _proto_in_adapter.reset(read_body);
     if(!_response.ParseFromZeroCopyStream(&_proto_in_adapter))
     {
-        // synchronized call to errored
-        _strand.dispatch(boost::bind(
-            &server::errored, shared_from_this(), 
-            boost::system::errc::make_error_code(
-                boost::system::errc::bad_message)));
+        // protobuf parse failure
+        on_error(boost::system::errc::make_error_code(
+            boost::system::errc::bad_message));
         return;
     }
 
-    // synchronized call to deque_response
-    _strand.dispatch(boost::bind(
-        &server::deque_response, shared_from_this()));
-}
-
-///////////////////////////////////////////////////
-// SYNCHRONIZED by _strand
-
-void server::queue_request(const server::request_callback_t & callback)
-{
-    if(_error)
-    {
-        // a connection error is set; post failure
-        request_interface null_int((ptr_t()));
-        _proactor->get_nonblocking_io_service().post(
-            boost::bind(callback, _error, null_int));
-        return;
-    }
-
-    _request_queue.push_back(callback);
-
-    // If this is the only element, there is no current
-    //   request-write operation.
-    if(_request_queue.size() == 1)
-    {
-        // post request callback
-        request_interface req_int(shared_from_this());
-        _proactor->get_nonblocking_io_service().post(boost::bind(
-            callback, boost::system::error_code(), req_int));
-    }
-}
-
-void server::deque_request(const boost::system::error_code & ec)
-{
-    if(ec)
-    {
-        errored(ec);
-        return;
-    }
-
-    // front callback has completed
-    _request_queue.pop_front();
-
-    if(!_request_queue.empty())
-    {
-        // post the next request callback
-        request_interface req_int(shared_from_this());
-        _proactor->get_nonblocking_io_service().post(boost::bind(
-            _request_queue.front(), boost::system::error_code(), req_int));
-    }
-}
-
-void server::queue_response(const server::response_callback_t & callback)
-{
-    if(_error)
-    {
-        // a connection error is set; post failure
-        response_interface null_int((ptr_t()));
-        _proactor->get_nonblocking_io_service().post(
-            boost::bind(callback, _error, null_int));
-        return;
-    }
-
-    if(_response_queue.empty())
-    {
-        // start a new timeout period
-        _timeout_timer.expires_from_now(
-            boost::posix_time::milliseconds(_timeout_ms));
-        _timeout_timer.async_wait(_strand.wrap(boost::bind(
-            &server::errored, shared_from_this(), _1)));
-
-        _ignore_timeout = false; 
-    }
-
-    _response_queue.push_back(callback);
-}
-
-void server::deque_response()
-{
     assert(!_response_queue.empty());
 
     // invoke callback
     response_interface resp_int(shared_from_this());
-    _proactor->get_nonblocking_io_service().post(boost::bind(
-        _response_queue.front(), boost::system::error_code(), resp_int));
+    _response_queue.front()(boost::system::error_code(), resp_int);
 
     // remove callback from queue
     _response_queue.pop_front();
@@ -321,11 +322,10 @@ void server::deque_response()
     _ignore_timeout = true;
 }
 
-void server::errored(const boost::system::error_code & ec)
+void server::on_error(boost::system::error_code ec)
 {
-    std::cerr << ec.value() << ec << std::endl;
-
-    if(false && _ignore_timeout)
+    // _timeout_timer will call on_error with ec == 0 on timeout
+    if(!ec && _ignore_timeout)
     {
         // _timeout_timer expired, but we've recieved
         //   responses during the timeout period
@@ -337,30 +337,39 @@ void server::errored(const boost::system::error_code & ec)
 
             _timeout_timer.expires_from_now(
                 boost::posix_time::milliseconds(_timeout_ms));
-            _timeout_timer.async_wait(_strand.wrap(boost::bind(
-                &server::errored, shared_from_this(), _1)));
+            _timeout_timer.async_wait(boost::bind(
+                &server::on_error, shared_from_this(), _1));
 
             _ignore_timeout = false; 
         }
         return;
+    }
+    else if(!ec && !_ignore_timeout)
+    {
+        // treat this timeout as an error
+        ec = boost::system::errc::make_error_code(
+            boost::system::errc::timed_out);
     }
 
     _error = ec;
     response_interface null_resp_int((ptr_t()));
     request_interface  null_req_int((ptr_t()));
 
+    // post errors to all pending callbacks
     while(!_response_queue.empty())
     {
-        _proactor->get_nonblocking_io_service().post(boost::bind(
+        get_io_service().post(boost::bind(
             _response_queue.front(), _error, null_resp_int));
         _response_queue.pop_front();
     }
     while(!_request_queue.empty())
     {
-        _proactor->get_nonblocking_io_service().post(boost::bind(
+        get_io_service().post(boost::bind(
             _request_queue.front(), _error, null_req_int));
         _request_queue.pop_front();
     }
+
+    close(); 
 }
 
 }

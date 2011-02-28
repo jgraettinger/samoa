@@ -26,7 +26,7 @@ future::future(const bpl::object & result)
 future::~future()
 {
     // obtain GIL to safely destroy python state
-    scoped_python block;
+    python_scoped_lock block;
 
     _result = _exc_type = _exc_msg = bpl::object();
     _coroutine.reset();
@@ -65,7 +65,7 @@ void future::on_buffer_result(
     const buffers_iterator_t & begin,
     const buffers_iterator_t & end)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {
@@ -89,7 +89,7 @@ void future::on_regex_match_result(
     const boost::system::error_code & ec,
     const stream_protocol::match_results_t & match)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {
@@ -129,7 +129,7 @@ void future::on_data_result(
     const boost::system::error_code & ec,
     size_t length, const buffer_regions_t & regions)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {
@@ -164,7 +164,7 @@ void future::on_data_result(
 void future::on_length_result(
     const boost::system::error_code & ec, size_t length)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {
@@ -186,7 +186,7 @@ void future::on_length_result(
 void future::on_server_connect(
     const boost::system::error_code & ec, samoa::client::server::ptr_t srv)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {
@@ -208,7 +208,7 @@ void future::on_server_request(
     const boost::system::error_code & ec,
     samoa::client::server::request_interface req_int)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {
@@ -230,7 +230,7 @@ void future::on_server_response(
     const boost::system::error_code & ec,
     samoa::client::server::response_interface resp_int)
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     if(ec)
     {

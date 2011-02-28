@@ -51,6 +51,7 @@ class TestBasic(unittest.TestCase):
 
             cmd = samoa.command.error.Error(
                 'test_error', 'hello, world')
+            cmd.closing = True
 
             try:
                 response = yield cmd.request(server)
@@ -74,10 +75,12 @@ class TestBasic(unittest.TestCase):
                 self.proactor, 'localhost', str(self.listener.port))
 
             cmd = samoa.command.ping.Ping('hello, world')
-            response = yield cmd.request(server)
+            cmd.closing = True
 
+            response = yield cmd.request(server)
             self.assertEquals(response, 'hello, world')
 
+            self.assertFalse(server.is_open())
             self.listener.cancel()
 
         self.listener = samoa.server.Listener(

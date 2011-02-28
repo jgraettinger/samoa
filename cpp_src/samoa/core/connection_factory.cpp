@@ -21,7 +21,7 @@ public:
 connection_factory::connection_factory(
     const core::proactor::ptr_t & proactor, unsigned timeout_ms)
  : _timeout_ms(timeout_ms),
-   _sock(new ip::tcp::socket(proactor->get_nonblocking_io_service())),
+   _sock(new ip::tcp::socket(proactor->serial_io_service())),
     _resolver(_sock->get_io_service()),
     _timer(_sock->get_io_service())
 { }

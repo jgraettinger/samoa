@@ -2,21 +2,21 @@
 package samoa.core.protobuf;
 
 enum CommandType {
-    
+
     // Present only in SamoaResponse
     ERROR = 5;
-    
+
     PING = 1;
     SHUTDOWN = 2;
     GET = 3;
     SET = 4;
+    CLOSE = 5;
 };
 
 // Returned by Samoa to indicate an error in the operation
 message Error {
     required string type = 1;
     optional string message = 2;
-    required bool closing = 3;
 };
 
 // Operations
@@ -50,6 +50,9 @@ message SetResponse {
 message SamoaRequest {
     required CommandType type = 1;
 
+    // whether the client will be closing the connection after this request
+    optional bool closing = 3 [default = false];
+
     optional PingRequest      ping = 2;
     optional GetRequest       get = 4;
     optional SetRequest       set = 5;
@@ -60,6 +63,9 @@ message SamoaRequest {
 
 message SamoaResponse {
     required CommandType type = 1;
+
+    // whether the server will be closing the connection after this request
+    optional bool closing = 6 [default = false];
 
     optional Error         error = 2;
     optional PingResponse  ping = 3;

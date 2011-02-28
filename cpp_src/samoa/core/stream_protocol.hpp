@@ -3,6 +3,7 @@
 
 #include "samoa/core/ref_buffer.hpp"
 #include "samoa/core/buffer_region.hpp"
+#include "samoa/core/proactor.hpp"
 #include <boost/regex.hpp>
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
@@ -154,13 +155,17 @@ public:
     typedef stream_protocol_read_interface read_interface_t;
     typedef stream_protocol_write_interface write_interface_t;
 
-    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
+    stream_protocol(proactor::ptr_t,
+        std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
 
     std::string get_local_address();
     std::string get_remote_address();
 
     unsigned get_local_port();
     unsigned get_remote_port();
+
+    boost::asio::io_service & get_io_service()
+    { return get_socket().get_io_service(); }
 
     bool is_open();
 
@@ -184,6 +189,9 @@ private:
     friend class stream_protocol_write_interface;
 
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
+
+    // held only to maintain a reference
+    proactor::ptr_t _proactor;
 };
 
 }

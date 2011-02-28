@@ -86,6 +86,8 @@ class TestPeerDiscovery(unittest.TestCase):
 
     def test_basic(self):
 
+        random.seed(32)
+
         max_ring_pos = samoa.model.Table.DEFAULT_RING_SIZE
 
         servers = []

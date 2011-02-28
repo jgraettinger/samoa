@@ -7,6 +7,8 @@ lib libpysamoa :
     ./future.cpp
     /samoa//libsamoa
     /python//python
+    /root//boost_thread
+    /root//boost_python
     : <link>shared ;
 
 install dist : libpysamoa : <location>$(INSTALL) ;

@@ -4,81 +4,73 @@
 #include <exception>
 #include <boost/python.hpp>
 #include <boost/detail/atomic_count.hpp>
+#include <boost/thread.hpp>
 #include <Python.h>
 
 namespace pysamoa {
 
-// Python thread which entered proactor.run()
-extern PyThreadState * _run_thread;
+// Stored python thread corresponding to this native thread
+extern boost::thread_specific_ptr<PyThreadState> _saved_python_thread;
 
-// Atomic reentrance-count of scoped_python struct
-extern boost::detail::atomic_count _scoped_python_count;
-
-inline void assert_in_run_thread()
-{
-    if(PyThreadState_Get() != _run_thread)
-    {
-        throw std::runtime_error("This operation must be invoked "
-            "from the thread which invoked Proactor.run()");
-    }
-}
-
-inline void exiting_python()
-{
-    assert_in_run_thread();
-
-    // Release the GIL & persist run-thread context
-    PyEval_SaveThread();
-}
-
-inline void entering_python()
-{
-    // Obtain the GIL & restore run-thread context
-    PyEval_RestoreThread(_run_thread);
-}
-
-class scoped_python
+class python_scoped_lock
 {
 public:
 
-    scoped_python()
+    python_scoped_lock()
     {
-        if((++_scoped_python_count) == 1)
-            entering_python();
+        if(_saved_python_thread.get())
+        {
+            // aqquire GIL, clear python thread
+            PyEval_RestoreThread(_saved_python_thread.get());
+            _saved_python_thread.reset();
+
+            assert(_reentrance_count == 0);
+        }
+
+        ++_reentrance_count;
     }
 
-    ~scoped_python()
+    ~python_scoped_lock()
     {
-        if((--_scoped_python_count) == 0)
-            exiting_python();
+        if((--_reentrance_count) == 0)
+        {
+            // release GIL, save python thread
+            _saved_python_thread.reset(PyEval_SaveThread());
+        }
     }
+
+private:
+
+    // note this variable is shared accross threads. However, it's
+    //   only updated when the GIL is held, and thus synchronized.
+    static unsigned _reentrance_count;
 };
 
-class set_run_thread
+class python_scoped_unlock
 {
 public:
 
-    set_run_thread()
+    python_scoped_unlock()
     {
-        if(_run_thread)
+        if(_saved_python_thread.get())
         {
-            throw std::runtime_error("set_run_thread(): Another python thread "
-                "is already acting as the run thread");
+            throw std::runtime_error("python_scoped_unlock(): "
+                "re-entrant calls are not allowed");
         }
 
         // Release the GIL, and save this thread state. Future calls
         //  in to python from proactor handlers will call from this
         //  thread context.
-        _run_thread = PyEval_SaveThread();
+        _saved_python_thread.reset(PyEval_SaveThread());
     }
 
-    ~set_run_thread()
+    ~python_scoped_unlock()
     {
         // Obtain the GIL & restore this thread state. Clear the
         //  _run_thread variable so that this or other threads
         //  may invoke Proactor.run()
-        PyEval_RestoreThread(_run_thread);
-        _run_thread = 0;
+        PyEval_RestoreThread(_saved_python_thread.get());
+        _saved_python_thread.reset();
     }
 };
 

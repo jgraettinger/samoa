@@ -74,6 +74,8 @@ public:
     void set_timeout_ms(unsigned timeout_ms)
     { _timeout_ms = timeout_ms; }
 
+    void close();
+
 private:
 
     context_ptr_t _context;
@@ -101,7 +103,7 @@ private:
         const boost::system::error_code &);
 
     void on_timeout(
-        const boost::system::error_code &);
+        boost::system::error_code);
 };
 
 }

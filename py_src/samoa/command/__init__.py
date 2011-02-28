@@ -9,12 +9,62 @@ log = logging.getLogger('command')
 
 class Command(samoa.server.CommandHandler):
 
+    def __init__(self):
+        samoa.server.CommandHandler.__init__(self)
+        self.closing = False
+
+    def request_of(self, server_pool, host, port):
+
+        req_proxy = yield server_pool.schedule_request(host, port)
+
+        if self.closing:
+            req_proxy.get_request().closing = True
+
+        yield self._write_request(req_proxy.get_request(), req_proxy)
+
+        resp_proxy = yield req_proxy.finish_request()
+
+        resp = resp_proxy.get_response()
+
+        if resp.type == protobuf.CommandType.ERROR:
+            err = resp.error
+            resp_proxy.finish_response()
+            raise RuntimeError("%s" % err)
+
+        result = yield self._read_response(resp, resp_proxy)
+        resp_proxy.finish_response()
+        yield result
+
+    def request(self, server):
+
+        req_proxy = yield server.schedule_request()
+
+        if self.closing:
+            req_proxy.get_request().closing = True
+
+        yield self._write_request(req_proxy.get_request(), req_proxy)
+
+        resp_proxy = yield req_proxy.finish_request()
+
+        resp = resp_proxy.get_response()
+
+        if resp.type == protobuf.CommandType.ERROR:
+            err = resp.error
+            resp_proxy.finish_response()
+            raise RuntimeError("%s" % err)
+
+        result = yield self._read_response(resp, resp_proxy)
+        resp_proxy.finish_response()
+        yield result
+
     @classmethod
     def check_for_error(cls, server_response_proxy):
 
         resp = server_response_proxy.get_response()
         if resp.type == protobuf.CommandType.ERROR:
-            raise RuntimeError("%s" % resp.error)
+            err = resp.error
+            server_response_proxy.finish_response()
+            raise RuntimeError("%s" % err)
 
     @classmethod
     def handle(cls, client):
@@ -26,3 +76,4 @@ class Command(samoa.server.CommandHandler):
             client.set_error(str(type(err)), repr(err), True)
 
         client.finish_response()
+

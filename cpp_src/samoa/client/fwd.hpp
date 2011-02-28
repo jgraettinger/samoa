@@ -13,6 +13,9 @@ typedef boost::shared_ptr<server> server_ptr_t;
 class server_request_interface;
 class server_response_interface;
 
+class server_pool;
+typedef boost::shared_ptr<server_pool> server_pool_ptr_t;
+
 };
 };
 

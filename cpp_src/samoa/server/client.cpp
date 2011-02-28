@@ -13,17 +13,30 @@ namespace server {
 
 using namespace boost::asio;
 
+// default timeout of 1 minute
+unsigned default_timeout_ms = 60 * 1000;
+
 client::client(context::ptr_t context, protocol::ptr_t protocol,
     std::unique_ptr<ip::tcp::socket> & sock)
- : core::stream_protocol(sock),
+ : core::stream_protocol(context->get_proactor(), sock),
    _context(context),
-   _protocol(protocol)
+   _protocol(protocol),
+   _timeout_ms(default_timeout_ms),
+   _timeout_timer(get_io_service())
 { }
 
 void client::init()
 {
     read_data(2, boost::bind(&client::on_request_length,
         shared_from_this(), _1, _3));
+
+    // start a timeout timer, waiting for requests from the client
+    _timeout_timer.expires_from_now(
+        boost::posix_time::milliseconds(_timeout_ms));
+    _timeout_timer.async_wait(boost::bind(
+        &client::on_timeout, shared_from_this(), _1));
+
+    _ignore_timeout = false;
 }
 
 void client::set_error(const std::string & err_type,
@@ -32,9 +45,9 @@ void client::set_error(const std::string & err_type,
     _response.Clear();
 
     _response.set_type(core::protobuf::ERROR);
+    _response.set_closing(closing);
     _response.mutable_error()->set_type(err_type);
     _response.mutable_error()->set_message(err_msg);
-    _response.mutable_error()->set_closing(closing);
 }
 
 void client::start_response()
@@ -46,6 +59,7 @@ void client::start_response()
 
     if(has_queued_writes())
     {
+        close();
         throw std::runtime_error("client::start_response() "
             "client already has queued writes (but shouldn't)");
     }
@@ -55,6 +69,7 @@ void client::start_response()
 
     if(_proto_out_adapter.ByteCount() > (1<<16))
     {
+        close();
         throw std::runtime_error("client::start_response() "
             "core::protobuf::SamoaResponse overflow (larger than 65K)");
     }
@@ -74,6 +89,7 @@ core::stream_protocol::write_interface_t & client::write_interface()
 {
     if(!_start_called)
     {
+        close();
         throw std::runtime_error(
             "client::write_interface(): start_response() hasn't been called");
     }
@@ -98,14 +114,20 @@ void client::finish_response()
     return;
 }
 
+void client::close()
+{
+    _timeout_timer.cancel();
+    core::stream_protocol::close();
+}
+
 void client::on_request_length(const boost::system::error_code & ec,
     const core::buffer_regions_t & read_body)
 {
     if(ec)
     {
-        std::cerr << "client::on_request_length(): ";
-        std::cerr << ec.message() << std::endl;
-        return;   
+        close();
+        throw boost::system::system_error(ec,
+            "client::on_request_length()");
     }
 
     uint16_t len;
@@ -121,9 +143,9 @@ void client::on_request_body(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        std::cerr << "client::on_request_body(): ";
-        std::cerr << ec.message() << std::endl;
-        return;   
+        close();
+        throw boost::system::system_error(ec,
+            "client::on_request_body()");
     }
 
     _proto_in_adapter.reset(read_body);
@@ -133,6 +155,9 @@ void client::on_request_body(const boost::system::error_code & ec,
         finish_response();
         return;
     }
+
+    // we've recieved a complete request in the timeout period
+    _ignore_timeout = true;
 
     command_handler::ptr_t handler = _protocol->get_command_handler(
         _request.type());
@@ -147,6 +172,10 @@ void client::on_request_body(const boost::system::error_code & ec,
     // as a convienence, preset the response type
     _response.set_type(_request.type());
 
+    // also set 'closing' if the client requested it
+    if(_request.closing())
+        _response.set_closing(true);
+
     handler->handle(shared_from_this());
     return;
 }
@@ -155,15 +184,15 @@ void client::on_response_finish(const boost::system::error_code & ec)
 {
     if(ec)
     {
-        std::cerr << "client::on_response_finish(): ";
-        std::cerr << ec.message() << std::endl;
-        return;
+        close();
+        throw boost::system::system_error(ec,
+            "client::on_response_finish()");
     }
 
     // close after writing this response?
-    if(_response.type() == core::protobuf::ERROR &&
-        _response.error().closing())
+    if(_response.closing())
     {
+        close();
         return;
     }
 
@@ -172,6 +201,32 @@ void client::on_response_finish(const boost::system::error_code & ec)
     read_data(2, boost::bind(&client::on_request_length,
         shared_from_this(), _1, _3));
     return;
+}
+
+void client::on_timeout(boost::system::error_code ec)
+{
+    // _timeout_timer will call on_timeout with ec == 0 on timeout
+    if(!ec && _ignore_timeout)
+    {
+
+        // start a timeout timer, waiting for requests from the client
+        _timeout_timer.expires_from_now(
+            boost::posix_time::milliseconds(_timeout_ms));
+        _timeout_timer.async_wait(boost::bind(
+            &client::on_timeout, shared_from_this(), _1));
+
+        _ignore_timeout = false;
+    }
+    else if(!ec && !_ignore_timeout)
+    {
+        // treat this timeout as an error
+        ec = boost::system::errc::make_error_code(
+            boost::system::errc::stream_timeout);
+
+        close();
+        throw boost::system::system_error(ec,
+            "client::on_timeout()");
+    }
 }
 
 }

@@ -295,11 +295,13 @@ void stream_protocol_write_interface::on_write_queued(
 //  stream_protocol
 
 stream_protocol::stream_protocol(
+    proactor::ptr_t proactor,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock
 ) :
     stream_protocol_read_interface(),
     stream_protocol_write_interface(),
-    _sock(std::move(sock))
+    _sock(std::move(sock)),
+    _proactor(proactor)
 { }
 
 std::string stream_protocol::get_local_address()

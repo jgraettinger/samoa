@@ -2,11 +2,14 @@
 
 namespace pysamoa {
 
-// Python thread which entered proactor.run()
-PyThreadState * _run_thread = 0;
+void null_cleanup(PyThreadState *)
+{}
 
-// Atomic reentrance-count of scoped_python struct
-boost::detail::atomic_count _scoped_python_count(0L);
+// Python thread which entered proactor.run()
+boost::thread_specific_ptr<PyThreadState> _saved_python_thread(
+    &null_cleanup);
+
+unsigned python_scoped_lock::_reentrance_count = 0;
 
 }
 

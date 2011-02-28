@@ -7,11 +7,10 @@
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 #include <boost/thread.hpp>
+#include <boost/thread/mutex.hpp>
 
 namespace samoa {
 namespace core {
-
-typedef boost::shared_ptr<boost::asio::io_service> io_service_ptr_t;
 
 class proactor :
     private boost::noncopyable,
@@ -21,13 +20,29 @@ public:
 
     typedef boost::shared_ptr<proactor> ptr_t;
 
+    /*
+    *  The thread invoking the proactor constructor implicitly
+    *    declares itself as running a serial io-service
+    */
     proactor();
+
+    virtual ~proactor();
+
+    /*
+    *  Declares that this thread will run a serial
+    *    (synchronous) io-service event loop
+    */
+    void declare_serial_io_service();
+
+    /*
+    *  Declares that this thread will run a concurrent
+    *    (threaded) io-service event loop
+    */
+    void declare_concurrent_io_service();
 
     /* 
     *  Selects a single-threaded io_service from the pool of such
-    *    io_services, in round-robin fashion. If no single-threaded
-    *    io_services are available, the concurrent io_service is
-    *    returned.
+    *    io_services, in round-robin fashion.
     *
     *  Non-threaded io_services are intended for use with non-blocking
     *    handlers, such as ones performing asynchronous network IO.
@@ -35,17 +50,7 @@ public:
     *    explicit synchronization is required for any handlers running
     *    on that service.
     */
-    io_service_ptr_t select_serial_io_service()
-    {
-        boost::thread::lock_guard guard(_mutex);
-
-        if(_serial_io_services.empty())
-            return get_concurrent_io_service();
-
-        io_service_ptr_t s(_serial_io_services.at(_next));
-        _next = (_next + 1) % _serial_io_services.size();
-        return s;
-    }
+    boost::asio::io_service & serial_io_service();
 
     /*
     *  Selects a multi-threaded io_service. If no multi-threaded io_service
@@ -54,29 +59,28 @@ public:
     *  Threaded io_services are intended for use with blocking handlers,
     *    such as one performing synchronous disk IO.
     */
-    io_service_ptr_t & get_concurrent_io_service()
-    {
-        return _threaded_io_service;
-    }
+    boost::asio::io_service & concurrent_io_service();
 
+    typedef boost::shared_ptr<boost::asio::deadline_timer> timer_ptr_t;
     typedef boost::function<void ()> run_later_callback_t;
-    void run_later(const run_later_callback_t &, unsigned delay_ms);
 
-    void declare_serial_io_service();
+    timer_ptr_t run_later(const run_later_callback_t &, unsigned delay_ms);
 
-    void declare_concurrent_io_service();
+    void run(bool exit_when_idle);
 
-    void run();
+    void shutdown();
 
 private:
 
-    unsigned _next;
-    std::vector<io_service_ptr_t> _nonthreaded_io_services;
+    boost::mutex _mutex;
 
-    io_service_ptr_t _threaded_io_service;
+    std::vector<boost::asio::io_service *> _serial_io_services;
+    unsigned _next_serial_service;
 
-    boost::thread::thread_specific_ptr<boost::asio::io_service> _io_srv;
-    boost::thread::mutex _mutex;
+    boost::asio::io_service _threaded_io_service;
+    unsigned _concurrent_thread_count;
+
+    boost::thread_specific_ptr<boost::asio::io_service> _io_srv;
 };
 
 }

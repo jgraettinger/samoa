@@ -18,7 +18,7 @@ coroutine::coroutine(const bpl::object & generator)
 
 coroutine::~coroutine()
 {
-    scoped_python block;
+    python_scoped_lock block;
 
     _stack.clear();
 

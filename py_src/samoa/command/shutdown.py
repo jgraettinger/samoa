@@ -4,19 +4,15 @@ from samoa.core import protobuf
 
 class Shutdown(samoa.command.Command):
 
-    def request(self, server):
+    def _write_request(self, request, server):
+        request.type = protobuf.CommandType.SHUTDOWN
+        yield
 
-        req_proxy = yield server.schedule_request()
-
-        req = req_proxy.get_request()
-        req.type = protobuf.CommandType.SHUTDOWN
-
-        resp_proxy = yield req_proxy.finish_request()
-        self.check_for_error(resp_proxy)
+    def _read_response(self, response, server):
         yield
 
     @classmethod
     def _handle(cls, client):
         client.get_context().get_proactor().shutdown()
+        client.get_response().closing = True
         yield
-

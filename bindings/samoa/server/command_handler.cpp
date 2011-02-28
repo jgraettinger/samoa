@@ -22,7 +22,7 @@ public:
 
     void handle(const client::ptr_t & client)
     {
-        pysamoa::scoped_python block;
+        pysamoa::python_scoped_lock block;
 
         object handler = this->get_override("handle");
         object result = handler(client);
