@@ -10,13 +10,65 @@ enum CommandType {
     SHUTDOWN = 2;
     GET = 3;
     SET = 4;
-    CLOSE = 5;
+    CLUSTER_STATE = 6;
 };
 
 // Returned by Samoa to indicate an error in the operation
 message Error {
     required string type = 1;
     optional string message = 2;
+};
+
+message ClusterState {
+
+    // A ClusterState represents a consistent snapshot of the cluster
+    //  shape and configuration, from the perspective of a cluster
+    //  participant.
+    //
+    // ClusterState messages are periodically passed between samoa
+    //  servers for purposes of discovery: to detect unknown peers,
+    //  tables, and partitions which should be tracked.
+
+    required string local_uuid = 1;
+    required string local_hostname = 2;
+    required int32  local_port = 3;
+
+    message Peer {
+
+        // cluster-shared peer state
+        required string uuid = 1;
+        required string hostname = 2;
+        required int32  port = 3;
+
+        // local server statistics
+        required bool   connected = 6;
+        optional uint32 queue_size = 7;
+        optional uint32 latency_ms = 8;
+    };
+    repeated Peer peer = 4;
+
+    message Table {
+
+        required string uuid = 1;
+        optional bool   dropped = 2 [default = false];
+
+        optional string name = 3;
+        optional int64  replication_factor = 4;
+
+        message Partition {
+
+            required string uuid = 1;
+            optional bool   dropped = 2 [default = false];
+
+            optional string server_uuid = 3;
+            optional int64  ring_position = 4;
+            optional string storage_path = 5;
+            optional int64  storage_size = 6;
+            optional int64  index_size = 7;
+        };
+        repeated Partition partition = 7;
+    };
+    repeated Table table = 5;
 };
 
 // Operations
@@ -26,7 +78,7 @@ message PingRequest {
 };
 message PingResponse {
     required int64 value_len = 1 [default = 0];
-}
+};
 
 message GetRequest {
     required string key = 1;
@@ -56,6 +108,7 @@ message SamoaRequest {
     optional PingRequest      ping = 2;
     optional GetRequest       get = 4;
     optional SetRequest       set = 5;
+    optional ClusterState     cluster_state = 7;
 
     // generates an error response
     optional Error            error = 6;
@@ -71,5 +124,6 @@ message SamoaResponse {
     optional PingResponse  ping = 3;
     optional GetResponse   get = 4;
     optional SetResponse   set = 5;
+    optional ClusterState  cluster_state = 7;
 };
 

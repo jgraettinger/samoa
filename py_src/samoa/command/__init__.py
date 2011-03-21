@@ -1,5 +1,5 @@
 
-import samoa.server
+import samoa.server.command_handler
 from samoa.core import protobuf
 
 import traceback
@@ -7,15 +7,15 @@ import traceback
 import logging
 log = logging.getLogger('command')
 
-class Command(samoa.server.CommandHandler):
+class Command(samoa.server.command_handler.CommandHandler):
 
     def __init__(self):
-        samoa.server.CommandHandler.__init__(self)
+        samoa.server.command_handler.CommandHandler.__init__(self)
         self.closing = False
 
-    def request_of(self, server_pool, host, port):
+    def request_of(self, server_pool, server_uuid):
 
-        req_proxy = yield server_pool.schedule_request(host, port)
+        req_proxy = yield server_pool.schedule_request(server_uuid)
 
         if self.closing:
             req_proxy.get_request().closing = True
@@ -76,4 +76,5 @@ class Command(samoa.server.CommandHandler):
             client.set_error(str(type(err)), repr(err), True)
 
         client.finish_response()
+        yield
 

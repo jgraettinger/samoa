@@ -67,6 +67,8 @@ void make_server_bindings()
         .def("schedule_request", &py_schedule_request)
         .def("get_timeout_ms", &server::get_timeout_ms)
         .def("set_timeout_ms", &server::set_timeout_ms)
+        .def("get_queue_size", &server::get_queue_size)
+        .def("get_latency_ms", &server::get_latency_ms)
         .def("close", &server::close);
 }
 

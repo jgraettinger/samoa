@@ -107,6 +107,8 @@ public:
         const std::string & port,
         const connect_to_callback_t &);
 
+    virtual ~server();
+
     // Argument callback is called when a request is ready to be written
     //  to the server, and is passed a request_interface instance
     void schedule_request(const request_callback_t &);
@@ -116,6 +118,12 @@ public:
 
     void set_timeout_ms(unsigned timeout_ms)
     { _timeout_ms = timeout_ms; }
+
+    unsigned get_queue_size()
+    { return _queue_size; }
+
+    unsigned get_latency_ms()
+    { return 1; }
 
     void close();
 
@@ -144,7 +152,8 @@ private:
     void on_response_body(
         const boost::system::error_code &, const core::buffer_regions_t &);
 
-    void on_error(boost::system::error_code);
+    void on_timeout(const boost::system::error_code &);
+    void on_error(const boost::system::error_code &);
 
     boost::system::error_code _error;
 
@@ -159,6 +168,7 @@ private:
 
     std::list<request_callback_t> _request_queue;
     std::list<response_callback_t> _response_queue;
+    unsigned _queue_size;
 
     bool _ignore_timeout;
     unsigned _timeout_ms;

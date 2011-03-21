@@ -21,6 +21,7 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
  : core::stream_protocol(context->get_proactor(), sock),
    _context(context),
    _protocol(protocol),
+   _start_called(false),
    _timeout_ms(default_timeout_ms),
    _timeout_timer(get_io_service())
 { }
@@ -197,6 +198,7 @@ void client::on_response_finish(const boost::system::error_code & ec)
     }
 
     // start next request
+    _start_called = false;
     _response.Clear();
     read_data(2, boost::bind(&client::on_request_length,
         shared_from_this(), _1, _3));

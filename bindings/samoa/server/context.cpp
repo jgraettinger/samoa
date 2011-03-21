@@ -5,16 +5,15 @@
 namespace samoa {
 namespace server {
 
-using namespace boost::python;
+namespace bpl = boost::python;
 
 void make_context_bindings()
 {
-    class_<context, context::ptr_t, boost::noncopyable>(
-        "Context", init<core::proactor::ptr_t>(args("proactor")))
+    bpl::class_<context, context::ptr_t, boost::noncopyable>(
+        "Context", bpl::init<core::proactor::ptr_t>(
+            (bpl::arg("proactor"))))
         .def("get_proactor", &context::get_proactor,
-            return_value_policy<copy_const_reference>())
-        .def("get_peer_pool", &context::get_peer_pool,
-            return_value_policy<copy_const_reference>());
+            bpl::return_value_policy<bpl::copy_const_reference>());
 }
 
 }

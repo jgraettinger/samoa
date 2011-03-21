@@ -304,6 +304,9 @@ stream_protocol::stream_protocol(
     _proactor(proactor)
 { }
 
+stream_protocol::~stream_protocol()
+{ }
+
 std::string stream_protocol::get_local_address()
 { return get_socket().local_endpoint().address().to_string(); }
 

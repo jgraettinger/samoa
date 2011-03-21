@@ -62,6 +62,8 @@ server::server(const core::proactor::ptr_t & proactor,
  :  core::stream_protocol(proactor, sock),
     _in_request(false),
     _start_request_called(false),
+    _queue_size(0),
+    _ignore_timeout(false),
     _timeout_ms(default_timeout_ms),
     _timeout_timer(get_io_service())
 { }
@@ -186,6 +188,9 @@ void server_response_interface::finish_response()
 ///////////////////////////////////////////////////////////////////////////////
 //  server interface
 
+server::~server()
+{ }
+
 void server::schedule_request(const server::request_callback_t & callback)
 {
     get_io_service().dispatch(boost::bind(
@@ -212,6 +217,7 @@ void server::on_schedule_request(const server::request_callback_t & callback)
     {
         // we're in the process of writing a request already
         _request_queue.push_back(callback);
+        _queue_size += 1;
     }
     else
     {
@@ -243,15 +249,13 @@ void server::on_request_written(const boost::system::error_code & ec,
         return;
     }
 
-    // this is the first pending response; start a new timeout period
-    if(_response_queue.size() == 1)
+    // there was no previous pending response; start a new timeout period
+    if(_response_queue.size() == 1 && !_ignore_timeout)
     {
         _timeout_timer.expires_from_now(
             boost::posix_time::milliseconds(_timeout_ms));
         _timeout_timer.async_wait(boost::bind(
-            &server::on_error, shared_from_this(), _1));
-
-        _ignore_timeout = false; 
+            &server::on_timeout, shared_from_this(), _1));
     }
 
     _start_request_called = false;
@@ -316,16 +320,23 @@ void server::on_response_body(const boost::system::error_code & ec,
 
     // remove callback from queue
     _response_queue.pop_front();
+    _queue_size -= 1;
 
     // ignore a timeout, as we've recieved a
     //   response during the timeout period
     _ignore_timeout = true;
 }
 
-void server::on_error(boost::system::error_code ec)
+void server::on_timeout(const boost::system::error_code & ec)
 {
-    // _timeout_timer will call on_error with ec == 0 on timeout
-    if(!ec && _ignore_timeout)
+    if(ec == boost::asio::error::operation_aborted)
+    {
+        // timeout timer was cancelled; not an error
+        return;
+    }
+    assert(!ec);
+
+    if(_ignore_timeout)
     {
         // _timeout_timer expired, but we've recieved
         //   responses during the timeout period
@@ -338,19 +349,21 @@ void server::on_error(boost::system::error_code ec)
             _timeout_timer.expires_from_now(
                 boost::posix_time::milliseconds(_timeout_ms));
             _timeout_timer.async_wait(boost::bind(
-                &server::on_error, shared_from_this(), _1));
+                &server::on_timeout, shared_from_this(), _1));
 
             _ignore_timeout = false; 
         }
-        return;
     }
     else if(!ec && !_ignore_timeout)
     {
         // treat this timeout as an error
-        ec = boost::system::errc::make_error_code(
-            boost::system::errc::timed_out);
+        on_error(boost::system::errc::make_error_code(
+            boost::system::errc::timed_out));
     }
+}
 
+void server::on_error(const boost::system::error_code & ec)
+{
     _error = ec;
     response_interface null_resp_int((ptr_t()));
     request_interface  null_req_int((ptr_t()));

@@ -1,6 +1,8 @@
 
 from _coroutine import Future
 
+#TODO(johng): Need to protect w/ a threading.Lock
+
 class Event(object):
 
     def __init__(self):

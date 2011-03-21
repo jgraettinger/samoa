@@ -1,35 +1,39 @@
 
 import getty
 
-import samoa.model
+from samoa.core import UUID
+
+import samoa.model.meta
+import samoa.model.table
 from table import Table
 
 class TableSet(object):
 
-    @getty.requires(
-        meta = samoa.model.Meta)
-    def __init__(self, meta):
+    def __init__(self, context, session, prev_table_set):
 
-        self.meta = meta
         self._tables = {}
         self._dropped = set()
 
         # Pull table state from database
-        session = meta.new_session()
-        for db_table in session.query(samoa.model.Table):
+        session = context.new_session()
+        for model in session.query(samoa.model.Table):
 
-            if db_table.dropped:
-                self._dropped.add(db_table.uid)
+            if model.dropped:
+                self._dropped.add(model.uuid)
                 continue
 
-            self._tables[db_table.uid] = Table(db_table)
+            self._tables[model.uuid] = Table(model, context,
+                prev_table_set and prev_table_set.get_table(model.uuid))
 
-        return
-
-    @property
-    def tables(self):
+    def get_tables(self):
         return self._tables.values()
 
-    def get(self, table_uid):
-        return self._tables[table_uid]
+    def get_table(self, table_uuid):
+        return self._tables.get(table_uuid)
+
+    def was_dropped(self, table_uuid):
+        return table_uuid in self._dropped
+
+    def get_dropped_table_uuids(self):
+        return self._dropped
 

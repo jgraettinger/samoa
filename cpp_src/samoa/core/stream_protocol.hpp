@@ -158,6 +158,8 @@ public:
     stream_protocol(proactor::ptr_t,
         std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
 
+    virtual ~stream_protocol();
+
     std::string get_local_address();
     std::string get_remote_address();
 

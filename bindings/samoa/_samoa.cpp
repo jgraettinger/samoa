@@ -12,6 +12,5 @@ BOOST_PYTHON_MODULE(_samoa)
     samoa::make_rolling_hash_bindings();
     samoa::make_heap_rolling_hash_bindings();
     samoa::make_mapped_rolling_hash_bindings();
-
 }
 

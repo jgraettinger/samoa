@@ -1,9 +1,11 @@
 
+import uuid
 import getty
 
 import samoa.core
-import samoa.server
-import samoa.model
+import samoa.server.context
+import samoa.model.meta
+import samoa.model.config
 
 class Module(object):
 
@@ -16,7 +18,7 @@ class Module(object):
         binder.bind_instance(getty.Config, self.db_uri,
             with_annotation = 'db_uri')
 
-        binder.bind(samoa.model.Meta,
+        binder.bind(samoa.model.meta.Meta,
             scope = getty.Singleton)
 
         if self.proactor:
@@ -25,12 +27,12 @@ class Module(object):
             binder.bind(samoa.core.Proactor,
                 scope = getty.Singleton)
 
-        binder.bind(samoa.server.Context,
+        binder.bind(samoa.server.context.Context,
             scope = getty.Singleton)
 
         # bind persisted configuration values
-        meta = binder.get_instance(samoa.model.Meta)
-        for conf_model in meta.new_session().query(samoa.model.Config):
+        meta = binder.get_instance(samoa.model.meta.Meta)
+        for conf_model in meta.new_session().query(samoa.model.config.Config):
             binder.bind_instance(getty.Config, conf_model.value,
                 with_annotation = conf_model.name)
 

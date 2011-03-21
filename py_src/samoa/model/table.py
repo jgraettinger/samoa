@@ -1,30 +1,48 @@
 
 import sqlalchemy as sa
 
-from base import ModelBase
+import samoa.core
+from base import ModelBase, UUIDType
 
 class Table(ModelBase):
     __tablename__ = 'table'
 
-    DEFAULT_RING_SIZE = (1 << 32)
+    RING_SIZE = (1 << 32)
 
     # mapped attributes
-    uid = sa.Column(sa.String, primary_key = True)
+    uuid = sa.Column(UUIDType, primary_key = True)
     dropped = sa.Column(sa.Boolean, default = False)
-    ring_size = sa.Column(sa.Integer, nullable = False)
-    repl_factor = sa.Column(sa.Integer, nullable = False) 
+    name = sa.Column(sa.String, nullable = False)
+    replication_factor = sa.Column(sa.Integer, nullable = False) 
 
-    # LocalPartition maps relationship 'table', with
-    #   backreference 'local_partitions'
-    # RemotePartition maps relationship 'table', with
-    #   backreference 'remote_partitions'
+    # Partition maps relationship 'table', with
+    #   backreference 'partitions'
 
-    def __init__(self, uid, repl_factor = 1,
-        ring_size = DEFAULT_RING_SIZE, dropped = False):
+    def __init__(self, uuid, name, replication_factor = 1):
 
-        self.uid = uid
-        self.dropped = dropped
-        self.ring_size = ring_size
-        self.repl_factor = repl_factor
-        return
+        self.uuid = uuid
+        self.name = name
+        self.replication_factor = replication_factor
+
+    @classmethod
+    def compute_ring_update(cls, tracked_partitions, unknown_partitions):
+        """
+        Given a collection of protobuf partition descriptions,
+        e.g. from a ClusterState message, determine what updates
+        (if any) to the locally tracked ring should be made.
+
+        This may involve adding partitions from descriptions, and
+        removing currently tracked remote partitions.
+
+        Inputs:
+
+          A list of protobuf partition descriptions
+
+        Outputs:
+
+          A list of protobuf partitions to be added to the ring.
+          A list of server.RemotePartition to be dropped from the ring.
+        """
+
+        return (unknown_partitions, []) 
 

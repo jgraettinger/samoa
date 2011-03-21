@@ -52,7 +52,7 @@ void coroutine::reenter(bpl::object arg)
             "a coroutine that has already exited");
     }
 
-    while(true)
+    while(!_stack.empty())
     {
         try
         {
@@ -112,10 +112,11 @@ void coroutine::reenter(bpl::object arg)
                 new_future.set_yielding_coroutine(shared_from_this());
                 return;
             }
-            else if(_stack.size() != 1)
+            else if(_stack.size() != 1 || result.ptr() == Py_None)
             {
                 // result is a value to be returned to parent frame
-                _frame_return.push_back(result);
+                arg = result;
+                _stack.pop_back();
             }
             else
             {
@@ -127,8 +128,25 @@ void coroutine::reenter(bpl::object arg)
                     "but got:\n\t" + msg + "\n<frame was " + f_msg + ">");
             }
         }
-        catch(bpl::error_already_set)
+        catch(bpl::error_already_set err)
         {
+/*
+            //TODO(johng) - Current semantics allow use of generators
+            // within coroutines. However, they also require that all
+            // coroutines explicitly have a final yield, or StopIteration
+            // will be thrown upstack.
+            //
+            // Would be nice to have StopIteration interpreted as yield None
+            // in the common case, without breaking support for calling
+            // generators from within coroutines (eg, need a way to flag
+            // that StopIteration shouldn't be caught for this particular
+            // stack frame).
+            //
+            // This could be instrumented by yielding a tuple of
+            // (generator, send_val) to both explicitly send a value,
+            // to the generator, and to flag that StopIteration is
+            // expected to be thrown.
+
             if(PyErr_ExceptionMatches(PyExc_StopIteration))
             {
                 cout << "caught stop_iteration" << endl;
@@ -164,6 +182,17 @@ void coroutine::reenter(bpl::object arg)
             else
             {
                 cout << "caught non-stop_iteration" << endl;
+*/
+
+                cerr << "coroutine caught exception; current stack: " << endl;
+                for(size_t ind = 0; ind != _stack.size(); ++ind)
+                {
+                    string frame = bpl::extract<string>(
+                        _stack[_stack.size() - ind - 1].attr("__repr__")());
+
+                    cerr << '\t' << frame << endl;
+                }
+
 
                 // Exceptional case
                 // Big Fat Note: This exception may have been thrown
@@ -179,7 +208,10 @@ void coroutine::reenter(bpl::object arg)
                 // No remaining stack to potentially
                 //   handle the exception: re-raise
                 if(_stack.empty())
-                { throw; }
+                {
+                    cout << "coroutine exiting with exception" << endl;
+                    bpl::throw_error_already_set();
+                }
 
                 cout << "still stack to unwind: reraising in python" << endl;
                 // Fetch & clear error from python interpreter
@@ -192,14 +224,15 @@ void coroutine::reenter(bpl::object arg)
                 // PyErr_Fetch returned new references. Pass reference
                 //   ownership to holding boost::python::objects
                 _exc_type = bpl::object(bpl::handle<>(ptype));
-                _exc_val  = bpl::object(bpl::handle<>(bpl::allow_null(pval)));
-                _exc_traceback = bpl::object(
-                    bpl::handle<>(bpl::allow_null(ptrace)));
+                _exc_val  = pval ? \
+                    bpl::object(bpl::handle<>(pval)) : bpl::object();
+                _exc_traceback = ptrace ? \
+                    bpl::object(bpl::handle<>(ptrace)) : bpl::object();
 
                 _exception_set = true;
-            }
+//            }
         }
-    } // end while true
+    } // end while !_stack.empty()
 }
 
 }

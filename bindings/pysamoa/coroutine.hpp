@@ -38,7 +38,6 @@ private:
     void reenter(bpl::object arg);
 
     std::vector<bpl::object> _stack;
-    std::vector<bpl::object> _frame_return;
 
     bool _exception_set;
     bpl::object _exc_type;

@@ -2,52 +2,62 @@
 import bisect
 import getty
 
+from samoa.core import UUID
+import samoa.model.partition
+
 from remote_partition import RemotePartition
 from local_partition import LocalPartition
 
 class Table(object):
 
-    def __init__(self, model):
+    def __init__(self, model, context, prev_table):
 
-        self.uid = model.uid
+        self.uuid = model.uuid
         assert not model.dropped
+        self.name = model.name
+        self.replication_factor = model.replication_factor
 
-        self.ring_size = model.ring_size
-        self.repl_factor = model.repl_factor
         self._ring = []
-
         self._local = {}
         self._remote = {}
-        self._dropped = set()
+        self._dropped_partitions = set()
 
-        for pmodel in model.local_partitions:
+        for pmodel in model.partitions:
+
             if pmodel.dropped:
-                self._dropped.add(pmodel.uid)
+                self._dropped_partitions.add(pmodel.uuid)
                 continue
 
-            partition = LocalPartition(pmodel)
+            if pmodel.server_uuid == context.get_server_uuid():
+                # this partition is managed locally
 
-            self._local[partition.uid] = partition
-            self._ring.append((partition.ring_pos, partition.uid, partition))
+                partition = LocalPartition(pmodel)
+                self._local[partition.uuid] = partition
 
-        for pmodel in model.remote_partitions:
-            if pmodel.dropped:
-                self._dropped.add(pmodel.uid)
-                continue
+            else:
+                # this partition is managed remotely
 
-            partition = RemotePartition(pmodel)
+                partition = RemotePartition(pmodel)
+                self._remote[partition.uuid] = partition
 
-            self._remote[partition.uid] = partition
-            self._ring.append((partition.ring_pos, partition.uid, partition))
+            self._ring.append((partition.ring_position,
+                partition.uuid, partition))
 
         self._ring.sort()
         return
 
-    @property
-    def local_partitions(self):
-        return self._local.values()
+    def get_partition(self, part_uuid):
+        return self._local.get(part_uuid) or self._remote.get(part_uuid)
 
-    @property
-    def remote_partitions(self):
-        return self._remote.values()
+    def get_partitions(self):
+        return self._local.values() + self._remote.values()
+
+    def get_dropped_partition_uuids(self):
+        return self._dropped_partitions
+
+    def was_dropped(self, part_uuid):
+        return part_uuid in self._dropped_partitions
+
+    def get_ring_description(self):
+        return [(pos, uuid, part.is_local) for (pos, uuid, part) in self._ring]
 

@@ -1,7 +1,5 @@
 
-from meta import Meta
 from config import Config
+from server import Server
 from table import Table
-from local_partition import LocalPartition
-from remote_partition import RemotePartition
-
+from partition import Partition
