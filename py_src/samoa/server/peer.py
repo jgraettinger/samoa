@@ -1,6 +1,7 @@
 
 import time
 import samoa.command.cluster_state
+import samoa.server.cluster_state
 
 import cluster_state
 
@@ -23,14 +24,14 @@ class Peer(object):
         poll_delay_ms = int(self.polling_interval_ms - (interval * 1000))
 
         self._poll_timer = context.get_proactor().run_later(
-            self._poll_cluster_state, max(poll_delay_ms, 0), (context,))
+            self.poll_cluster_state, max(poll_delay_ms, 0), (context,))
 
-    def _poll_cluster_state(self, context):
+    def poll_cluster_state(self, context):
 
         # schedule next iteration
         self._last_poll_ts = time.time()
         self._poll_timer = context.get_proactor().run_later(
-            self._poll_cluster_state, self.polling_interval_ms, (context,))
+            self.poll_cluster_state, self.polling_interval_ms, (context,))
 
         cluster_state = context.get_cluster_state()
 
@@ -40,7 +41,8 @@ class Peer(object):
         peer_state = yield cmd.request_of(
             cluster_state.get_peer_set(), self.uuid)
 
-        yield cluster_state.update_from_peer(context, peer_state)
+        yield context.cluster_state_transaction(
+            samoa.server.cluster_state.ProtobufUpdator(peer_state).update)
         yield
 
     def retire(self):

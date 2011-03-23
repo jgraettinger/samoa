@@ -11,8 +11,8 @@ class Shutdown(samoa.command.Command):
     def _read_response(self, response, server):
         yield
 
-    @classmethod
-    def _handle(cls, client):
+class ShutdownHandler(samoa.command.CommandHandler):
+    def _handle(self, client):
         client.get_context().get_proactor().shutdown()
         client.get_response().closing = True
         yield

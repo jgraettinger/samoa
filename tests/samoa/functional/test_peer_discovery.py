@@ -1,7 +1,4 @@
 
-import logging
-logging.basicConfig(level = logging.INFO)
-
 import socket
 import random
 import unittest
@@ -14,9 +11,7 @@ import samoa.model.table
 import samoa.model.partition
 import samoa.core
 import samoa.client
-import samoa.server.protocol
 import samoa.server.context
-import samoa.server.listener
 import samoa.core.protobuf
 import samoa.command.shutdown
 import samoa.command.cluster_state
@@ -25,37 +20,17 @@ import samoa.command.cluster_state
 class TestPeerDiscovery(unittest.TestCase):
 
     def setUp(self):
-
         self.proactor = samoa.core.Proactor()
-
-        self.protocol = samoa.server.protocol.Protocol()
-        self.protocol.set_command_handler(
-            samoa.core.protobuf.CommandType.SHUTDOWN,
-            samoa.command.shutdown.Shutdown())
-        self.protocol.set_command_handler(
-            samoa.core.protobuf.CommandType.CLUSTER_STATE,
-            samoa.command.cluster_state.ClusterState())
-
-        return
 
     def _server_bootstrap(self, server_uuid, port, local_partitions, peers):
 
         class _Server(object): pass
 
-        srv = _Server()
-        module = samoa.module.Module(':memory:', self.proactor)
-        srv.injector = module.configure(getty.Injector())
+        module = samoa.module.TestModule(server_uuid, port, self.proactor)
+        injector = module.configure(getty.Injector())
 
-        srv.injector.bind_instance(getty.Config, server_uuid,
-            with_annotation = 'server_uuid')            
-
-        srv.meta = srv.injector.get_instance(samoa.model.meta.Meta)
-
-        session = srv.meta.new_session()
-
-        # add a record for this server
-        session.add(samoa.model.server.Server(uuid = server_uuid,
-            hostname = 'localhost', port = port))
+        meta = injector.get_instance(samoa.model.meta.Meta)
+        session = meta.new_session()
 
         # add records for known peers
         for peer_uuid, peer_port in peers:
@@ -88,13 +63,11 @@ class TestPeerDiscovery(unittest.TestCase):
 
         session.commit()
 
-        srv.context = srv.injector.get_instance(
+        # Cause the context to spring into life
+        injector.get_instance(
             samoa.server.context.Context)
 
-        srv.listener = samoa.server.listener.Listener(
-            'localhost', str(port), 1, srv.context, self.protocol)
-
-        return srv
+        return meta
 
     def test_basic(self):
 
@@ -111,8 +84,8 @@ class TestPeerDiscovery(unittest.TestCase):
 
         u = samoa.core.UUID.from_name_str
 
-        servers = []
-        servers.append(self._server_bootstrap(u('server_0'), ports[0],
+        server_meta = []
+        server_meta.append(self._server_bootstrap(u('server_0'), ports[0],
             # local partitions
             [('tbl0', u('srv0_tbl0_part1'), random.randint(0, max_ring_pos)),
              ('tbl0', u('srv0_tbl0_part2'), random.randint(0, max_ring_pos)),
@@ -120,20 +93,20 @@ class TestPeerDiscovery(unittest.TestCase):
             # no known peers
             []))
 
-        servers.append(self._server_bootstrap(u('server_1'), ports[1],
+        server_meta.append(self._server_bootstrap(u('server_1'), ports[1],
             # local partitions
             [('tbl0', u('srv1_tbl0_part1'), random.randint(0, max_ring_pos)),
              ('tbl1', u('srv1_tbl1_part2'), random.randint(0, max_ring_pos))],
             # knows of server 0
             [(u('server_0'), ports[0])]))
 
-        servers.append(self._server_bootstrap(u('server_2'), ports[2],
+        server_meta.append(self._server_bootstrap(u('server_2'), ports[2],
             # local partitions
             [('tbl0', u('srv2_tbl0_part1'), random.randint(0, max_ring_pos))],
             # knows of server 0
             [(u('server_0'), ports[0])]))
 
-        servers.append(self._server_bootstrap(u('server_3'), ports[3],
+        server_meta.append(self._server_bootstrap(u('server_3'), ports[3],
             # local partitions
             [('tbl1', u('srv3_tbl1_part1'), random.randint(0, max_ring_pos))],
             # knows of server 2
@@ -143,8 +116,8 @@ class TestPeerDiscovery(unittest.TestCase):
         self.proactor.run()
 
         # check all servers know of all partitions
-        for srv in servers:
-            session = srv.meta.new_session()
+        for meta in server_meta:
+            session = meta.new_session()
             self.assertEquals(session.query(samoa.model.Partition).count(), 7)
 
         return

@@ -307,19 +307,19 @@ stream_protocol::stream_protocol(
 stream_protocol::~stream_protocol()
 { }
 
-std::string stream_protocol::get_local_address()
+std::string stream_protocol::get_local_address() const
 { return get_socket().local_endpoint().address().to_string(); }
 
-std::string stream_protocol::get_remote_address()
+std::string stream_protocol::get_remote_address() const
 { return get_socket().remote_endpoint().address().to_string(); }
 
-unsigned stream_protocol::get_local_port()
+unsigned stream_protocol::get_local_port() const
 { return get_socket().local_endpoint().port(); }
 
-unsigned stream_protocol::get_remote_port()
+unsigned stream_protocol::get_remote_port() const
 { return get_socket().remote_endpoint().port(); }
 
-bool stream_protocol::is_open()
+bool stream_protocol::is_open() const
 {
     return _sock->is_open();
 }

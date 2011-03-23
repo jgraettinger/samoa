@@ -17,8 +17,8 @@ void make_listener_bindings()
         bpl::init<string, string, unsigned, context::ptr_t, protocol::ptr_t>(
             bpl::args("host", "port", "listen_backlog", "context", "protocol")))
         .def("cancel", &listener::cancel)
-        .add_property("address", &listener::get_address)
-        .add_property("port", &listener::get_port);
+        .def("get_address", &listener::get_address)
+        .def("get_port", &listener::get_port);
 }
 
 }

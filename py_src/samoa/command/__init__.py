@@ -4,13 +4,9 @@ from samoa.core import protobuf
 
 import traceback
 
-import logging
-log = logging.getLogger('command')
-
-class Command(samoa.server.command_handler.CommandHandler):
+class Command(object):
 
     def __init__(self):
-        samoa.server.command_handler.CommandHandler.__init__(self)
         self.closing = False
 
     def request_of(self, server_pool, server_uuid):
@@ -57,8 +53,7 @@ class Command(samoa.server.command_handler.CommandHandler):
         resp_proxy.finish_response()
         yield result
 
-    @classmethod
-    def check_for_error(cls, server_response_proxy):
+    def check_for_error(self, server_response_proxy):
 
         resp = server_response_proxy.get_response()
         if resp.type == protobuf.CommandType.ERROR:
@@ -66,13 +61,14 @@ class Command(samoa.server.command_handler.CommandHandler):
             server_response_proxy.finish_response()
             raise RuntimeError("%s" % err)
 
-    @classmethod
-    def handle(cls, client):
+class CommandHandler(samoa.server.command_handler.CommandHandler):
+
+    def handle(self, client):
         try:
-            yield cls._handle(client)
+            yield self._handle(client)
         except Exception, err:
             traceback.print_exc()
-            log.exception('<caught by Command.handle()>')
+            client.get_context().log.exception('<caught by Command.handle()>')
             client.set_error(str(type(err)), repr(err), True)
 
         client.finish_response()

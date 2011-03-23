@@ -160,16 +160,16 @@ public:
 
     virtual ~stream_protocol();
 
-    std::string get_local_address();
-    std::string get_remote_address();
+    std::string get_local_address() const;
+    std::string get_remote_address() const;
 
-    unsigned get_local_port();
-    unsigned get_remote_port();
+    unsigned get_local_port() const;
+    unsigned get_remote_port() const;
 
     boost::asio::io_service & get_io_service()
     { return get_socket().get_io_service(); }
 
-    bool is_open();
+    bool is_open() const;
 
     void close();
 
@@ -183,6 +183,9 @@ protected:
 
     // Underlying socket
     boost::asio::ip::tcp::socket & get_socket()
+    { return *_sock; }
+
+    const boost::asio::ip::tcp::socket & get_socket() const
     { return *_sock; }
 
 private:

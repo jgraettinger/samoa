@@ -10,6 +10,14 @@ namespace server {
 
 namespace bpl = boost::python;
 
+std::string py_repr(const client & c)
+{
+    return "client@<" + \
+        c.get_remote_address() + ":" + \
+        boost::lexical_cast<std::string>(c.get_remote_port()) + \
+        ">";
+}
+
 void make_client_bindings()
 {
     bpl::class_<client, client::ptr_t, boost::noncopyable,
@@ -28,7 +36,8 @@ void make_client_bindings()
         .def("start_response", &client::start_response)
         .def("write_interface", &client::write_interface,
             bpl::return_value_policy<bpl::reference_existing_object>())
-        .def("finish_response", &client::finish_response);
+        .def("finish_response", &client::finish_response)
+        .def("__repr__", &py_repr);
 }
 
 }

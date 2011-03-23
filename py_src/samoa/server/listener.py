@@ -1,14 +1,10 @@
 
-import getty
-from _server import Listener
+import _server
 
-import context
-import protocol
+class Listener(_server.Listener):
 
-getty.Extension(Listener).requires(
-    host = getty.Config('host'),
-    port = getty.Config('port'),
-    listen_backlog = getty.Config('listen_backlog'),
-    context = context.Context,
-    protocol = protocol.Protocol)
+    def __init__(self, server_model, context, protocol, listen_backlog = 5):
+
+        _server.Listener.__init__(self, server_model.hostname,
+            str(server_model.port), listen_backlog, context, protocol)
 

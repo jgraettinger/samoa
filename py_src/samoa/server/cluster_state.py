@@ -1,16 +1,12 @@
 
-import logging
 import sqlalchemy.sql.expression as sql_exp
 
 from samoa.core import UUID
-import samoa.coroutine.lock
 import samoa.model
 import samoa.core.protobuf
 
 import peer_set
 import table_set
-
-log = logging.getLogger('cluster_state')
 
 class ClusterState(object):
     """
@@ -46,6 +42,12 @@ class ClusterState(object):
 
     def get_table_set(self):
         return self._table_set
+
+    def get_table(self, table_uuid):
+        return self._table_set.get_table(table_uuid)
+
+    def get_table_by_name(self, table_name):
+        return self._table_set.get_table_by_name(table_name)
 
     @classmethod
     def update_from_peer(cls, context, proto_state):
@@ -127,42 +129,28 @@ class ClusterState(object):
         self._cached_proto_state = cluster_state
 
 
+class ProtobufUpdator(object):
 
-class _ClusterState_Updater(object):
-
-    # Updates to the underlying database, and rebuilding the active
-    #  ClusterState instance must be transactional, such that there
-    #  is a strict ordering of active ClusterStates.
-    #
-    # To merge a peer protobuf cluster-state description using a
-    #  stale ClusterState instance can introduce inconsistencies.
-    _merge_lock = samoa.coroutine.lock.Lock()
- 
-    def __init__(self, context):
-        self.context = context
-        self.server_uuid = context.get_server_uuid()
-        self.session = False
-
-        self.prev_cluster_state = None
-        self.prev_table_set = None
-        self.prev_peer_set = None
-
+    def __init__(self, proto_state):
+        self.proto_state = proto_state
         self.new_peers = {}
 
-    def update_from(self, proto_state):
+    def update(self, context, session):
 
-        yield self._merge_lock.aquire()
+        self.context = context
+        self.session = session
+        self.log = context.log
 
-        self.session = self.context.new_session()
+        self.server_uuid = context.get_server_uuid()
 
-        self.prev_cluster_state = self.context.get_cluster_state()
+        self.prev_cluster_state = context.get_cluster_state()
         self.prev_table_set = self.prev_cluster_state.get_table_set()
         self.prev_peer_set = self.prev_cluster_state.get_peer_set()
 
         # First, identify remote peers which are not locally known.
         # Adding unknown peers is deferred until it's known
         #  whether they're required by a locally-tracked partition
-        for proto_peer in proto_state.peer:
+        for proto_peer in self.proto_state.peer:
             peer_uuid = UUID.from_hex_str(proto_peer.uuid)
 
             if not self.prev_peer_set.get_peer(peer_uuid):
@@ -170,42 +158,35 @@ class _ClusterState_Updater(object):
                     proto_peer.hostname, proto_peer.port)
 
         # The originator of the ClusterState message is also a potential peer
-        peer_uuid = UUID.from_hex_str(proto_state.local_uuid)
+        peer_uuid = UUID.from_hex_str(self.proto_state.local_uuid)
 
         if not self.prev_peer_set.get_peer(peer_uuid):
             self.new_peers[peer_uuid] = (
-                proto_state.local_hostname, proto_state.local_port)
+                self.proto_state.local_hostname, self.proto_state.local_port)
 
         # Merge tables & table partitions
-        dirty = self._merge_table_set(proto_state.table)
+        dirty = self._merge_table_set(self.proto_state.table)
 
         if not dirty:
             # no change to cluster state
-            self._merge_lock.release()
-            yield
+            yield False, False
 
         self.session.flush()
 
         for peer_uuid in self.new_peers.keys():
-            log.info('discarding remote peer %r (not used)' % peer_uuid) 
+            self.log.info('discarding remote peer %r (not used)' % peer_uuid) 
 
         # Delete known peers whom we no longer care about
         for model in self.session.query(samoa.model.Server).filter(
             sql_exp.not_(samoa.model.Server.uuid.in_(
                 self.session.query(samoa.model.Partition.server_uuid)))):
 
-            log.info('dropping remote peer %r (%r, %r)' % (
+            self.log.info('dropping remote peer %r (%r, %r)' % (
                 model.uuid, model.hostname, model.port))
 
             self.session.delete(model)
 
-        self.context.set_cluster_state(ClusterState(self.context,
-            self.session, self.prev_cluster_state))
-
-        self.session.commit()
-
-        self._merge_lock.release()
-        yield
+        yield True, False
 
     def _merge_table_set(self, proto_set):
 
@@ -237,7 +218,7 @@ class _ClusterState_Updater(object):
                 self.session.flush()
                 dirty = True
 
-                log.info('discovered remote table %r (%r)' % (
+                self.log.info('discovered remote table %r (%r)' % (
                     model.name, model.uuid))
 
             elif proto_table.dropped:
@@ -252,7 +233,7 @@ class _ClusterState_Updater(object):
                     table_uuid = table_uuid).update({'dropped': True})
 
                 dirty = True
-                log.info('remotely dropped table %r (%r)' % (
+                self.log.info('remotely dropped table %r (%r)' % (
                     model.name, model.uuid))
                 continue
 
@@ -298,7 +279,7 @@ class _ClusterState_Updater(object):
                 model.dropped = True
                 dirty = True
 
-                log.info('remotely dropped partition %r (table %r)' % (
+                self.log.info('remotely dropped partition %r (table %r)' % (
                     model.uuid, model.table_uuid))
 
         # currently-tracked partitions, as:
@@ -359,7 +340,7 @@ class _ClusterState_Updater(object):
                 index_size = proto_part.index_size)
             self.session.add(model)
 
-            log.info('discovered remote partition %r (table %r)' % (
+            self.log.info('discovered remote partition %r (table %r)' % (
                     model.uuid, model.table_uuid))
 
         for ring_pos, part_uuid, is_local in deletions:
@@ -368,7 +349,7 @@ class _ClusterState_Updater(object):
             self.session.query(samoa.model.Partition).filter_by(
                 uuid = part_uuid).delete()
 
-            log.info('dropped remote partition %r from local ring' % part_uuid)
+            self.log.info('dropped remote partition %r from local ring' % part_uuid)
 
         return True
 
@@ -385,6 +366,6 @@ class _ClusterState_Updater(object):
         self.session.add(model)
         self.session.flush()
 
-        log.info('added new peer %r (%r, %r)' % (
+        self.log.info('added new peer %r (%r, %r)' % (
             model.uuid, model.hostname, model.port))
 

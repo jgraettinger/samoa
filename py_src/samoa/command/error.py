@@ -19,8 +19,9 @@ class Error(samoa.command.Command):
             err.message = self.message
         yield
 
-    @classmethod
-    def _handle(cls, client):
+class ErrorHandler(samoa.command.CommandHandler):
+
+    def _handle(self, client):
 
         request = client.get_request()
         response = client.get_response()

@@ -25,8 +25,8 @@ class Ping(samoa.command.Command):
             response.ping.value_len)
         yield value
 
-    @classmethod
-    def _handle(cls, client):
+class PingHandler(samoa.command.CommandHandler):
+    def _handle(self, client):
 
         req = client.get_request()
 
