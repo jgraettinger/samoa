@@ -112,9 +112,9 @@ message DropTableResponse {
 
 message CreatePartitionRequest {
     required string table_uuid = 1;
-    required int64  ring_position = 2;
+    required int32  ring_position = 2;
 
-    required string storage_size = 3;
+    required int64 storage_size = 3;
     required int64  index_size = 4;
 };
 
@@ -123,11 +123,11 @@ message CreatePartitionResponse {
 };
 
 message DropPartitionRequest {
-    required string uuid = 1;
+    required string table_uuid = 1;
+    required string uuid = 2;
 };
 
 message DropPartitionResponse {
-    required string uuid = 1;
 };
 
 // Table access operations

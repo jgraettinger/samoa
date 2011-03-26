@@ -52,6 +52,8 @@ class TestModule(Module):
 
         binder.bind_instance(getty.Config, self.server_uuid,
             with_annotation = 'server_uuid')
+        binder.bind_instance(getty.Config, '/tmp',
+            with_annotation = 'partition_path')
 
         # Add a record for this server
         meta = binder.get_instance(samoa.model.meta.Meta)
