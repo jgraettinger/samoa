@@ -1,17 +1,18 @@
 
-#include "samoa/mapped_rolling_hash.hpp"
+#include "samoa/persistence/mapped_rolling_hash.hpp"
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <fstream>
 
 namespace samoa {
+namespace persistence {
 
 namespace bip = boost::interprocess;
 
-typedef std::auto_ptr<bip::file_mapping> file_mapping_ptr_t;
-typedef std::auto_ptr<bip::file_lock> file_lock_ptr_t;
-typedef std::auto_ptr<bip::mapped_region> mapped_region_ptr_t;
+typedef std::unique_ptr<bip::file_mapping> file_mapping_ptr_t;
+typedef std::unique_ptr<bip::file_lock> file_lock_ptr_t;
+typedef std::unique_ptr<bip::mapped_region> mapped_region_ptr_t;
 
 // private implementation pattern for boost::interprocess state
 struct mapped_rolling_hash::pimpl_t
@@ -26,7 +27,7 @@ struct mapped_rolling_hash::pimpl_t
 mapped_rolling_hash::mapped_rolling_hash(pimpl_ptr_t pimpl)
  : rolling_hash::rolling_hash(
     pimpl->mregion->get_address(), pimpl->region_size, pimpl->table_size),
-   _pimpl(pimpl)
+   _pimpl(std::move(pimpl))
 { }
 
 mapped_rolling_hash::~mapped_rolling_hash()
@@ -40,7 +41,7 @@ mapped_rolling_hash::~mapped_rolling_hash()
     return;
 }
 
-std::auto_ptr<mapped_rolling_hash> mapped_rolling_hash::open(
+std::unique_ptr<mapped_rolling_hash> mapped_rolling_hash::open(
     const std::string & file, size_t region_size, size_t table_size)
 {
     if(std::ifstream(file.c_str()).fail())
@@ -72,8 +73,9 @@ std::auto_ptr<mapped_rolling_hash> mapped_rolling_hash::open(
     p->mregion.reset(new bip::mapped_region(
         *p->fmapping, bip::read_write, 0, region_size));
 
-    return std::auto_ptr<mapped_rolling_hash>(new mapped_rolling_hash(p));
+    return std::unique_ptr<mapped_rolling_hash>(new mapped_rolling_hash(std::move(p)));
 }
 
+}
 }
 

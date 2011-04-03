@@ -1,62 +1,55 @@
 
-import samoa.exception
+from samoa.core import protobuf
 
 import command
 
-class GET(command.Command):
+class Get(command.Command):
 
-    def __init__(self, tbl, key):
-        self.tbl = tbl
+    def __init__(self, table_uuid, key):
+        self.table_uuid = table_uuid
         self.key = key
 
-    @classmethod
-    def request_from_stream(cls, sin):
-        tbl_len = int(sin.readline())
-        tbl = sin.read(tbl_len)
-        sin.read(2)
-        key_len = int(sin.readline())
-        key = sin.read(key_len)
-        sin.read(2)
-        return GET(tbl, key)
+    def _write_request(self, request, server):
+        request.type = protobuf.CommandType.GET
+        get_req = request.mutable_get_request()
 
-    def request_to_stream(self, sout):
-        sout('GET\r\n%d\r\n%s\r\n%d\r\n%s\r\n' % (
-            len(self.tbl), self.tbl, len(self.key), self.key))
+        get_req.table_uuid = self.table_uuid.to_hex_str()
+        get_req.key = self.key
+        yield
 
-    @classmethod
-    def response_from_stream(cls, sin):
-        line = sin.readline()
-        cls.check_for_error(sin, line)
+    def _read_response(self, response, server):
+        if not response.get.found:
+            yield None
 
-        val_len = int(line)
-        if val_len == -1:
-            return None
+        value = yield server.read_data(response.get.value_length)
+        yield value
 
-        val = sin.read(val_len)
-        sin.read(2)
-        return val
 
-    @classmethod
-    def response_to_stream(cls, sout, response):
-        if respose is None:
-            sout('-1\r\n')
-        else:
-            sout('%d\r\n%s\r\n' % (len(response), response))
+class GetHandler(command.CommandHandler):
 
-    def execute(self, server):
+    def _handle(self, client):
 
-        table = server.tables.get(self.tbl)
-        partitions = list(table.route_key(self.key))
+        get_req = client.get_request().get
 
-        # attempt to route locally
-        for partition in partitions:
-            if partition.is_local and partition.is_online:
-                return partition.get(self.key)
+        cluster_state = client.get_context().get_cluster_state()
 
-        # route remotely
-        for partition in partitions:
-            if partition.is_online:
-                return partition.forward(self).get()
+        table = cluster_state.get_table(
+            samoa.core.UUID.from_hex_str(get.table_uuid))
 
-        raise samoa.exception.Unroutable(self.key)
+        if not table:
+            client.set_error("get", "no such table", False)
+            yield
+
+        partitions = table.route_key(get_req.key)
+
+        # try to find a local partition to handle the request
+        for part in partitions:
+            if part.is_local and partition.is_online:
+                yield partition.get(get_req.key)
+
+        # else, route remotely
+        cmd = Get(table.uuid, get_req.key).request_of(
+        result = yield cluster_state.get_peer_set().request_of(
+            partitions[0].server_uuid, cmd)
+        yield result
 

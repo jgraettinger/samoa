@@ -133,8 +133,8 @@ message DropPartitionResponse {
 // Table access operations
 
 message GetRequest {
-    required string key = 1;
-    optional bool allow_blocking = 2 [default = true];
+    required string table_uuid = 1;
+    required bytes key = 2;
 };
 message GetResponse {
     required bool  found = 1;
@@ -142,14 +142,17 @@ message GetResponse {
 };
 
 message SetRequest {
-    required string table_uid = 1;
-    required string key = 2;
+    required string table_uuid = 1;
+    required bytes  key = 2;
     required bool   replace = 3 [default = true];
     required int64  value_length = 4;
 };
 message SetResponse {
     required bool   replaced = 1;
 };
+
+
+
 
 message SamoaRequest {
     required CommandType type = 1;

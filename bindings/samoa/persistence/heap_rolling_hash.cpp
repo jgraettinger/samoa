@@ -1,9 +1,11 @@
 
-#include "samoa/heap_rolling_hash.hpp"
-#include "samoa/rolling_hash.hpp"
+#include "samoa/persistence/heap_rolling_hash.hpp"
+#include "samoa/persistence/rolling_hash.hpp"
 #include <boost/python.hpp>
 
 namespace samoa {
+namespace persistence {
+
 namespace bpl = boost::python;
 
 void make_heap_rolling_hash_bindings()
@@ -12,4 +14,6 @@ void make_heap_rolling_hash_bindings()
             "HeapRollingHash", bpl::init<size_t, size_t>());
 }
 
-};
+}
+}
+

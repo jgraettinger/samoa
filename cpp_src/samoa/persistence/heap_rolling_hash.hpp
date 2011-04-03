@@ -1,9 +1,10 @@
-#ifndef SAMOA_HEAP_ROLLING_HASH_HPP
-#define SAMOA_HEAP_ROLLING_HASH_HPP
+#ifndef SAMOA_PERSISTENCE_HEAP_ROLLING_HASH_HPP
+#define SAMOA_PERSISTENCE_HEAP_ROLLING_HASH_HPP
 
-#include "samoa/rolling_hash.hpp"
+#include "samoa/persistence/rolling_hash.hpp"
 
 namespace samoa {
+namespace persistence {
 
 class heap_rolling_hash : public rolling_hash
 {
@@ -18,7 +19,8 @@ public:
     { delete [] _region_ptr; }
 };
 
-};
+}
+}
 
 #endif
 

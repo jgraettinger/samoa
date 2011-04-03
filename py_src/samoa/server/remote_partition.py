@@ -3,7 +3,7 @@ class RemotePartition(object):
 
     is_local = False
 
-    def __init__(self, model):
+    def __init__(self, model, table, prev_partition):
         self.uuid = model.uuid
         self.server_uuid = model.server_uuid
 

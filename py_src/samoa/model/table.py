@@ -15,6 +15,8 @@ class Table(ModelBase):
     name = sa.Column(sa.String, nullable = False)
     replication_factor = sa.Column(sa.Integer, nullable = False) 
 
+    vclock_retire_delay = sa.Column(sa.Integer, nullable = False)
+
     # Partition maps relationship 'table', with
     #   backreference 'partitions'
 

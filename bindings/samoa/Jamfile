@@ -1,17 +1,7 @@
 
-python-extension _samoa :
-    [ glob *.cpp ]
-    /samoa//libsamoa
-    /pysamoa//libpysamoa
-    /root//boost_system
-    /root//boost_regex
-    /root//boost_python
-;
-
 build-project core ;
+build-project persistence ;
 build-project coroutine ;
 build-project server ;
 build-project client ;
-
-install dist : _samoa : <location>$(INSTALL)/samoa ;
 

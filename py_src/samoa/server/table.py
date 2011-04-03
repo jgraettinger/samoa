@@ -28,16 +28,19 @@ class Table(object):
                 self._dropped_partitions.add(pmodel.uuid)
                 continue
 
+            prev_part = prev_table and prev_table.get_partition(
+                pmodel.uuid)
+
             if pmodel.server_uuid == context.get_server_uuid():
                 # this partition is managed locally
 
-                partition = LocalPartition(pmodel)
+                partition = LocalPartition(pmodel, self, prev_part)
                 self._local[partition.uuid] = partition
 
             else:
                 # this partition is managed remotely
 
-                partition = RemotePartition(pmodel)
+                partition = RemotePartition(pmodel, self, prev_part)
                 self._remote[partition.uuid] = partition
 
             self._ring.append((partition.ring_position,

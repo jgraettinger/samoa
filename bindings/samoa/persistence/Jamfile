@@ -1,0 +1,11 @@
+
+python-extension _persistence :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _persistence : <location>$(INSTALL)/samoa/persistence ;
+

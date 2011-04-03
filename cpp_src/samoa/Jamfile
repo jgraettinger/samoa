@@ -5,6 +5,7 @@ lib libsamoa :
     [ glob-tree *.cpp ] $(BUILD)/generated/cpp_src/samoa/core/protobuf/samoa.pb.cc
     /root//boost_system
     /root//boost_thread
+    /root//boost_regex
     /root//protobuf
     : <link>shared
     ;

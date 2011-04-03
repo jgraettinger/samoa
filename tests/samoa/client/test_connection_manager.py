@@ -5,7 +5,8 @@ import getty
 import samoa.module
 import samoa.core
 import samoa.client
-import samoa.server
+import samoa.server.context
+import samoa.server.protocol
 import samoa.core.protobuf
 import samoa.command.ping
 
@@ -17,8 +18,8 @@ class TestConnectionManager(unittest.TestCase):
         self.injector = module.configure(getty.Injector())
 
         self.proactor = self.injector.get_instance(samoa.core.Proactor)
-        self.context = self.injector.get_instance(samoa.server.Context)
-        self.protocol = self.injector.get_instance(samoa.server.Protocol)
+        self.context = self.injector.get_instance(samoa.server.context.Context)
+        self.protocol = self.injector.get_instance(samoa.server.protocol.Protocol)
 
         self.protocol.set_command_handler(samoa.core.protobuf.CommandType.PING,
             samoa.command.ping.Ping())
