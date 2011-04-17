@@ -12,13 +12,13 @@ namespace bpl = boost::python;
 using namespace samoa::core;
 
 future::future()
- : _called(false), _error(false)
+ : _called(false), _error(false), _reenter_via_post(false)
 {
     std::cerr << "future " << (size_t)this << " created" << std::endl;
 }
 
 future::future(const bpl::object & result)
- : _called(true), _error(false), _result(result)
+ : _called(true), _error(false), _reenter_via_post(false), _result(result)
 {
     std::cerr << "*precalled* future " << (size_t)this << " created" << std::endl;
 }
@@ -41,6 +41,46 @@ void future::set_yielding_coroutine(const coroutine::ptr_t & coro)
     send_result();
 }
 
+void future::set_reenter_via_post()
+{
+    if(_called)
+    {
+        throw std::runtime_error("future::set_reenter_via_post(): "\
+            "cannot be applied to an already-called future");
+    }
+    _reenter_via_post = true;
+}
+
+void future::on_error(const boost::system::error_code & ec)
+{
+    _exc_type = bpl::object(
+        bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
+    _exc_msg = bpl::str(ec.message());
+    _error = true;
+
+    _called = true;
+    send_result();
+}
+
+void future::on_error(
+    const bpl::object & exc_type, const bpl::object & exc)
+{
+    _exc_type = exc_type;
+    _exc_msg = exc;
+    _error = true;
+
+    _called = true;
+    send_result();
+}
+
+void future::on_result(const bpl::object & result)
+{
+    _result = result;
+
+    _called = true;
+    send_result();
+}
+
 // precondition: Python GIL is held
 void future::send_result()
 {
@@ -50,9 +90,9 @@ void future::send_result()
         return;
 
     if(_error)
-        _coroutine->error(_exc_type, _exc_msg);
+        _coroutine->error(_exc_type, _exc_msg, _reenter_via_post);
     else
-        _coroutine->send(_result);
+        _coroutine->send(_result, _reenter_via_post);
 
     // clear held references to break cycles
     _result = bpl::object();
@@ -60,6 +100,9 @@ void future::send_result()
     _exc_msg = bpl::object();
 }
 
+
+
+/*
 void future::on_buffer_result(
     const boost::system::error_code & ec,
     const buffers_iterator_t & begin,
@@ -248,24 +291,61 @@ void future::on_server_response(
     send_result();
 }
 
-void future::on_error(
-    const bpl::object & exc_type, const bpl::object & exc)
+void future::on_get_result(
+    const boost::system::error_code & ec,
+    const samoa::persistence::record * rec)
 {
-    _exc_type = exc_type;
-    _exc_msg = exc;
-    _error = true;
+    python_scoped_lock block;
+
+    if(ec)
+    {
+        // save exception
+        _exc_type = bpl::object(
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
+        _exc_msg = bpl::str(ec.message());
+        _error = true;
+    }
+    else {
+        bpl::reference_existing_object::apply<
+            const samoa::persistence::record *>::type convert;
+
+        _result = bpl::object(bpl::handle<>(convert(rec)));
+    }
 
     _called = true;
     send_result();
 }
 
-void future::on_result(const bpl::object & result)
+bool future::on_put_result(
+    const boost::system::error_code & ec,
+    const samoa::persistence::record * rec,
+    samoa::persistence::record * new_rec)
 {
-    _result = result;
+    python_scoped_lock block;
+
+    if(ec)
+    {
+        // save exception
+        _exc_type = bpl::object(
+            bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
+        _exc_msg = bpl::str(ec.message());
+        _error = true;
+    }
+    else {
+        bpl::reference_existing_object::apply<
+            const samoa::persistence::record *>::type cconvert;
+        bpl::reference_existing_object::apply<
+            const samoa::persistence::record *>::type convert;
+
+        _result = bpl::make_tuple(
+            bpl::handle<>(cconvert(rec)),
+            bpl::handle<>(convert(new_rec)));
+    }
 
     _called = true;
     send_result();
 }
+*/
 
 }
 

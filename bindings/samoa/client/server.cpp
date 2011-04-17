@@ -2,44 +2,95 @@
 #include "samoa/client/server.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include "pysamoa/future.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
+#include "pysamoa/scoped_python.hpp"
 #include <boost/python.hpp>
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace client {
 
 namespace bpl = boost::python;
 using namespace pysamoa;
-using namespace std;
+
+///////////// connect_to support
+
+void py_on_connect_to(
+    const future::ptr_t & future,
+    const boost::system::error_code & ec,
+    const samoa::client::server_ptr_t & server)
+{
+    python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    future->on_result(bpl::object(server));
+}
 
 future::ptr_t py_connect_to(
-    const core::proactor::ptr_t & proactor,
-    const string & host, const string & port)
+    const core::io_service_ptr_t & io_srv,
+    const std::string & host, const std::string & port)
 {
     future::ptr_t f(boost::make_shared<future>());
-
-    server::connect_to(proactor, host, port,
-        boost::bind(&future::on_server_connect, f, _1, _2));
+    server::connect_to(boost::bind(py_on_connect_to, f, _1, _2),
+        io_srv, host, port);
     return f;
+}
+
+//////////// schedule_request support
+
+void py_on_schedule_request(
+    const future::ptr_t & future,
+    const boost::system::error_code & ec,
+    const samoa::client::server_request_interface & iface)
+{
+    python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    future->on_result(bpl::object(iface));
 }
 
 future::ptr_t py_schedule_request(server & s)
 {
     future::ptr_t f(boost::make_shared<future>());
-
-    s.schedule_request(boost::bind(
-        &future::on_server_request, f, _1, _2));
+    s.schedule_request(boost::bind(py_on_schedule_request, f, _1, _2));
     return f;
+}
+
+//////////// finish_request support
+
+void py_on_server_response(
+    const future::ptr_t & future,
+    const boost::system::error_code & ec,
+    const samoa::client::server_response_interface & iface)
+{
+    python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    future->on_result(bpl::object(iface));
 }
 
 future::ptr_t py_finish_request(server::request_interface & s)
 {
     future::ptr_t f(boost::make_shared<future>());
-
-    s.finish_request(boost::bind(
-        &future::on_server_response, f, _1, _2));
+    s.finish_request(boost::bind(py_on_server_response, f, _1, _2));
     return f;
 }
+
+////////////
 
 void make_server_bindings()
 {

@@ -58,6 +58,9 @@ class CreatePartitionHandler(samoa.command.CommandHandler):
             table_uuid = table_uuid,
             server_uuid = context.get_server_uuid(),
             ring_position = part_req.ring_position,
+            consistent_range_begin = part_req.ring_position,
+            consistent_range_end = part_req.ring_position,
+            lamport_ts = 0,
             storage_path = storage_path,
             storage_size = part_req.storage_size,
             index_size = part_req.index_size)

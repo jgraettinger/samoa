@@ -1,7 +1,7 @@
 
-import sqlalchemy as sa
-
 import samoa.core
+
+import sqlalchemy as sa
 from base import ModelBase, UUIDType
 
 class Table(ModelBase):
@@ -13,18 +13,26 @@ class Table(ModelBase):
     uuid = sa.Column(UUIDType, primary_key = True)
     dropped = sa.Column(sa.Boolean, default = False)
     name = sa.Column(sa.String, nullable = False)
-    replication_factor = sa.Column(sa.Integer, nullable = False) 
+    data_type = sa.Column(sa.Integer, nullable = False)
 
-    vclock_retire_delay = sa.Column(sa.Integer, nullable = False)
+    replication_factor = sa.Column(sa.Integer, nullable = False) 
+    lamport_consistency_bound = sa.Column(sa.Integer, nullable = False)
 
     # Partition maps relationship 'table', with
     #   backreference 'partitions'
 
-    def __init__(self, uuid, name, replication_factor = 1):
+    def __init__(self,
+            uuid,
+            name,
+            data_type,
+            replication_factor,
+            lamport_consistency_bound):
 
         self.uuid = uuid
         self.name = name
+        self.data_type = data_type
         self.replication_factor = replication_factor
+        self.lamport_consistency_bound = lamport_consistency_bound
 
     @classmethod
     def compute_ring_update(cls, tracked_partitions, unknown_partitions):

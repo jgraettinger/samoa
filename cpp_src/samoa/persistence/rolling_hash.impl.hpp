@@ -121,7 +121,7 @@ bool rolling_hash::mark_for_deletion(
     //  effectively dropping it from the hash chain
     *(offset_t*)(_region_ptr + rec_ptr_ptr) = rec->next();
 
-    rec->set_dead();
+    rec->mark_as_dead();
     _tbl.live_record_count -= 1;
     return true;
 }

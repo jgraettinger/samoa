@@ -24,6 +24,7 @@ void py_set_value(record * r, const bpl::str & val)
     const char * val_end = val_begin + val_len;
 
     std::copy(val_begin, val_end, r->value_begin());
+    r->trim_value_length(val_len);
 }
 
 void make_record_bindings()
@@ -32,6 +33,7 @@ void make_record_bindings()
         .def("key_length", &record::key_length)
         .def("value_length", &record::value_length)
         .def("is_dead", &record::is_dead)
+        .def("is_copy", &record::is_copy)
         .add_property("key", &py_get_key)
         .add_property("value", &py_get_value)
         .def("set_value", &py_set_value);

@@ -13,26 +13,28 @@ class connection_factory_priv : public connection_factory
 {
 public:
 
-    connection_factory_priv(const core::proactor::ptr_t & p, unsigned t)
-     : connection_factory(p, t)
+    connection_factory_priv(const core::io_service_ptr_t & io_srv,
+         unsigned t)
+     : connection_factory(io_srv, t)
     { }
 };
 
 connection_factory::connection_factory(
-    const core::proactor::ptr_t & proactor, unsigned timeout_ms)
+    const core::io_service_ptr_t & io_srv, unsigned timeout_ms)
  : _timeout_ms(timeout_ms),
-   _sock(new ip::tcp::socket(proactor->serial_io_service())),
+   _sock(new ip::tcp::socket(*io_srv)),
     _resolver(_sock->get_io_service()),
     _timer(_sock->get_io_service())
 { }
 
 /* static */ connection_factory::ptr_t connection_factory::connect_to(
-    const core::proactor::ptr_t & proactor,
+    const connection_factory::callback_t & callback,
+    const core::io_service_ptr_t & io_srv,
     const std::string & host,
-    const std::string & port,
-    const connection_factory::callback_t & callback)
+    const std::string & port)
+
 {
-    ptr_t p(boost::make_shared<connection_factory_priv>(proactor, 60000));
+    ptr_t p(boost::make_shared<connection_factory_priv>(io_srv, 60000));
 
     ip::tcp::resolver::query query(host, port);
 

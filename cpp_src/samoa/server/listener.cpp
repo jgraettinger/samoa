@@ -4,7 +4,6 @@
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
 #include <boost/asio.hpp>
 
 #include <iostream>
@@ -13,7 +12,6 @@ namespace samoa {
 namespace server {
 
 using namespace boost::asio;
-using namespace boost;
 
 listener::listener(std::string host, std::string port, unsigned listen_backlog,
     context::ptr_t ctxt, protocol::ptr_t prot)
@@ -21,7 +19,7 @@ listener::listener(std::string host, std::string port, unsigned listen_backlog,
 {
     core::proactor::ptr_t proactor = _context->get_proactor();
 
-    ip::tcp::resolver resolver(proactor->serial_io_service());
+    ip::tcp::resolver resolver(*(proactor->serial_io_service()));
 
     // Blocks, & throws on resolution failure
     ip::tcp::endpoint ep = *resolver.resolve(
@@ -29,7 +27,7 @@ listener::listener(std::string host, std::string port, unsigned listen_backlog,
 
     // Create & listen on accepting socket, reusing port
     _accept_sock.reset(new ip::tcp::acceptor(
-        proactor->serial_io_service(), ep));
+        *(proactor->serial_io_service()), ep));
 
     _accept_sock->listen(listen_backlog);
 
@@ -79,14 +77,14 @@ void listener::on_accept(const boost::system::error_code & ec)
         // Lifetime is managed by client's use in callbacks. Eg, it's
         //  auto-destroyed when it falls out of event handler state
         client::ptr_t c(boost::make_shared<client>(
-            _context, _protocol, _next_sock));
+            _context, _protocol, _next_io_srv, _next_sock));
 
         c->init();
     }
 
     // Next connection to accept
-    _next_sock.reset(new ip::tcp::socket(
-        _context->get_proactor()->serial_io_service()));
+    _next_io_srv = _context->get_proactor()->serial_io_service();
+    _next_sock.reset(new ip::tcp::socket(*_next_io_srv));
 
     // Schedule call on accept. Note that bound handler
     // DOES NOT have a smart-pointer. This means, when

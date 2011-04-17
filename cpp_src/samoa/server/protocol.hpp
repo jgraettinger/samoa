@@ -2,7 +2,6 @@
 #define SAMOA_SERVER_PROTOCOL_HPP
 
 #include "samoa/server/fwd.hpp"
-#include <boost/shared_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <vector>
 
@@ -13,7 +12,7 @@ class protocol : private boost::noncopyable
 {
 public:
 
-    typedef boost::shared_ptr<protocol> ptr_t;
+    typedef protocol_ptr_t ptr_t;
 
     void set_command_handler(unsigned operation_type,
         const command_handler_ptr_t & handler)

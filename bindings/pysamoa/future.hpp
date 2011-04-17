@@ -1,25 +1,19 @@
 #ifndef PYSAMOA_FUTURE_HPP
 #define PYSAMOA_FUTURE_HPP
 
-#include "samoa/client/fwd.hpp"
-#include "samoa/core/buffer_region.hpp"
-#include "samoa/core/stream_protocol.hpp"
+#include "pysamoa/fwd.hpp"
 #include <boost/python.hpp>
-#include <boost/shared_ptr.hpp>
+#include <boost/system/error_code.hpp>
 
 namespace pysamoa {
 
 namespace bpl = boost::python;
 
-// fwd-declare coroutine
-class coroutine;
-typedef boost::shared_ptr<coroutine> coroutine_ptr_t;
-
 class future
 {
 public:
 
-    typedef boost::shared_ptr<future> ptr_t;
+    typedef future_ptr_t ptr_t;
 
     future();
     future(const bpl::object & result);
@@ -28,6 +22,21 @@ public:
     // Precondition: Python GIL is held
     void set_yielding_coroutine(const coroutine_ptr_t & coro);
 
+    void set_reenter_via_post();
+
+    // precondition: Python GIL is held
+    void on_error(
+        const boost::system::error_code &);
+
+    // precondition: Python GIL is held
+    void on_error(
+        const bpl::object & exception_type,
+        const bpl::object & exception);
+
+    // precondition: Python GIL is held
+    void on_result(const bpl::object & result);
+
+    /*
     // TODO: Perhaps the should be broken out into subclasses?
     //  (Not worth the complexity at the moment)
     void on_buffer_result(
@@ -57,14 +66,7 @@ public:
     void on_server_response(
         const boost::system::error_code & ec,
         samoa::client::server_response_interface);
-
-    // precondition: Python GIL is held
-    void on_error(
-        const bpl::object & exception_type,
-        const bpl::object & exception);
-
-    // precondition: Python GIL is held
-    void on_result(const bpl::object & result);
+    */
 
 private:
 
@@ -73,6 +75,7 @@ private:
 
     bool _called;
     bool _error;
+    bool _reenter_via_post;
 
     bpl::object _result;
     bpl::object _exc_type;

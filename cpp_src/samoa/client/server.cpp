@@ -7,7 +7,6 @@ namespace samoa {
 namespace client {
 
 using namespace boost::asio;
-using namespace std;
 
 // default timeout of 1 minute
 unsigned default_timeout_ms = 60 * 1000;
@@ -20,52 +19,52 @@ class server_private_ctor : public server
 {
 public:
 
-    server_private_ctor(const core::proactor::ptr_t & proactor,
+    server_private_ctor(const core::io_service_ptr_t & io_srv,
         std::unique_ptr<ip::tcp::socket> & sock)
-     : server(proactor, sock)
+     : server(io_srv, sock)
     { }
 };
 
 /* static */ core::connection_factory::ptr_t server::connect_to(
-    const core::proactor::ptr_t & proactor,
+    const server_connect_to_callback_t & callback,
+    const core::io_service_ptr_t & io_srv,
     const std::string & host,
-    const std::string & port,
-    const server::connect_to_callback_t & callback)
+    const std::string & port)
 {
     return core::connection_factory::connect_to(
-        proactor, host, port,
-        boost::bind(&server::on_connect, _1, proactor, _2, callback));
+        boost::bind(&server::on_connect, _1, io_srv, _2, callback),
+        io_srv, host, port);
 }
 
 /* static */ void server::on_connect(
     const boost::system::error_code & ec,
-    const core::proactor::ptr_t & proactor,
+    const core::io_service_ptr_t & io_srv,
     std::unique_ptr<ip::tcp::socket> & sock,
-    const server::connect_to_callback_t & callback)
+    const server_connect_to_callback_t & callback)
 {
     if(ec)
     { callback(ec, ptr_t()); }
     else
     { 
-        ptr_t p(boost::make_shared<server_private_ctor>(proactor, sock));
+        ptr_t p(boost::make_shared<server_private_ctor>(io_srv, sock));
 
         // start initial response read
-        p->read_data(2, boost::bind(
-            &server::on_response_length, p, _1, _3));
+        p->read_data(boost::bind(&server::on_response_length,
+            p, _1, _3), 2);
 
         callback(ec, p);
     }
 }
 
-server::server(const core::proactor::ptr_t & proactor,
+server::server(const core::io_service_ptr_t & io_srv,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock)
- :  core::stream_protocol(proactor, sock),
+ :  core::stream_protocol(io_srv, sock),
     _in_request(false),
     _start_request_called(false),
     _queue_size(0),
     _ignore_timeout(false),
     _timeout_ms(default_timeout_ms),
-    _timeout_timer(get_io_service())
+    _timeout_timer(*get_io_service())
 { }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -146,7 +145,7 @@ void server_request_interface::finish_request(
     else
     {
         // write already completed; dispatch directly
-        _srv->get_io_service().dispatch(boost::bind(
+        _srv->get_io_service()->dispatch(boost::bind(
             &server::on_request_written, _srv,
             boost::system::error_code(), callback));
     }
@@ -174,8 +173,8 @@ void server_response_interface::finish_response()
     if(!_srv->_response.closing())
     {
         // start next response read
-        _srv->read_data(2, boost::bind(
-            &server::on_response_length, _srv, _1, _3));
+        _srv->read_data(boost::bind(&server::on_response_length,
+            _srv, _1, _3), 2);
     }
     else
     {
@@ -193,7 +192,7 @@ server::~server()
 
 void server::schedule_request(const server::request_callback_t & callback)
 {
-    get_io_service().dispatch(boost::bind(
+    get_io_service()->dispatch(boost::bind(
         &server::on_schedule_request, shared_from_this(), callback));
 }
 
@@ -224,7 +223,7 @@ void server::on_schedule_request(const server::request_callback_t & callback)
         _in_request = true;
 
         // no requests are currently being written-- start one
-        get_io_service().post(boost::bind(callback,
+        get_io_service()->post(boost::bind(callback,
             boost::system::error_code(),
             request_interface(shared_from_this())));
     }
@@ -266,7 +265,7 @@ void server::on_request_written(const boost::system::error_code & ec,
         request_callback_t callback = _request_queue.front();
         _request_queue.pop_front();
 
-        get_io_service().post(boost::bind(callback,
+        get_io_service()->post(boost::bind(callback,
             boost::system::error_code(),
             request_interface(shared_from_this())));
     }
@@ -290,8 +289,8 @@ void server::on_response_length(const boost::system::error_code & ec,
         boost::asio::buffers_end(read_body),
         (char*) &len);
 
-    read_data(ntohs(len), boost::bind(
-        &server::on_response_body, shared_from_this(), _1, _3));
+    read_data(boost::bind(&server::on_response_body,
+        shared_from_this(), _1, _3), ntohs(len));
 }
 
 void server::on_response_body(const boost::system::error_code & ec,
@@ -371,13 +370,13 @@ void server::on_error(const boost::system::error_code & ec)
     // post errors to all pending callbacks
     while(!_response_queue.empty())
     {
-        get_io_service().post(boost::bind(
+        get_io_service()->post(boost::bind(
             _response_queue.front(), _error, null_resp_int));
         _response_queue.pop_front();
     }
     while(!_request_queue.empty())
     {
-        get_io_service().post(boost::bind(
+        get_io_service()->post(boost::bind(
             _request_queue.front(), _error, null_req_int));
         _request_queue.pop_front();
     }

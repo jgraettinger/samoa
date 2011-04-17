@@ -2,6 +2,7 @@
 #define SAMOA_PERSISTENCE_RECORD_HPP
 
 #include <cstddef>
+#include <stdexcept>
 
 namespace samoa {
 namespace persistence {
@@ -12,7 +13,7 @@ public:
 
     typedef unsigned offset_t;
 
-    static const size_t max_key_length = (1 << 12) - 1;
+    static const size_t max_key_length = (1 << 11) - 1;
     static const size_t max_value_length = (1 << 27) - 1;
 
     size_t key_length() const
@@ -23,6 +24,9 @@ public:
 
     bool is_dead() const
     { return _meta.is_dead; }
+
+    bool is_copy() const
+    { return _meta.is_copy; }
 
     const char * key_begin() const
     { return ((char*)this) + header_size(); }
@@ -42,6 +46,21 @@ public:
     char * value_end()
     { return value_begin() + value_length(); }
 
+    void trim_value_length(size_t value_length)
+    {
+        if(value_length > _meta.value_length)
+        {
+            throw std::overflow_error("record::trim_value_length(): "
+                "argument value length > this->value_length()");
+        }
+        _meta.value_length = value_length;
+    }
+
+    void mark_as_copy()
+    { _meta.is_copy = true; }
+
+    static offset_t allocated_size(size_t key_length, size_t value_length);
+
 private:
 
     friend class rolling_hash;
@@ -54,8 +73,11 @@ private:
         // whether this record may be reclaimed
         bool is_dead : 1;
 
+        // whether this record is a cached copy of a record hosted elsewhere
+        bool is_copy : 1;
+
         // length of record key & value
-        unsigned key_length : 12;
+        unsigned key_length : 11;
         unsigned value_length : 27;
 
         // total size of bit-fields is 5 bytes
@@ -73,18 +95,14 @@ private:
     void set_next(offset_t next)
     { _meta.next = next; }
 
-    void set_dead()
+    void mark_as_dead()
     { _meta.is_dead = true; }
-
-    void set_value_length(unsigned value_length)
-    { _meta.value_length = value_length; }
 
     // Static methods
 
     static size_t header_size()
     { return sizeof(_meta); }
 
-    static offset_t allocated_size(size_t key_length, size_t value_length);
 };
 }
 }

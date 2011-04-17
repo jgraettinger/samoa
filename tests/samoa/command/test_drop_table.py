@@ -22,7 +22,7 @@ class TestDropTable(unittest.TestCase):
         def test():
 
             server = yield samoa.client.server.Server.connect_to(
-                self.proactor, 'localhost', str(self.port))
+                self.proactor.serial_io_service(), 'localhost', str(self.port))
 
             # create a table to drop
             cmd = samoa.command.declare_table.DeclareTable(

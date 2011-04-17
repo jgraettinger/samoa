@@ -12,9 +12,9 @@ stream_protocol_read_interface::stream_protocol_read_interface()
 { }
 
 void stream_protocol_read_interface::read_regex(
+    const  stream_protocol_read_interface::read_regex_callback_t & callback,
     const  boost::regex & regex,
-    size_t max_read_length,
-    const  stream_protocol_read_interface::read_regex_callback_t & callback)
+    size_t max_read_length)
 {
     assert(!_in_read);
     _in_read = true;
@@ -38,8 +38,8 @@ void stream_protocol_read_interface::read_line(
 }
 
 void stream_protocol_read_interface::read_data(
-    size_t read_length,
-    const stream_protocol_read_interface::read_data_callback_t & callback)
+    const stream_protocol_read_interface::read_data_callback_t & callback,
+    size_t read_length)
 {
     assert(!_in_read);
     _in_read = true;
@@ -295,13 +295,13 @@ void stream_protocol_write_interface::on_write_queued(
 //  stream_protocol
 
 stream_protocol::stream_protocol(
-    proactor::ptr_t proactor,
+    io_service_ptr_t io_srv,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock
 ) :
     stream_protocol_read_interface(),
     stream_protocol_write_interface(),
     _sock(std::move(sock)),
-    _proactor(proactor)
+    _io_srv(io_srv)
 { }
 
 stream_protocol::~stream_protocol()

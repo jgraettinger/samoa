@@ -1,12 +1,10 @@
 
-#include <boost/python.hpp>
 #include "samoa/core/stream_protocol.hpp"
-#include "pysamoa/scoped_python.hpp"
 #include "pysamoa/future.hpp"
+#include "pysamoa/scoped_python.hpp"
+#include <boost/python.hpp>
 #include <boost/system/error_code.hpp>
-#include <boost/bind/protect.hpp>
 #include <boost/bind.hpp>
-#include <boost/smart_ptr/make_shared.hpp>
 
 namespace samoa {
 namespace core {
@@ -25,35 +23,161 @@ boost::regex py_compile_regex(const bpl::str & re)
     return boost::regex(buf, buf + length);
 }
 
-future::ptr_t py_read_regex(stream_protocol::read_interface_t & p,
-    const boost::regex & re, size_t max_read_length)
+/////////// read_regex support
+
+void py_on_read_regex(
+    const pysamoa::future::ptr_t & future,
+    const boost::system::error_code & ec,
+    const stream_protocol::match_results_t & match)
+{
+    python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    PyObject * tuple = PyTuple_New(match.size());
+
+    for(unsigned i = 0; i != match.size(); ++i)
+    {
+        // allocate uninitialized string of appropriate size
+        //   (adds a reference to str)
+        PyObject * str;
+        if(!(str = PyString_FromStringAndSize(0, match[i].length())))
+            bpl::throw_error_already_set();
+
+        // copy in regex match body
+        std::copy(match[i].first, match[i].second,
+            PyString_AS_STRING(str));
+
+        // add str to tuple (steals reference)
+        PyTuple_SET_ITEM(tuple, i, str);
+    }
+
+    future->on_result(bpl::object(bpl::handle<>(tuple)));
+}
+
+future::ptr_t py_read_regex(
+    stream_protocol::read_interface_t & p,
+    const boost::regex & re,
+    size_t max_read_length)
 {
     future::ptr_t f(boost::make_shared<future>());
 
-    p.read_regex(re, max_read_length,
-        boost::bind(&future::on_regex_match_result, f, _1, _2));
+    p.read_regex(boost::bind(py_on_read_regex, f, _1, _2),
+        re, max_read_length);
     return f;
 }
-    
-future::ptr_t py_read_line(stream_protocol::read_interface_t & p,
-    char delim_char, size_t max_read_length)
+
+/////////// read_line support
+
+void py_on_read_line(
+    const pysamoa::future::ptr_t & future,
+    const boost::system::error_code & ec,
+    const buffers_iterator_t & begin,
+    const buffers_iterator_t & end)
+{
+    pysamoa::python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    // allocate a python copy of the buffer
+    bpl::object result = bpl::str(0, std::distance(begin, end));
+    std::copy(begin, end, PyString_AS_STRING(result.ptr()));
+
+    future->on_result(result);
+}
+
+future::ptr_t py_read_line(
+    stream_protocol::read_interface_t & p,
+    char delim_char,
+    size_t max_read_length)
 {
     future::ptr_t f(boost::make_shared<future>());
 
-    p.read_line(boost::bind(&future::on_buffer_result, f, _1, _2, _3),
+    p.read_line(boost::bind(py_on_read_line, f, _1, _2, _3),
         delim_char, max_read_length);
     return f;
 }
 
-future::ptr_t py_read_data(stream_protocol::read_interface_t & p,
+/////////// read_data support
+
+void py_on_read_data(
+    const pysamoa::future::ptr_t & future,
+    const boost::system::error_code & ec,
+    size_t length,
+    const buffer_regions_t & regions)
+{
+    pysamoa::python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    // allocate uninitialized buffer of appropriate size
+    //   (adds a reference to str)
+    PyObject * buf;
+    if(!(buf = PyString_FromStringAndSize(0, length)))
+        bpl::throw_error_already_set();
+
+    char * buf_ptr = PyString_AS_STRING(buf);
+
+    for(unsigned i = 0; i != regions.size(); ++i)
+    {
+        std::copy(regions[i].begin(), regions[i].end(), buf_ptr);
+        buf_ptr += regions[i].size();
+    }
+
+    future->on_result(bpl::object(bpl::handle<>(buf)));
+}
+
+future::ptr_t py_read_data(
+    stream_protocol::read_interface_t & p,
     size_t read_length)
 {
     future::ptr_t f(boost::make_shared<future>());
 
-    p.read_data(read_length,
-        boost::bind(&future::on_data_result, f, _1, _2, _3));
+    p.read_data(boost::bind(py_on_read_data, f, _1, _2, _3),
+        read_length);
     return f;
 }
+
+/////////// write_queued support
+
+void py_on_write_queued(
+    const pysamoa::future::ptr_t & future,
+    const boost::system::error_code & ec,
+    size_t length)
+{
+    pysamoa::python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    future->on_result(bpl::object(bpl::handle<>(
+        PyInt_FromSize_t(length))));
+}
+
+future::ptr_t py_write_queued(stream_protocol::write_interface_t & p)
+{
+    future::ptr_t f(boost::make_shared<future>());
+
+    p.write_queued(boost::bind(py_on_write_queued, f, _1, _2));
+    return f;
+}
+
+/////////// queue_write support
 
 void py_queue_write(stream_protocol::write_interface_t & p,
     const bpl::str & buf)
@@ -65,14 +189,6 @@ void py_queue_write(stream_protocol::write_interface_t & p,
         bpl::throw_error_already_set();
 
     p.queue_write(cbuf, cbuf + length);
-}
-
-future::ptr_t py_write_queued(stream_protocol::write_interface_t & p)
-{
-    future::ptr_t f(boost::make_shared<future>());
-
-    p.write_queued(boost::bind(&future::on_length_result, f, _1, _2));
-    return f;
 }
 
 void make_stream_protocol_bindings()

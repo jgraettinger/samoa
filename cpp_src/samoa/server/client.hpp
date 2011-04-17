@@ -2,13 +2,11 @@
 #define SAMOA_SERVER_CLIENT_HPP
 
 #include "samoa/server/fwd.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/stream_protocol.hpp"
 #include <boost/asio.hpp>
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
-#include <memory>
 
 namespace samoa {
 namespace server {
@@ -19,9 +17,10 @@ class client :
 {
 public:
 
-    typedef boost::shared_ptr<client> ptr_t;
+    typedef client_ptr_t ptr_t;
 
     client(context_ptr_t, protocol_ptr_t,
+        core::io_service_ptr_t,
         std::unique_ptr<boost::asio::ip::tcp::socket> &);
 
     // Begins reading requests

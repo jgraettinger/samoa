@@ -6,8 +6,6 @@
 #include "samoa/core/stream_protocol.hpp"
 #include <boost/asio.hpp>
 
-#include <iostream>
-
 namespace samoa {
 namespace server {
 
@@ -17,19 +15,20 @@ using namespace boost::asio;
 unsigned default_timeout_ms = 60 * 1000;
 
 client::client(context::ptr_t context, protocol::ptr_t protocol,
+    core::io_service_ptr_t io_srv,
     std::unique_ptr<ip::tcp::socket> & sock)
- : core::stream_protocol(context->get_proactor(), sock),
+ : core::stream_protocol(io_srv, sock),
    _context(context),
    _protocol(protocol),
    _start_called(false),
    _timeout_ms(default_timeout_ms),
-   _timeout_timer(get_io_service())
+   _timeout_timer(*get_io_service())
 { }
 
 void client::init()
 {
-    read_data(2, boost::bind(&client::on_request_length,
-        shared_from_this(), _1, _3));
+    read_data(boost::bind(&client::on_request_length,
+        shared_from_this(), _1, _3), 2);
 
     // start a timeout timer, waiting for requests from the client
     _timeout_timer.expires_from_now(
@@ -135,8 +134,8 @@ void client::on_request_length(const boost::system::error_code & ec,
     std::copy(buffers_begin(read_body), buffers_end(read_body),
         (char*) &len);
 
-    read_data(ntohs(len), boost::bind(&client::on_request_body,
-        shared_from_this(), _1, _3));
+    read_data(boost::bind(&client::on_request_body,
+        shared_from_this(), _1, _3), ntohs(len));
 }
 
 void client::on_request_body(const boost::system::error_code & ec,
@@ -200,8 +199,8 @@ void client::on_response_finish(const boost::system::error_code & ec)
     // start next request
     _start_called = false;
     _response.Clear();
-    read_data(2, boost::bind(&client::on_request_length,
-        shared_from_this(), _1, _3));
+    read_data(boost::bind(&client::on_request_length,
+        shared_from_this(), _1, _3), 2);
     return;
 }
 

@@ -1,12 +1,13 @@
 #ifndef SAMOA_CLIENT_SERVER_POOL_HPP
 #define SAMOA_CLIENT_SERVER_POOL_HPP
 
-#include "samoa/client/fwd.hpp"
 #include "samoa/client/server.hpp"
+#include "samoa/client/fwd.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/core/uuid.hpp"
-#include <boost/thread/mutex.hpp>
+#include <mutex>
 #include <boost/unordered_map.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <list>
 
 namespace samoa {
@@ -17,16 +18,16 @@ class server_pool :
 {
 public:
 
-    typedef boost::shared_ptr<server_pool> ptr_t;
+    typedef server_pool_ptr_t ptr_t;
 
-    server_pool(const core::proactor::ptr_t &);
+    server_pool(const core::proactor_ptr_t &);
     virtual ~server_pool();
 
     // Submits the request via server::schedule_request to a
     //  connected server instance. If none is available, a
     //  connection is first established.
-    void schedule_request(const core::uuid & server_uid,
-        const server::request_callback_t &);
+    void schedule_request(const server::request_callback_t &,
+        const core::uuid & server_uid);
 
     // Returns a server only if a connected instance is available
     server::ptr_t get_server(const core::uuid & server_uid);
@@ -54,8 +55,8 @@ private:
     void on_connect(const boost::system::error_code &,
         server::ptr_t, const core::uuid &);
 
-    boost::mutex _mutex;
-    core::proactor::ptr_t _proactor;
+    std::mutex _mutex;
+    core::proactor_ptr_t _proactor;
 
     typedef std::pair<std::string, unsigned> address_t;
 

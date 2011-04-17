@@ -11,6 +11,7 @@ record::record(
 {
     _meta.next = 0;
     _meta.is_dead = false;
+    _meta.is_copy = false;
     _meta.key_length = std::distance(k_begin, k_end);
     _meta.value_length = value_length;
 

@@ -1,6 +1,7 @@
 
 #include "samoa/client/server_pool.hpp"
 #include "pysamoa/future.hpp"
+#include "pysamoa/scoped_python.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
 #include <boost/python.hpp>
 
@@ -9,14 +10,16 @@ namespace client {
 
 namespace bpl = boost::python;
 using namespace pysamoa;
-using namespace std;
+
+void py_on_schedule_request(
+    const future::ptr_t & future,
+    const boost::system::error_code & ec,
+    const samoa::client::server_request_interface & iface);
 
 future::ptr_t py_schedule_request(server_pool & s, const core::uuid & uuid)
 {
     future::ptr_t f(boost::make_shared<future>());
-
-    s.schedule_request(uuid, boost::bind(
-        &future::on_server_request, f, _1, _2));
+    s.schedule_request(boost::bind(py_on_schedule_request, f, _1, _2), uuid);
     return f;
 }
 

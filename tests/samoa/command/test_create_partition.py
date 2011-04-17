@@ -22,7 +22,7 @@ class TestCreatePartition(unittest.TestCase):
         def test():
 
             server = yield samoa.client.server.Server.connect_to(
-                self.proactor, 'localhost', str(self.port))
+                self.proactor.serial_io_service(), 'localhost', str(self.port))
 
             # create a test table
             cmd = samoa.command.declare_table.DeclareTable(

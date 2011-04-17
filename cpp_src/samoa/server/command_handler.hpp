@@ -3,7 +3,6 @@
 
 #include "samoa/server/fwd.hpp"
 #include <boost/noncopyable.hpp>
-#include <boost/shared_ptr.hpp>
 
 namespace samoa {
 namespace server {
@@ -12,7 +11,7 @@ class command_handler : private boost::noncopyable
 {
 public:
 
-    typedef boost::shared_ptr<command_handler> ptr_t;
+    typedef command_handler_ptr_t ptr_t;
 
     command_handler() {}
 

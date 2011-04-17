@@ -2,7 +2,8 @@
 import unittest
 import random
 import uuid
-from samoa import persistence
+from samoa.persistence.mapped_rolling_hash import MappedRollingHash
+from samoa.persistence.heap_rolling_hash import HeapRollingHash
 
 class TestRollingHash(unittest.TestCase):
 
@@ -10,7 +11,7 @@ class TestRollingHash(unittest.TestCase):
 
         path = '/tmp/%s' % uuid.uuid4()
 
-        h = persistence.MappedRollingHash.open(path, 1 << 16, 100)
+        h = MappedRollingHash.open(path, 1 << 16, 100)
 
         self._set(h, 'foo', 'bar')
         self._set(h, 'bar', 'baz')
@@ -18,7 +19,7 @@ class TestRollingHash(unittest.TestCase):
 
         del h
 
-        h = persistence.MappedRollingHash.open(path, 1 << 16, 100)
+        h = MappedRollingHash.open(path, 1 << 16, 100)
 
         self.assertEquals(
             {'foo': 'bar', 'bar': 'baz', 'baz': 'bing'}, self._dict(h))
@@ -28,7 +29,7 @@ class TestRollingHash(unittest.TestCase):
     def test_record_bounds(self):
         # Checks assumptions about how records are layed out & padded
 
-        h = persistence.HeapRollingHash(1 << 16, 100)
+        h = HeapRollingHash(1 << 16, 100)
 
         # 36 bytes table overhead, 400 byte index
         self.assertEquals(36 + 100 * 4, h.used_region_size())
@@ -71,7 +72,7 @@ class TestRollingHash(unittest.TestCase):
 
         data_size = sum(len(i) + len(j) for i,j in data.iteritems())
 
-        h = persistence.HeapRollingHash(
+        h = HeapRollingHash(
             int(data_size * 1.3), 2000)
 
         # Set all keys / values
@@ -82,10 +83,10 @@ class TestRollingHash(unittest.TestCase):
         for i in xrange(5 * len(data)):
             drop_key, set_key, get_key = random.sample(data.keys(), 3)
 
-            self._migrate(h)
+            self._upkeep(h)
             h.mark_for_deletion(drop_key)
 
-            self._migrate(h)
+            self._upkeep(h)
             self._set(h, set_key, data[set_key])
 
             rec = h.get(get_key)
@@ -94,7 +95,7 @@ class TestRollingHash(unittest.TestCase):
 
         # Set all keys / values
         for key, value in data.items():
-            self._migrate(h)
+            self._upkeep(h)
             self._set(h, key, value)
 
         # contents of rolling hash should
@@ -104,7 +105,7 @@ class TestRollingHash(unittest.TestCase):
     def _set(self, h, key, val):
         rec = h.prepare_record(key, len(val))
         rec.set_value(val)
-        h.commit_record(len(val))
+        h.commit_record()
 
     def _dict(self, h):
         res = {}
@@ -116,13 +117,10 @@ class TestRollingHash(unittest.TestCase):
 
         return res
 
-    def _migrate(self, h):
+    def _upkeep(self, h):
 
-        while h.head().is_dead():
-            h.reclaim_head()
-
-        rec = h.head()
-        self._set(h, rec.key, rec.value)
+        if not h.head().is_dead():
+            h.rotate_head()
 
         while h.head().is_dead():
             h.reclaim_head()

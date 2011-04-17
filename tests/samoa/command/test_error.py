@@ -21,7 +21,7 @@ class TestDropTable(unittest.TestCase):
         def test():
 
             server = yield samoa.client.server.Server.connect_to(
-                self.proactor, 'localhost', str(self.port))
+                self.proactor.serial_io_service(), 'localhost', str(self.port))
 
             # error 'request' causes server to return an error,
             #  which should be raised in the client

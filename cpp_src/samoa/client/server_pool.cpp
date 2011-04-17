@@ -1,6 +1,5 @@
 
 #include "samoa/client/server_pool.hpp"
-#include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 
 namespace samoa {
@@ -26,8 +25,9 @@ void server_pool::set_connected_server(const core::uuid & uuid,
     _servers[uuid] = server;
 }
 
-void server_pool::schedule_request(const core::uuid & uuid,
-    const server::request_callback_t & callback)
+void server_pool::schedule_request(
+    const server::request_callback_t & callback,
+    const core::uuid & uuid)
 {
     // already have a connected server?
     {
@@ -40,7 +40,7 @@ void server_pool::schedule_request(const core::uuid & uuid,
         }
     }
 
-    boost::mutex::scoped_lock guard(_mutex);
+    std::lock_guard<std::mutex> guard(_mutex);
 
     // assert that an address exists for this server
     address_map_t::const_iterator addr_it = _addresses.find(uuid);
@@ -55,10 +55,12 @@ void server_pool::schedule_request(const core::uuid & uuid,
     if(pending_callbacks.empty())
     {
         //  start a new connection
-        server::connect_to(_proactor, addr_it->second.first,
-            boost::lexical_cast<std::string>(addr_it->second.second),
+        server::connect_to(
             boost::bind(&server_pool::on_connect, shared_from_this(),
-                _1, _2, uuid));
+                _1, _2, uuid),
+            _proactor->serial_io_service(),
+            addr_it->second.first,
+            boost::lexical_cast<std::string>(addr_it->second.second));
     }
     pending_callbacks.push_back(callback);
 }
@@ -87,7 +89,7 @@ void server_pool::on_connect(const boost::system::error_code & ec,
 {
     callback_list_t callbacks;
     {
-        boost::mutex::scoped_lock guard(_mutex);
+        std::lock_guard<std::mutex> guard(_mutex);
 
         // move list of callbacks into local variable,
         //   clearing the original

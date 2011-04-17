@@ -15,7 +15,9 @@ class Table(object):
         self.uuid = model.uuid
         assert not model.dropped
         self.name = model.name
+        self.data_type = model.data_type
         self.replication_factor = model.replication_factor
+        self.lamport_consistency_bound = model.lamport_consistency_bound
 
         self._ring = []
         self._local = {}

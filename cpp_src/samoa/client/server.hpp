@@ -1,6 +1,7 @@
 #ifndef SAMOA_CLIENT_SERVER_HPP
 #define SAMOA_CLIENT_SERVER_HPP
 
+#include "samoa/core/fwd.hpp"
 #include "samoa/client/fwd.hpp"
 #include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/stream_protocol.hpp"
@@ -8,21 +9,22 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/proactor.hpp"
 #include <boost/asio.hpp>
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/function.hpp>
 #include <memory>
 
 namespace samoa {
 namespace client {
 
 typedef boost::function<
-void(const boost::system::error_code &, server_request_interface)
+    void(const boost::system::error_code &, server_request_interface)
 > server_request_callback_t;
 
 typedef boost::function<
-void(const boost::system::error_code &, server_response_interface)
+    void(const boost::system::error_code &, server_response_interface)
 > server_response_callback_t;
+
+typedef boost::function<
+    void(const boost::system::error_code &, server_ptr_t)
+> server_connect_to_callback_t;
 
 class server_request_interface
 {
@@ -89,7 +91,7 @@ class server :
 {
 public:
 
-    typedef boost::shared_ptr<server> ptr_t;
+    typedef server_ptr_t ptr_t;
 
     typedef server_request_interface request_interface;
     typedef server_response_interface response_interface;
@@ -97,15 +99,11 @@ public:
     typedef server_request_callback_t request_callback_t;
     typedef server_response_callback_t response_callback_t;
 
-    typedef boost::function<
-        void(const boost::system::error_code &, server::ptr_t)
-    > connect_to_callback_t;
-
     static core::connection_factory::ptr_t connect_to(
-        const core::proactor::ptr_t &,
+        const server_connect_to_callback_t &,
+        const core::io_service_ptr_t &,
         const std::string & host,
-        const std::string & port,
-        const connect_to_callback_t &);
+        const std::string & port);
 
     virtual ~server();
 
@@ -133,11 +131,11 @@ private:
     friend class server_response_interface;
 
     static void on_connect(const boost::system::error_code &,
-        const core::proactor::ptr_t &,
+        const core::io_service_ptr_t &,
         std::unique_ptr<boost::asio::ip::tcp::socket> &,
-        const connect_to_callback_t &);
+        const server_connect_to_callback_t &);
 
-    server(const core::proactor::ptr_t &,
+    server(const core::io_service_ptr_t &,
         std::unique_ptr<boost::asio::ip::tcp::socket> &);
 
     void on_schedule_request(const request_callback_t &);

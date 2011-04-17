@@ -2,6 +2,7 @@
 #include "samoa/persistence/rolling_hash.hpp"
 #include "samoa/persistence/record.hpp"
 #include <boost/python.hpp>
+#include <memory>
 
 namespace samoa {
 namespace persistence {
@@ -17,16 +18,16 @@ const record * py_get(rolling_hash * hash, const bpl::str & key)
 }
 
 record * py_prepare_record(rolling_hash * hash, const bpl::str & key,
-    unsigned value_length_upper_bound)
+    unsigned value_length)
 {
     const char * key_begin = PyString_AsString(key.ptr());
     const char * key_end = key_begin + PyString_GET_SIZE(key.ptr());
 
-    return hash->prepare_record(key_begin, key_end, value_length_upper_bound);
+    return hash->prepare_record(key_begin, key_end, value_length);
 }
 
-void py_commit_record(rolling_hash * hash, unsigned actual_value_length)
-{ hash->commit_record(actual_value_length); }
+void py_commit_record(rolling_hash * hash)
+{ hash->commit_record(); }
 
 bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 {
@@ -38,7 +39,13 @@ bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 
 void make_rolling_hash_bindings()
 {
-    bpl::class_<rolling_hash, boost::noncopyable>("RollingHash", bpl::no_init)
+    bool (rolling_hash::*would_fit1)(size_t, size_t) = &rolling_hash::would_fit;
+    bool (rolling_hash::*would_fit2)(size_t) = &rolling_hash::would_fit;
+
+    // use of auto_ptr is non-optimal: unique_ptr is preferred
+    bpl::class_<rolling_hash, std::auto_ptr<rolling_hash>, boost::noncopyable>(
+            "RollingHash", bpl::no_init)
+
         .def("get", &py_get,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("prepare_record", &py_prepare_record,
@@ -46,11 +53,13 @@ void make_rolling_hash_bindings()
         .def("commit_record", &py_commit_record)
         .def("mark_for_deletion", &py_mark_for_deletion)
         .def("reclaim_head", &rolling_hash::reclaim_head)
+        .def("rotate_head", &rolling_hash::rotate_head)
         .def("head", &rolling_hash::head,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("step", &rolling_hash::step,
             bpl::return_value_policy<bpl::reference_existing_object>())
-        .def("would_fit", &rolling_hash::would_fit)
+        .def("would_fit", would_fit1)
+        .def("would_fit", would_fit2)
         .def("total_region_size", &rolling_hash::total_region_size)
         .def("used_region_size", &rolling_hash::used_region_size)
         .def("total_index_size", &rolling_hash::total_index_size)

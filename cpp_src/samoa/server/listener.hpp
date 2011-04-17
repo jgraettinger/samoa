@@ -3,20 +3,17 @@
 
 #include "samoa/server/fwd.hpp"
 #include <boost/asio.hpp>
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
 #include <string>
 
 namespace samoa {
 namespace server {
 
 class listener :
-    public boost::enable_shared_from_this<listener>,
-    private boost::noncopyable
+    public boost::enable_shared_from_this<listener>
 {
 public:
 
-    typedef boost::shared_ptr<listener> ptr_t;
+    typedef listener_ptr_t ptr_t;
 
     listener(std::string host, std::string port, unsigned listen_backlog,
         context_ptr_t, protocol_ptr_t);
@@ -38,9 +35,10 @@ private:
 
     // Accepting socket
     std::unique_ptr<boost::asio::ip::tcp::acceptor> _accept_sock;
-    
-    // Next connection to accept
+
+    // Next connection to accept, and it's io_service
     std::unique_ptr<boost::asio::ip::tcp::socket> _next_sock;
+    boost::shared_ptr<boost::asio::io_service> _next_io_srv;
 };
 
 }

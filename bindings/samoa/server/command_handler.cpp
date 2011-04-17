@@ -5,7 +5,7 @@
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
 #include <boost/python.hpp>
-#include <iostream>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -31,7 +31,8 @@ public:
         if(PyGen_Check(result.ptr()))
         {
             // start a new coroutine
-            pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(result));
+            pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(
+                result, client->get_io_service()));
             coro->next();
         }
         else if(result.ptr() != Py_None)

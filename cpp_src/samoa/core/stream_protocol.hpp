@@ -4,13 +4,9 @@
 #include "samoa/core/ref_buffer.hpp"
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/core/proactor.hpp"
-#include <boost/regex.hpp>
 #include <boost/asio.hpp>
-#include <boost/function.hpp>
 #include <boost/system/error_code.hpp>
-#include <boost/bind/protect.hpp>
-#include <boost/bind.hpp>
-#include <memory>
+#include <boost/regex.hpp>
 
 namespace samoa {
 namespace core {
@@ -33,9 +29,9 @@ public:
     > read_regex_callback_t;
 
     void read_regex(
+        const  read_regex_callback_t &,
         const  boost::regex &,
-        size_t max_read_length,
-        const  read_regex_callback_t &); 
+        size_t max_read_length);
 
     // iteration range is invalidated by
     //  the next call to read_*
@@ -58,8 +54,8 @@ public:
     > read_data_callback_t;
 
     void read_data(
-        size_t read_length,
-        const read_data_callback_t &);
+        const read_data_callback_t &,
+        size_t read_length);
 
 private:
 
@@ -155,7 +151,7 @@ public:
     typedef stream_protocol_read_interface read_interface_t;
     typedef stream_protocol_write_interface write_interface_t;
 
-    stream_protocol(proactor::ptr_t,
+    stream_protocol(io_service_ptr_t,
         std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
 
     virtual ~stream_protocol();
@@ -166,8 +162,8 @@ public:
     unsigned get_local_port() const;
     unsigned get_remote_port() const;
 
-    boost::asio::io_service & get_io_service()
-    { return get_socket().get_io_service(); }
+    const io_service_ptr_t & get_io_service()
+    { return _io_srv; }
 
     bool is_open() const;
 
@@ -194,9 +190,7 @@ private:
     friend class stream_protocol_write_interface;
 
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
-
-    // held only to maintain a reference
-    proactor::ptr_t _proactor;
+    io_service_ptr_t _io_srv;
 };
 
 }

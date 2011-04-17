@@ -19,8 +19,8 @@ mapped_rolling_hash * py_open(const std::string & file,
 
 void make_mapped_rolling_hash_bindings()
 {
-    bpl::class_<mapped_rolling_hash,
-        bpl::bases<rolling_hash>, boost::noncopyable>(
+    bpl::class_<mapped_rolling_hash, bpl::bases<rolling_hash>,
+        std::auto_ptr<mapped_rolling_hash>, boost::noncopyable>(
             "MappedRollingHash", bpl::no_init)
         .def("open", &py_open,
             bpl::return_value_policy<bpl::manage_new_object>())

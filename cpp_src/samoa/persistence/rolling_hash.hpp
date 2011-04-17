@@ -56,7 +56,7 @@ public:
     record * prepare_record(
         const KeyIterator & key_begin,
         const KeyIterator & key_end,
-        unsigned value_length_upper_bound);
+        unsigned value_length);
 
     /*
     Preconditions:
@@ -73,7 +73,7 @@ public:
      - optional hint is used to avoid extra lookup to locate
        a previous record stored under this key
     */
-    void commit_record(unsigned actual_value_length, offset_t hint = 0);
+    void commit_record(offset_t hint = 0);
 
     /*
     Preconditions:
@@ -99,7 +99,6 @@ public:
     /*
     Preconditions:
      - head()->is_dead() is true; eg the ring head is marked for deletion
-     - step(head()) is valid
 
     Postconditions:
      - the ring head becomes the next least-recently-written record
@@ -107,6 +106,22 @@ public:
      - step(previous_head) is no longer valid
     */
     void reclaim_head();
+
+    /*
+    Preconditions:
+     - head()->is_dead() is false; eg the ring head is a live record
+
+    Postconditions:
+     - the ring head is rotated to the ring tail
+     - step(previous_head) is no longer valid
+
+    rotate_head() can be used to compact the table, by rotating
+    live records to the ring tail and uncovering reclaimable records.
+
+    The operation will always succeed, even if would_fit() returns false
+     for any key/length value.
+    */
+    void rotate_head();
 
     /*
     No Preconditions
@@ -129,13 +144,16 @@ public:
 
     /*
     Preconditions:
-     - key_length & value_length are being considered for ring inclusion
+     - key_length/value_length or record_length are
+       being considered for ring inclusion
 
     Postconditions:
      - true is returned if an immediate write would succeed
      - otherwise, false is returned
     */
     bool would_fit(size_t key_length, size_t value_length);
+
+    bool would_fit(size_t record_length);
 
     // metrics
 

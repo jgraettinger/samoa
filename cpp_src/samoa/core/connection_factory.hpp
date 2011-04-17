@@ -23,14 +23,14 @@ public:
     > callback_t;
 
     static ptr_t connect_to(
-        const core::proactor::ptr_t & proactor,
+        const callback_t & callback,
+        const core::io_service_ptr_t & io_srv,
         const std::string & host,
-        const std::string & port,
-        const callback_t & callback);
+        const std::string & port);
 
 private:
 
-    connection_factory(const core::proactor::ptr_t &,
+    connection_factory(const core::io_service_ptr_t &,
         unsigned timeout_ms);
 
     void on_resolve(const boost::system::error_code &,

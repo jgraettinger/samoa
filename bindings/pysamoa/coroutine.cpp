@@ -9,8 +9,9 @@ namespace bpl = boost::python;
 using namespace std;
 
 // Precondition: Python GIL is held (Py_INCREF called under the hood)
-coroutine::coroutine(const bpl::object & generator)
- : _stack(1, generator), _exception_set(false)
+coroutine::coroutine(const bpl::object & generator,
+    const samoa::core::io_service_ptr_t & io_srv)
+ : _stack(1, generator), _exception_set(false), _io_srv(io_srv)
 {
     string repr = bpl::extract<string>(bpl::str(generator));
     std::cerr << "coro " << (size_t)this << " created " << repr << std::endl;
@@ -25,27 +26,42 @@ coroutine::~coroutine()
     std::cerr << "coro " << (size_t)this << " destroyed" << std::endl;
 }
 
-void coroutine::next()
+void coroutine::next(bool post)
 {
-    send(bpl::object());
+    send(bpl::object(), post);
 }
 
-void coroutine::send(const bpl::object & arg)
+void coroutine::send(const bpl::object & arg, bool post)
 {
-    reenter(arg);
+    if(post)
+        _io_srv->post(boost::bind(&coroutine::on_reenter,
+            shared_from_this(), arg));
+    else
+        _io_srv->dispatch(boost::bind(&coroutine::on_reenter,
+            shared_from_this(), arg)); 
 }
 
-void coroutine::error(const bpl::object & exc_type, const bpl::object & exc_msg)
+void coroutine::error(const bpl::object & exc_type,
+    const bpl::object & exc_msg, bool post)
 {
     _exc_type = exc_type;
     _exc_val = exc_msg;
     _exception_set = true;
 
-    reenter(bpl::object());
+    if(post)
+        _io_srv->post(boost::bind(&coroutine::on_reenter,
+            shared_from_this(), bpl::object()));
+    else
+        _io_srv->dispatch(boost::bind(&coroutine::on_reenter,
+            shared_from_this(), bpl::object())); 
 }
 
-void coroutine::reenter(bpl::object arg)
+void coroutine::on_reenter(const bpl::object & t_arg)
 {
+    python_scoped_lock block;
+
+    bpl::object arg = t_arg;
+
     if(_stack.empty())
     {
         throw runtime_error("coroutine.reenter(): attempt to reenter"

@@ -1,16 +1,20 @@
 
 import samoa.command
+from samoa.persistence import data_types_str_to_int, data_types_int_to_str
 from samoa.core import protobuf
 from samoa.server import cluster_state
 
 class DeclareTable(samoa.command.Command):
 
-    def __init__(self, name, replication_factor,
-            create_if_not_exists = True):
+    def __init__(self, name, data_type = 'blob', replication_factor = 1,
+        lamport_consistency_bound = 3 * 24 * 60 * 60,
+        create_if_not_exists = True):
 
         samoa.command.Command.__init__(self)
         self.name = name
+        self.data_type = data_type
         self.replication_factor = replication_factor
+        self.lamport_consistency_bound = lamport_consistency_bound
         self.create_if_not_exists = create_if_not_exists
 
     def _write_request(self, request, server):
@@ -18,7 +22,9 @@ class DeclareTable(samoa.command.Command):
         decl_tbl = request.mutable_declare_table()
 
         decl_tbl.name = self.name
+        decl_tbl.data_type = self.data_type
         decl_tbl.replication_factor = self.replication_factor
+        decl_tbl.lamport_consistency_bound = self.lamport_consistency_bound
         decl_tbl.create_if_not_exists = self.create_if_not_exists
         yield
 
@@ -40,7 +46,9 @@ class DeclareTableHandler(samoa.command.CommandHandler):
         model = samoa.model.Table(
             uuid = samoa.core.UUID.from_random(),
             name = tbl_req.name,
-            replication_factor = tbl_req.replication_factor)
+            data_type = data_types_str_to_int[tbl_req.data_type],
+            replication_factor = tbl_req.replication_factor,
+            lamport_consistency_bound = tbl_req.lamport_consistency_bound)
 
         session.add(model)
         context.log.info('%s added new table %r (%r)' % (
@@ -54,6 +62,10 @@ class DeclareTableHandler(samoa.command.CommandHandler):
         context = client.get_context()
         tbl_req = client.get_request().declare_table
         tbl_resp = client.get_response().mutable_declare_table()
+
+        if tbl_req.data_type not in data_types_str_to_int:
+            client.set_error("no such data-type", tbl_req.data_type, False)
+            yield
 
         table = context.get_table_by_name(tbl_req.name)
 
@@ -73,6 +85,8 @@ class DeclareTableHandler(samoa.command.CommandHandler):
 
         tbl_resp.uuid = table.uuid.to_hex_str()
         tbl_resp.name = table.name
+        tbl_resp.data_type = data_types_int_to_str[table.data_type]
         tbl_resp.replication_factor = table.replication_factor
+        tbl_resp.lamport_consistency_bound = table.lamport_consistency_bound
         yield
 

@@ -21,10 +21,11 @@ class TestDeclareTable(unittest.TestCase):
         def test():
 
             server = yield samoa.client.server.Server.connect_to(
-                self.proactor, 'localhost', str(self.port))
+                self.proactor.serial_io_service(), 'localhost', str(self.port))
 
             cmd = samoa.command.declare_table.DeclareTable(
                 name = 'test_table',
+                data_type = 'blob',
                 replication_factor = 2,
                 create_if_not_exists = False)
 

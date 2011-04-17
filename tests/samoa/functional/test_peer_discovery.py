@@ -15,6 +15,7 @@ import samoa.server.context
 import samoa.core.protobuf
 import samoa.command.shutdown
 import samoa.command.cluster_state
+import samoa.persistence
 
 
 class TestPeerDiscovery(unittest.TestCase):
@@ -48,7 +49,9 @@ class TestPeerDiscovery(unittest.TestCase):
 
             if tbl_name not in table_names:
                 session.add(samoa.model.table.Table(
-                    uuid = tbl_uuid, name = tbl_name))
+                    uuid = tbl_uuid, name = tbl_name,
+                    data_type = samoa.persistence.BLOB_TYPE,
+                    replication_factor = 2, lamport_consistency_bound = 60))
                 table_names.add(tbl_name)
                 session.flush()
 
@@ -57,6 +60,9 @@ class TestPeerDiscovery(unittest.TestCase):
                 table_uuid = tbl_uuid,
                 server_uuid = server_uuid,
                 ring_position = ring_pos,
+                consistent_range_begin = ring_pos,
+                consistent_range_end = ring_pos,
+                lamport_ts = 1,
                 storage_path = '/tmp/%s' % local_uuid.to_hex_str(),
                 storage_size = (1 << 24), # 1 MB
                 index_size = 1000))

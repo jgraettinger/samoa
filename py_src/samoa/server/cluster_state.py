@@ -96,7 +96,10 @@ class ClusterState(object):
             # add cluster-shared table state
             proto_table.uuid = table.uuid.to_hex_str()
             proto_table.name = table.name
+            proto_table.data_type = table.data_type
             proto_table.replication_factor = table.replication_factor
+            proto_table.lamport_consistency_bound = \
+                table.lamport_consistency_bound
 
             # enumerate live partitions
             for part in table.get_partitions():
@@ -106,6 +109,9 @@ class ClusterState(object):
                 proto_part.uuid = part.uuid.to_hex_str()
                 proto_part.server_uuid = part.server_uuid.to_hex_str()
                 proto_part.ring_position = part.ring_position
+                proto_part.consistent_range_begin = part.consistent_range_begin
+                proto_part.consistent_range_end = part.consistent_range_end
+                proto_part.lamport_ts = part.lamport_ts
                 proto_part.storage_path = part.storage_path
                 proto_part.storage_size = part.storage_size
                 proto_part.index_size = part.index_size
@@ -210,7 +216,10 @@ class ProtobufUpdator(object):
                 model = samoa.model.Table(
                     uuid = table_uuid,
                     name = proto_table.name,
-                    replication_factor = proto_table.replication_factor)
+                    data_type = proto_table.data_type,
+                    replication_factor = proto_table.replication_factor,
+                    lamport_consistency_bound = \
+                        proto_table.lamport_consistency_bound)
                 self.session.add(model)
 
                 # flush here, or we'll violate fk-constraints
@@ -282,6 +291,15 @@ class ProtobufUpdator(object):
                 self.log.info('remotely dropped partition %r (table %r)' % (
                     model.uuid, model.table_uuid))
 
+            elif proto_part.lamport_ts > part.lamport_ts:
+                # Remote partition has been remotely dropped
+                model = session.query(samoa.model.Partition).filter_by(
+                    uuid = part_uuid).one()
+
+                model.consistent_range_begin = proto_part.consistent_range_begin
+                model.consistent_range_end = proto_part.consistent_range_end
+                model.lamport_ts = proto_part.lamport_ts
+
         # currently-tracked partitions, as:
         #  (ring-position, partition uuid, is-local)
         tracked_partitions = []
@@ -335,6 +353,9 @@ class ProtobufUpdator(object):
                 table_uuid = table_uuid,
                 server_uuid = server_uuid,
                 ring_position = proto_part.ring_position,
+                consistent_range_begin = proto_part.consistent_range_begin,
+                consistent_range_end = proto_part.consistent_range_end,
+                lamport_ts = proto_part.lamport_ts,
                 storage_path = proto_part.storage_path,
                 storage_size = proto_part.storage_size,
                 index_size = proto_part.index_size)

@@ -1,6 +1,5 @@
 
 #include "samoa/core/proactor.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
 
 namespace samoa {
 namespace core {
@@ -18,28 +17,26 @@ proactor::proactor()
 { declare_serial_io_service(); }
 
 proactor::~proactor()
-{
-    for(size_t i = 0; i != _serial_io_services.size(); ++i)
-        delete _serial_io_services[i];
-}
+{ }
 
 void proactor::declare_serial_io_service()
 {
-    boost::mutex::scoped_lock guard(_mutex);
+    std::lock_guard<std::mutex> guard(_mutex);
 
     if(_io_srv.get())
         throw std::runtime_error("proactor::declare_serial_io_service(): "
             "this thread has already declared");
 
     // create a new io-service to run
-    _serial_io_services.push_back(new boost::asio::io_service());
+    _serial_io_services.push_back(
+        io_service_ptr_t(new boost::asio::io_service()));
 
-    _io_srv.reset(_serial_io_services.back());
+    _io_srv.reset(_serial_io_services.back().get());
 }
 
 void proactor::declare_concurrent_io_service()
 {
-    boost::mutex::scoped_lock guard(_mutex);
+    std::lock_guard<std::mutex> guard(_mutex);
 
     if(_io_srv.get())
         throw std::runtime_error("proactor::declare_concurrent_io_service(): "
@@ -49,17 +46,19 @@ void proactor::declare_concurrent_io_service()
 
     _concurrent_thread_count += 1;
 
-    _io_srv.reset(&_threaded_io_service);
+    if(!_threaded_io_service)
+        _threaded_io_service.reset(new boost::asio::io_service());
+
+    _io_srv.reset(_threaded_io_service.get());
 }
 
-boost::asio::io_service & proactor::serial_io_service()
+io_service_ptr_t proactor::serial_io_service()
 {
-    boost::mutex::scoped_lock guard(_mutex);
+    std::lock_guard<std::mutex> guard(_mutex);
 
     assert(!_serial_io_services.empty()); 
 
-    boost::asio::io_service & io_srv(
-        *_serial_io_services.at(_next_serial_service));
+    io_service_ptr_t io_srv = _serial_io_services.at(_next_serial_service); 
 
     // round-robin increment 
     _next_serial_service = \
@@ -68,11 +67,9 @@ boost::asio::io_service & proactor::serial_io_service()
     return io_srv;
 }
 
-boost::asio::io_service & proactor::concurrent_io_service()
+io_service_ptr_t proactor::concurrent_io_service()
 {
-    boost::mutex::scoped_lock guard(_mutex);
-
-    if(!_concurrent_thread_count)
+    if(!_threaded_io_service)
         return serial_io_service();
 
     return _threaded_io_service;
@@ -81,32 +78,29 @@ boost::asio::io_service & proactor::concurrent_io_service()
 // helper for proactor::run_later callback dispatch
 void on_run_later(const boost::system::error_code & ec,
     const proactor::run_later_callback_t & callback,
-    const proactor::timer_ptr_t &)
+    const io_service_ptr_t & io_srv,
+    const timer_ptr_t &)
 {
     // if cancelled
     if(ec)
     { return; }
 
-    callback();
+    callback(io_srv);
 }
 
 // Again, deadline_timer doesn't work across shared-library boundaries,
 //  so it's use needs to be encapsulated into libsamoa.
-proactor::timer_ptr_t proactor::run_later(
-    const proactor::run_later_callback_t & callback, unsigned delay_ms)
+timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
+    unsigned delay_ms)
 {
-    if(!_io_srv.get())
-        throw std::runtime_error("proactor::run_later(): "
-            "declare_serial_io_service or declare_concurrent_io_service must "
-            "first be called from this thread");
+    io_service_ptr_t io_srv = serial_io_service();
 
-    timer_ptr_t timer = boost::make_shared<boost::asio::deadline_timer>(*_io_srv);
-
+    timer_ptr_t timer = boost::make_shared<boost::asio::deadline_timer>(*io_srv);
     timer->expires_from_now(boost::posix_time::milliseconds(delay_ms));
 
     // timer reference count is passed to boost::bind callback argument
     timer->async_wait(boost::bind(&on_run_later,
-        boost::asio::placeholders::error, callback, timer));
+        _1, callback, io_srv, timer));
 
     return timer;
 }
@@ -130,13 +124,13 @@ void proactor::run(bool exit_when_idle /* = true */)
 
 void proactor::shutdown()
 {
-    boost::mutex::scoped_lock guard(_mutex);
+    std::lock_guard<std::mutex> guard(_mutex);
 
     for(size_t i = 0; i != _serial_io_services.size(); ++i)
         _serial_io_services[i]->stop();
 
-    _threaded_io_service.stop();
-    return;
+    if(_threaded_io_service)
+        _threaded_io_service->stop();
 }
 
 }

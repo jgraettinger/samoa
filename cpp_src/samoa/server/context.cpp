@@ -5,7 +5,7 @@
 namespace samoa {
 namespace server {
 
-context::context(core::proactor::ptr_t proactor)
+context::context(core::proactor_ptr_t proactor)
  : _proactor(proactor)
 { }
 
