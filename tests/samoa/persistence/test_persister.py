@@ -31,26 +31,28 @@ class TestPersister(unittest.TestCase):
 
         data = {}
 
-        for i in xrange(1000):
-            data[str(uuid.uuid4())] = '=' * int(
-                random.expovariate(1.0 / 135))
-
-        data_size = sum(len(i) + len(j) for i,j in data.iteritems())
-
         def test():
 
             # Set all keys / values
-            for key, value in data.items():
+            while True:
                 try:
+                    key = str(uuid.uuid4())
+                    value = '=' * int(random.expovariate(1.0 / 135))
+
                     yield self.persister.put(lambda cr, nr: \
-                        (nr.set_value(data[nr.key]) or 1),
-                        key, len(value))
-                except:
-                    import pdb; pdb.set_trace()
-    
+                        (nr.set_value(value) or 1),
+                        key, int(len(value) * 1.1))
+
+                    data[key] = value
+
+                except Exception, e:
+                    break
+
+            data_size = sum(len(i) + len(j) for i,j in data.iteritems())
+
             # Randomly churn, dropping & setting keys
             for i in xrange(5 * len(data)):
-                drop_key, set_key, get_key = random.sample(data.keys(), 3)
+                drop_key, put_key, get_key = random.sample(data.keys(), 3)
     
                 yield self.persister.drop(lambda r: 1, drop_key)
                 

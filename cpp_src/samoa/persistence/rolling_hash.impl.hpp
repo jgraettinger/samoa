@@ -106,11 +106,17 @@ bool rolling_hash::mark_for_deletion(
         // identify the record pointed to by hint, if any
         rec = rec_ptr ? (record*)(_region_ptr + rec_ptr) : 0;
 
+        if(rec_ptr < records_offset() || rec_ptr >= _tbl.region_size)
+        {
+            throw std::runtime_error("rolling_hash::mark_for_deletion(): "
+                "invalid argument hint (record offset is out of bounds)");
+        }
+
         if(rec && (key_length != rec->key_length() ||
             !std::equal(key_begin, key_end, rec->key_begin())))
         {
             throw std::runtime_error("rolling_hash::mark_for_deletion(): "
-                "invalid argument hint");
+                "invalid argument hint (valid record, with wrong key)");
         }
     }
 

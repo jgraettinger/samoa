@@ -166,6 +166,15 @@ public:
     offset_t total_record_count();
     offset_t live_record_count();
 
+    offset_t dbg_begin()
+    { return _tbl.begin; }
+
+    offset_t dbg_end()
+    { return _tbl.end; }
+
+    offset_t dbg_wrap()
+    { return _tbl.wrap; }
+
 protected:
 
     unsigned char * _region_ptr;

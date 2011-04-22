@@ -65,7 +65,10 @@ void make_rolling_hash_bindings()
         .def("total_index_size", &rolling_hash::total_index_size)
         .def("used_index_size", &rolling_hash::used_index_size)
         .def("total_record_count", &rolling_hash::total_record_count)
-        .def("live_record_count", &rolling_hash::live_record_count);
+        .def("live_record_count", &rolling_hash::live_record_count)
+        .def("_dbg_begin", &rolling_hash::dbg_begin)
+        .def("_dbg_end", &rolling_hash::dbg_end)
+        .def("_dbg_wrap", &rolling_hash::dbg_wrap);
 }
 
 }

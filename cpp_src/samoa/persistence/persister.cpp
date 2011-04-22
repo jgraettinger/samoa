@@ -136,7 +136,7 @@ void persister::on_drop(const std::string & key,
 
     for(unsigned i = 0; i != _layers.size(); ++i)
     {
-        rolling_hash & layer = *_layers.back();
+        rolling_hash & layer = *_layers[i];
         rolling_hash::offset_t hint = 0;
         const record * rec = layer.get(key.begin(), key.end(), &hint);
 
@@ -145,7 +145,7 @@ void persister::on_drop(const std::string & key,
         bool commit = callback(boost::system::error_code(), rec);
 
         if(commit)
-            _layers[i]->mark_for_deletion(key.begin(), key.end(), hint);
+            layer.mark_for_deletion(key.begin(), key.end(), hint);
 
         return;
     }

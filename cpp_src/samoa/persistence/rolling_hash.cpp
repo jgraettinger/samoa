@@ -238,10 +238,10 @@ offset_t rolling_hash::used_region_size()
 {
     size_t used = records_offset();
 
-    if(_tbl.end < _tbl.begin)
+    if(_tbl.wrap)
     {
-        used += (_tbl.wrap - _tbl.begin);
         used += (_tbl.end - records_offset());
+        used += (_tbl.wrap - _tbl.begin);
     }
     else
         used += _tbl.end - _tbl.begin;

@@ -26,6 +26,37 @@ class TestRollingHash(unittest.TestCase):
 
         return
 
+    def test_hash_chaining(self):
+        # Excercises worst-case hash chaining
+        h = HeapRollingHash(1 << 16, 2)
+
+        self._set(h, 'primer', '0')
+        d = {'primer': '0'}
+
+        for i in xrange(1000):
+
+            if random.randint(0, 1):
+                # insert a new key
+                key = str(uuid.uuid4())
+
+                self._set(h, key, '0')
+                d[key] = '0'
+
+            else:
+                # check value of old key, & increment it
+                key = random.choice(d.keys())
+                self.assertEquals(h.get(key).value, d[key])
+
+                d[key] = str(int(d[key]) + 1)
+                self._set(h, key, d[key])
+
+        # purge all keys
+        for key in d.keys():
+            h.mark_for_deletion(key)
+
+        # no live records should remain
+        self.assertEquals(h.live_record_count(), 0)
+
     def test_record_bounds(self):
         # Checks assumptions about how records are layed out & padded
 
@@ -62,7 +93,59 @@ class TestRollingHash(unittest.TestCase):
         self.assertEquals(post - prev, 308)
         return
 
+    def test_wrapping(self):
+        # Checks assumptions about how records are shifted around the ring,
+        #   how wrapping is handled, and how the full condition is handled
+
+        h = HeapRollingHash(1 << 13, 100)
+
+        # 8192 total - 436 bytes overhead = 7756 record region size
+
+        # 56 byte records (36 byte key, 10 byte value, 9 record overhead, 1 padding)
+        #   => 138 records, w/ 28 bytes remaining
+
+        # insert & remove some records
+        keys = set(str(uuid.uuid4()) for i in xrange(20))
+        for key in keys:
+            self._set(h, key, key[:10])
+
+        # delete them all
+        for key in keys:
+            h.mark_for_deletion(key)
+
+        # reclaim space
+        while h.head():
+            self.assertTrue(h.head().is_dead())
+            h.reclaim_head()
+
+        self.assertEquals(h.used_region_size(), 436)
+
+        # insert exactly as many records as the hash can store
+        keys = set(str(uuid.uuid4()) for i in xrange(138))
+        for i, key in enumerate(keys):
+
+            self._set(h, key, key[:10])
+            self.assertEquals(h.used_region_size(), 436 + (i + 1) * 56)
+
+        # no additional records will fit
+        self.assertEquals(h.total_region_size() - h.used_region_size(), 28)
+
+        # rotate head excessively
+        for i in xrange(138 * 20):
+            h.rotate_head()
+
+        # check all expected keys / values are present
+        head = h.head()
+        while head:
+
+            self.assertEquals(head.value, head.key[:10])
+            keys.remove(head.key)
+            head = h.step(head)
+
+        self.assertEquals(keys, set())
+
     def test_churn(self):
+        # Synthesizes "normal" usage, with keys being both added & dropped
 
         data = {}
 
