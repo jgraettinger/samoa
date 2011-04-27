@@ -74,6 +74,8 @@ record * rolling_hash::prepare_record(
     // need to wrap?
     if(_tbl.end + rec_len > _tbl.region_size)
     {
+        assert(_tbl.wrap == 0);
+
         _tbl.wrap = _tbl.end;
         _tbl.end = records_offset();
     }
@@ -101,6 +103,13 @@ bool rolling_hash::mark_for_deletion(
     }
     else
     {
+        // DEBUG
+        offset_t rec_ptr_ptr_check;
+        get(key_begin, key_end, &rec_ptr_ptr_check);
+        if(rec_ptr_ptr_check != rec_ptr_ptr)
+            throw std::runtime_error("rec_ptr_ptr_check");
+        // END DEBUG
+
         // dereference offset of current record
         offset_t rec_ptr = *(offset_t*)(_region_ptr + rec_ptr_ptr);
         // identify the record pointed to by hint, if any

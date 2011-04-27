@@ -196,8 +196,8 @@ def main():
     sys.stdout.write(cg_resp.SerializeToString())
 
 MSG_HEAD = """
-#include "%s"
 #include <boost/python.hpp>
+#include "%s"
 
 namespace bpl = boost::python;
 """[1:]

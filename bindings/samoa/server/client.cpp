@@ -1,9 +1,9 @@
 
+#include <boost/python.hpp>
 #include "samoa/server/client.hpp"
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/core/stream_protocol.hpp"
-#include <boost/python.hpp>
 
 namespace samoa {
 namespace server {

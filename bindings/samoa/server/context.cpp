@@ -1,6 +1,7 @@
+
+#include <boost/python.hpp>
 #include "samoa/server/context.hpp"
 #include "samoa/client/server_pool.hpp"
-#include <boost/python.hpp>
 
 namespace samoa {
 namespace server {

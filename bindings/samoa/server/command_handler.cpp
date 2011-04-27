@@ -1,10 +1,10 @@
 
+#include <boost/python.hpp>
 #include "samoa/server/command_handler.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
-#include <boost/python.hpp>
 #include <memory>
 
 namespace samoa {

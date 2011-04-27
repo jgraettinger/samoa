@@ -1,8 +1,8 @@
 #ifndef PYSAMOA_FUTURE_HPP
 #define PYSAMOA_FUTURE_HPP
 
-#include "pysamoa/fwd.hpp"
 #include <boost/python.hpp>
+#include "pysamoa/fwd.hpp"
 #include <boost/system/error_code.hpp>
 
 namespace pysamoa {

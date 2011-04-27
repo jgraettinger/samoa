@@ -1,9 +1,9 @@
 
+#include <boost/python.hpp>
 #include "samoa/client/server_pool.hpp"
 #include "pysamoa/future.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
-#include <boost/python.hpp>
 
 namespace samoa {
 namespace client {

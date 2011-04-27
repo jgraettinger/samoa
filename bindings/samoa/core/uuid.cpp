@@ -1,6 +1,6 @@
 
-#include "samoa/core/uuid.hpp"
 #include <boost/python.hpp>
+#include "samoa/core/uuid.hpp"
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 

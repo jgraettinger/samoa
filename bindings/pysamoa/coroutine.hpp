@@ -1,10 +1,10 @@
 #ifndef PYSAMOA_COROUTINE_HPP
 #define PYSAMOA_COROUTINE_HPP
 
+#include <boost/python.hpp>
 #include "pysamoa/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include <boost/noncopyable.hpp>
-#include <boost/python.hpp>
 #include <vector>
 #include <memory>
 

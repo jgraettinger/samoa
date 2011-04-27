@@ -11,7 +11,7 @@ class TestPersister(unittest.TestCase):
     def setUp(self):
         self.proactor = Proactor()
         self.persister = Persister(self.proactor)
-        self.persister.add_heap_hash(1<<15, 100)
+        self.persister.add_heap_hash(1<<14, 10)
         self.persister.add_heap_hash(1<<16, 1000)
 
     def test_basic(self):
@@ -53,23 +53,26 @@ class TestPersister(unittest.TestCase):
             # Randomly churn, dropping & setting keys
             for i in xrange(5 * len(data)):
                 drop_key, put_key, get_key = random.sample(data.keys(), 3)
-    
+
+                if len(data[drop_key]) < len(data[put_key]):
+                    drop_key, put_key = put_key, drop_key
+ 
                 yield self.persister.drop(lambda r: 1, drop_key)
-                
+
                 yield self.persister.put(lambda cr, nr: \
                     (nr.set_value(data[nr.key]) or 1),
-                    put_key, int(len(data[put_key]) * 1.1))
-    
+                    put_key, int(len(data[put_key]) * 1.0))
+
                 yield self.persister.get(lambda r: \
                     (not r or self.assertEquals(r.value, data[r.key])),
                     get_key)
-    
+
             # Set all keys / values
             for key, value in data.items():
                 yield self.persister.put(lambda cr, nr: \
                     (nr.set_value(value) or 1), key,
-                    int(len(value) * 1.1))
-    
+                    int(len(value) * 1.0))
+
             # contents of rolling hash should
             #   be identical to data
             #self.assertEquals(data, self._dict(h))

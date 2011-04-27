@@ -1,6 +1,6 @@
 
-#include "samoa/persistence/record.hpp"
 #include <boost/python.hpp>
+#include "samoa/persistence/record.hpp"
 
 namespace samoa {
 namespace persistence {

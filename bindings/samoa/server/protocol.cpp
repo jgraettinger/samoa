@@ -1,7 +1,7 @@
 
+#include <boost/python.hpp>
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/command_handler.hpp"
-#include <boost/python.hpp>
 
 namespace samoa {
 namespace server {

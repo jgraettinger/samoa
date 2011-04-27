@@ -1,8 +1,8 @@
 
+#include <boost/python.hpp>
 #include "samoa/core/stream_protocol.hpp"
 #include "pysamoa/future.hpp"
 #include "pysamoa/scoped_python.hpp"
-#include <boost/python.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/bind.hpp>
 

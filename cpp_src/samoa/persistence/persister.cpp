@@ -12,16 +12,14 @@ namespace persistence {
 
 using namespace std;
 
-float overflow_threshold = 0.95;
-
 persister::persister(core::proactor & p)
  : _strand(*p.concurrent_io_service()),
-   _max_rotations(50)
+   _max_rotations(5000)
 { }
 
 persister::~persister()
 {
-    for(unsigned i = 0; i != _layers.size(); ++i)
+    for(size_t i = 0; i != _layers.size(); ++i)
         delete _layers[i];
 }
 
@@ -48,7 +46,7 @@ void persister::get(
 void persister::put(
     persister::put_callback_t && callback,
     std::string && key,
-    unsigned value_length)
+    size_t value_length)
 {
     _strand.post(boost::bind(&persister::on_put, shared_from_this(),
         std::move(key), value_length, std::move(callback)));
@@ -62,13 +60,13 @@ void persister::drop(
         std::move(key), std::move(callback)));
 }
 
-const rolling_hash & persister::get_layer(unsigned index) const
+const rolling_hash & persister::get_layer(size_t index) const
 { return *_layers.at(index); }
 
 void persister::on_get(const std::string & key,
     const persister::get_callback_t & callback)
 {
-    for(unsigned i = 0; i != _layers.size(); ++i)
+    for(size_t i = 0; i != _layers.size(); ++i)
     {
         const record * rec = _layers[i]->get(key.begin(), key.end());
 
@@ -81,29 +79,41 @@ void persister::on_get(const std::string & key,
 }
 
 void persister::on_put(const std::string & key,
-    unsigned value_length,
+    size_t est_value_length,
     const persister::put_callback_t & callback)
 {
-    upkeep(record::allocated_size(key.length(), value_length));
-
     // first, find a previous record instance
-    unsigned layer = 0;
-    rolling_hash::offset_t root_hint = 0, found_hint = 0;
+    size_t cur_layer = 0;
+    rolling_hash::offset_t root_hint = 0, cur_hint = 0;
     const record * rec = _layers[0]->get(key.begin(), key.end(), &root_hint);
 
-    while(!rec && ++layer != _layers.size())
+    while(!rec && ++cur_layer != _layers.size())
     {
-        rec = _layers[layer]->get(key.begin(), key.end(), &found_hint);
+        rec = _layers[cur_layer]->get(key.begin(), key.end(), &cur_hint);
     }
 
     if(rec)
     {
         // provision a value size equal to the length of the
         //  update, _plus_ the length of the old record
-        value_length += rec->value_length();
+        est_value_length += rec->value_length();
     }
 
-    if(!_layers[0]->would_fit(key.length(), value_length))
+    if(make_room(key.length(), est_value_length, root_hint, cur_hint, cur_layer))
+    {
+        // while making room, we invalidated the previously found hints,
+        //  and we need to find them again
+
+        cur_layer = 0;
+        rec = _layers[0]->get(key.begin(), key.end(), &root_hint);
+
+        while(!rec && ++cur_layer != _layers.size())
+        {
+            rec = _layers[cur_layer]->get(key.begin(), key.end(), &cur_hint);
+        }
+    }
+
+    if(!_layers[0]->would_fit(key.length(), est_value_length))
     {
         // won't fit? return error to caller
         callback(boost::system::errc::make_error_code(
@@ -112,7 +122,7 @@ void persister::on_put(const std::string & key,
     }
 
     record * new_rec = _layers[0]->prepare_record(
-        key.begin(), key.end(), value_length);
+        key.begin(), key.end(), est_value_length);
 
     if(!callback(boost::system::error_code(), rec, new_rec))
     {
@@ -122,19 +132,17 @@ void persister::on_put(const std::string & key,
 
     _layers[0]->commit_record(root_hint);
 
-    if(rec && layer)
+    if(rec && cur_layer)
     {
         // previous record isn't in top layer: mark old location for collection
-        _layers[layer]->mark_for_deletion(key.begin(), key.end(), found_hint);
+        _layers[cur_layer]->mark_for_deletion(key.begin(), key.end(), cur_hint);
     }
 }
 
 void persister::on_drop(const std::string & key,
     const persister::drop_callback_t & callback)
 {
-    upkeep(0);
-
-    for(unsigned i = 0; i != _layers.size(); ++i)
+    for(size_t i = 0; i != _layers.size(); ++i)
     {
         rolling_hash & layer = *_layers[i];
         rolling_hash::offset_t hint = 0;
@@ -152,134 +160,123 @@ void persister::on_drop(const std::string & key,
     callback(boost::system::error_code(), 0);
 }
 
-void persister::upkeep(size_t target_size)
+bool persister::make_room(size_t key_length, size_t val_length,
+    record::offset_t root_hint, record::offset_t cur_hint, size_t cur_layer)
 {
-    // target size is max of the write target, or the largest
-    //  head of any layer's ring
-    for(size_t i = 0; i != _layers.size(); ++i)
+    // turn root_hint into a root record?
+    // turn found_hint into a found record?
+    bool invalid = false;
+
+    size_t cur_rotation = 0;
+
+    auto invalidate = [&](size_t layer, const record * r)
     {
-        const record * head = _layers[i]->head();
+        invalid = true;
+    };
 
-        if(!head) continue;
-
-        target_size = std::max<size_t>(target_size,
-            record::allocated_size(head->key_length(), head->value_length()));
-    }
-
-    upkeep_leaf(*_layers.back(), target_size);
-
-    for(size_t ind = _layers.size() - 1; ind-- != 0;)
+    auto iterator_step = [&](rolling_hash & layer, const record * r)
     {
-        upkeep_inner(*_layers[ind], *_layers[ind+1], target_size);
-    }
-}
+        for(size_t i = 0; i != _iterators.size(); ++i)
+        {
+            if(_iterators[i].second == r)
+                _iterators[i].second = layer.step(r);
+        }
+    };
 
-void persister::upkeep_leaf(rolling_hash & layer, size_t target_size)
-{
-    // Leaf layer update:
-    //  - rotate/reclaim [1, _max_rotations] heads, until
-    //     a write of target_size would succeed
-    //  - proactively reclaim up to max_rotations dead ring heads
-    for(size_t r = 0; r != _max_rotations; ++r)
+    auto rotate_down = [&](rolling_hash & layer, rolling_hash & next)-> bool
     {
         const record * head = layer.head();
 
-        if(!head)
+        assert(next.would_fit(head->key_length(), head->value_length()));
+
+        // allocate new record copy at tail of the next layer down
+        record * new_rec = next.prepare_record(
+            head->key_begin(), head->key_end(), head->value_length());
+
+        std::copy(head->value_begin(), head->value_end(),
+            new_rec->value_begin());
+
+        next.commit_record();
+
+        // shift any iterators pointed at head down to
+        //  the new record on the lower layer
+        for(size_t i = 0; i != _iterators.size(); ++i)
         {
-            // layer is empty
-            break;
+            if(_iterators[i].second != head)
+                continue;
+
+            _iterators[i].first += 1;
+            _iterators[i].second = new_rec;
         }
 
-        if(r && !head->is_dead() && layer.would_fit(target_size))
-        {
-            // we've rotated/reclaimed at least one head,
-            //  the current one is live, but we've already
-            //  got enough space for an immediate write
-            break;
-        }
-
-        // step any iterators pointing at head
-        for(unsigned i = 0; i != _iterators.size(); ++i)
-        {
-            if(_iterators[i].second == head)
-                _iterators[i].second = layer.step(head);
-        }
-
-        if(head->is_dead())
-            layer.reclaim_head();
-        else
-            layer.rotate_head();
-    }
-}
-
-void persister::upkeep_inner(rolling_hash & layer,
-    rolling_hash & next_layer, size_t target_size)
-{
-    // Inner layer update:
-    //  - overflow record heads until a write of target_size would succeed
-    //  - proactively reclaim up to max_rotations dead ring heads
-
-    for(size_t r = 0; r != _max_rotations; ++r)
-    {
-        const record * head = layer.head();
-
-        if(!head)
-        {
-            // layer is empty
-            break;
-        }
-
-        if(!head->is_dead() && layer.would_fit(target_size))
-        {
-            // the current head is live, but we've already
-            //   got enough space for an immediate write
-            break;
-        }
-
-        if(head->is_dead())
-        {
-            // dead head: step iterators
-            for(unsigned i = 0; i != _iterators.size(); ++i)
-            {
-                if(_iterators[i].second == head)
-                    _iterators[i].second = layer.step(head);
-            }
-        }
-        else
-        {
-            // record is live, and needs to spill over to the next layer down
-
-            // won't fit? bail out
-            if(!next_layer.would_fit(head->key_length(), head->value_length()))
-                break;
-
-            // allocate new record copy at tail of the next layer down
-            record * new_rec = next_layer.prepare_record(
-                head->key_begin(), head->key_end(), head->value_length());
-
-            std::copy(head->value_begin(), head->value_end(),
-                new_rec->value_begin());
-
-            next_layer.commit_record();
-
-            // shift any iterators pointed at head down to
-            //  the new record on the lower layer
-            for(unsigned i = 0; i != _iterators.size(); ++i)
-            {
-                if(_iterators[i].second != head)
-                    continue;
-
-                _iterators[i].first += 1;
-                _iterators[i].second = new_rec;
-            }
-
-            // mark original head record as dead
-            layer.mark_for_deletion(head->key_begin(), head->key_end());
-        }
-
-        // if head wasn't dead, it is now
+        // mark original head record as dead, & reclaim
+        layer.mark_for_deletion(head->key_begin(), head->key_end());
         layer.reclaim_head();
-    }
+        return true;
+    };
+
+    auto prep_leaf = [&](size_t trg_key, size_t trg_val) -> bool
+    {
+        rolling_hash & hash = *_layers.back();
+
+        for(const record * head = hash.head(); head &&
+            !hash.would_fit(trg_key, trg_val); head = hash.head())
+        {
+            if(++cur_rotation == _max_rotations)
+                return false;
+
+            invalidate(_layers.size() - 1, head);
+            iterator_step(hash, head);
+
+            if(head->is_dead())
+                hash.reclaim_head();
+            else
+                hash.rotate_head();
+        }
+        return true;
+    };
+
+    boost::function<bool(size_t, size_t, size_t)> prep_inner;
+
+    auto prep = [&](size_t layer, size_t trg_key, size_t trg_val) -> bool
+    {
+        if(layer + 1 == _layers.size())
+            return prep_leaf(trg_key, trg_val);
+        else
+            return prep_inner(layer, trg_key, trg_val);
+    };
+
+    prep_inner = [&](size_t layer, size_t trg_key, size_t trg_val) -> bool
+    {
+        rolling_hash & hash = *_layers[layer];
+
+        for(const record * head = hash.head(); head &&
+            !hash.would_fit(trg_key, trg_val); head = hash.head())
+        {
+            if(++cur_rotation == _max_rotations)
+                return false;
+
+            if(head->is_dead())
+            {
+                invalidate(layer, head);
+                iterator_step(hash, head);
+                hash.reclaim_head();
+            }
+            else
+            {
+                // record is live, and needs to spill over to the next layer down
+                if(!prep(layer + 1, head->key_length(), head->value_length()))
+                    return false;
+
+                invalidate(layer, head);
+                rotate_down(hash, *_layers[layer+1]);
+            }
+        }
+        return true;
+    };
+
+    prep(0, key_length, val_length);
+    return invalid;
 }
 
 }

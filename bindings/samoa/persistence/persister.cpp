@@ -1,10 +1,10 @@
 
+#include <boost/python.hpp>
 #include "samoa/persistence/persister.hpp"
 #include "samoa/persistence/rolling_hash.hpp"
 #include "samoa/persistence/record.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/future.hpp"
-#include <boost/python.hpp>
 #include <stdexcept>
 
 namespace samoa {

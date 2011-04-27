@@ -3,7 +3,12 @@ path-constant ROOT : . ;
 path-constant BUILD : build ;
 
 project root
-    : requirements <threading>multi <cxxflags>-std=c++0x
+    : requirements 
+        <threading>multi
+        <cxxflags>-std=c++0x
+        <toolset>gcc-4.5
+        <include>/home/johng/local/include
+        <library-path>/home/johng/local/lib
     : default-build debug 
     : build-dir $(BUILD) 
 ;

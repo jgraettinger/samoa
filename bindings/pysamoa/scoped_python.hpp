@@ -1,11 +1,11 @@
 #ifndef PYSAMOA_SCOPED_PYTHON_HPP
 #define PYSAMOA_SCOPED_PYTHON_HPP
 
-#include <exception>
+#include <Python.h>
 #include <boost/python.hpp>
+#include <exception>
 #include <boost/detail/atomic_count.hpp>
 #include <boost/thread.hpp>
-#include <Python.h>
 
 namespace pysamoa {
 

@@ -144,16 +144,13 @@ public:
 
     /*
     Preconditions:
-     - key_length/value_length or record_length are
-       being considered for ring inclusion
+     - key_length/value_length are being considered for ring inclusion
 
     Postconditions:
      - true is returned if an immediate write would succeed
      - otherwise, false is returned
     */
     bool would_fit(size_t key_length, size_t value_length);
-
-    bool would_fit(size_t record_length);
 
     // metrics
 

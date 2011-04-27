@@ -1,9 +1,9 @@
 
+#include <boost/python.hpp>
 #include "future.hpp"
 #include "coroutine.hpp"
 #include "scoped_python.hpp"
 #include "samoa/client/server.hpp"
-#include <boost/python.hpp>
 #include <iostream>
 
 namespace pysamoa {

@@ -71,6 +71,13 @@ void rolling_hash::commit_record(offset_t rec_ptr_ptr /*= 0*/)
     }
     else
     {
+        // DEBUG
+        offset_t rec_ptr_ptr_check;
+        get(new_rec->key_begin(), new_rec->key_end(), &rec_ptr_ptr_check);
+        if(rec_ptr_ptr_check != rec_ptr_ptr)
+            throw std::runtime_error("rec_ptr_ptr_check");
+        // END DEBUG
+
         // dereference offset of current record
         offset_t old_rec_ptr = *(offset_t*)(_region_ptr + rec_ptr_ptr);
         // identify the record pointed to by hint, if any
@@ -124,6 +131,8 @@ void rolling_hash::reclaim_head()
     }
 
     _tbl.begin += rec_len;
+    assert(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
+
     if(_tbl.begin == _tbl.wrap)
     {
         _tbl.wrap = 0;
@@ -159,19 +168,21 @@ void rolling_hash::rotate_head()
 
     // rotate ring indices, dropping head
     _tbl.begin += rec_len;
+    assert(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
+
     if(_tbl.begin == _tbl.wrap)
     {
         _tbl.wrap = 0;
         _tbl.begin = records_offset();
     }
-
-    // re-allocate it at ring tail
-    if(_tbl.end + rec_len > _tbl.region_size)
+    else if(_tbl.end + rec_len > _tbl.region_size)
     {
         // need to wrap
         _tbl.wrap = _tbl.end;
         _tbl.end = records_offset();
     }
+
+    // re-allocate it at ring tail
 
     // copy raw bytes of record from old to new location
     // Big Fat Note: we're quite possibly overwriting the old record as
@@ -217,18 +228,24 @@ const record * rolling_hash::step(const record * cur) const
 }
 
 bool rolling_hash::would_fit(size_t key_length, size_t value_length)
-{ return would_fit(record::allocated_size(key_length, value_length)); }
-
-bool rolling_hash::would_fit(size_t record_length)
 {
-    // would cause a wrap?
-    if(_tbl.end + record_length > _tbl.region_size)
-        return records_offset() + record_length <= _tbl.begin;
+    size_t record_length = record::allocated_size(
+        key_length, value_length);
 
-    if(_tbl.wrap && _tbl.end + record_length > _tbl.begin)
-        return false;
+    if(_tbl.wrap)
+    {
+        // fits between current end and begin?
+        return (_tbl.end + record_length) <= _tbl.begin;
+    }
+    else
+    {
+        // fits into available space at the tail?
+        if(_tbl.end + record_length <= _tbl.region_size)
+            return true;
 
-    return true;
+        // would fit if we wrapped?
+        return (records_offset() + record_length) <= _tbl.begin;
+    }
 }
 
 offset_t rolling_hash::total_region_size()

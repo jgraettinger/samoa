@@ -1,7 +1,7 @@
 
+#include <boost/python.hpp>
 #include "samoa/persistence/heap_rolling_hash.hpp"
 #include "samoa/persistence/rolling_hash.hpp"
-#include <boost/python.hpp>
 
 namespace samoa {
 namespace persistence {

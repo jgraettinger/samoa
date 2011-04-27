@@ -1,7 +1,7 @@
+#include <boost/python.hpp>
 #include "coroutine.hpp"
 #include "future.hpp"
 #include "scoped_python.hpp"
-#include <boost/python.hpp>
 #include <iostream>
 
 namespace pysamoa {

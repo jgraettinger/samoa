@@ -1,8 +1,8 @@
+#include <boost/python.hpp>
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
-#include <boost/python.hpp>
 #include <boost/python/operators.hpp>
 #include <boost/bind.hpp>
 

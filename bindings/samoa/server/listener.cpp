@@ -1,8 +1,8 @@
 
+#include <boost/python.hpp>
 #include "samoa/server/listener.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/protocol.hpp"
-#include <boost/python.hpp>
 #include <string>
 
 namespace samoa {
