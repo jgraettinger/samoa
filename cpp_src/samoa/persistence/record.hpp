@@ -68,6 +68,8 @@ private:
     struct {
 
         // offset of next record in hash chain, or 0
+        // Note: order of this field w/in the struct is important,
+        //  and relied upon by rolling_hash
         offset_t next;
 
         // whether this record may be reclaimed

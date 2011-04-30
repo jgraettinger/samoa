@@ -152,6 +152,16 @@ public:
     */
     bool would_fit(size_t key_length, size_t value_length);
 
+    /*
+    Preconditions:
+     - 'hint' is a hint returned by a previous get() operation
+
+    Postconditions:
+     - if rotating or reclaiming the current head would
+       invalidate the hint, true is returned; else false
+    */
+    bool head_invalidates(offset_t hint) const;
+
     // metrics
 
     offset_t total_region_size();

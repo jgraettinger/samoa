@@ -187,10 +187,13 @@ void rolling_hash::rotate_head()
     // copy raw bytes of record from old to new location
     // Big Fat Note: we're quite possibly overwriting the old record as
     // we write the new one. This is only safely done by copying-forward
-    std::copy(
-        _region_ptr + rec_begin,
-        _region_ptr + rec_begin + rec_len,
-        _region_ptr + _tbl.end);
+    if(rec_begin != _tbl.end)
+    {
+        std::copy(
+            _region_ptr + rec_begin,
+            _region_ptr + rec_begin + rec_len,
+            _region_ptr + _tbl.end);
+    }
 
     // update the previous link in the hash chain to point to new_rec
     // the pointer we're updating here may be the next field of another
@@ -246,6 +249,29 @@ bool rolling_hash::would_fit(size_t key_length, size_t value_length)
         // would fit if we wrapped?
         return (records_offset() + record_length) <= _tbl.begin;
     }
+}
+
+bool rolling_hash::head_invalidates(offset_t rec_ptr_ptr) const
+{
+    // is rec_ptr owned by rec?
+    if(rec_ptr_ptr == _tbl.begin)
+    {
+        // this works because record::_meta.next is stored
+        //  as the first bytes of the record class.
+        // otherwise we'd need to adjust for the offset
+        //  within the record structure
+        return true;
+    }
+
+    // does rec_ptr point to rec?
+    offset_t rec_ptr = *(offset_t*)(_region_ptr + rec_ptr_ptr);
+    if(rec_ptr == _tbl.begin)
+    {
+        // again, record::_meta.next is first field of record
+        return true;
+    }
+
+    return false;
 }
 
 offset_t rolling_hash::total_region_size()

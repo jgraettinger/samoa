@@ -4,6 +4,7 @@
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/persistence/record.hpp"
 #include "samoa/core/proactor.hpp"
+#include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
 #include <string>
@@ -31,6 +32,10 @@ public:
         bool (const boost::system::error_code &, const record *)
     > drop_callback_t;
 
+    typedef boost::function<
+        void (const boost::system::error_code &, const std::vector<const record*> &)
+    > iterate_callback_t;
+
     persister(core::proactor &);
     virtual ~persister();
 
@@ -45,6 +50,29 @@ public:
 
     void drop(drop_callback_t && drop_callback, std::string && key);
 
+    /*
+    * No preconditions
+    * 
+    * Postconditions:
+    *  - an iteration ticket is returned, to be passed to iterate()
+    */
+    size_t begin_iteration();
+
+    /*
+    * Preconditions:
+    *  - ticket was previously returned by begin_iteration, and is still valid
+    *
+    * Postcodition:
+    *  - if false is returned, this ticket has completed iteration, and
+    *     is no longer valid. iterate_callback will not be called.
+    *
+    *  - if true is returned, iterate_callback will be called from
+    *     persister's io_service, and [1, max_elements_per_callback]
+    *     records will be returned by-argument
+    */ 
+    bool iterate(iterate_callback_t &&, size_t ticket);
+
+
     size_t get_layer_count() const
     { return _layers.size(); }
 
@@ -52,20 +80,37 @@ public:
 
 private:
     
-    void on_get(const std::string &, const persister::get_callback_t &);
+    void on_get(const std::string &, const get_callback_t &);
 
-    void on_put(const std::string &, size_t,
-        const persister::put_callback_t &);
+    void on_put(const std::string &, size_t, const put_callback_t &);
 
-    void on_drop(const std::string &, const persister::drop_callback_t &);
+    void on_drop(const std::string &, const drop_callback_t &);
+
+    void on_iterate(size_t, const iterate_callback_t &);
 
     bool make_room(size_t, size_t, record::offset_t, record::offset_t, size_t);
 
-    std::vector<std::pair<size_t, const record *>> _iterators;
     std::vector<rolling_hash*> _layers;
+
+    struct iterator {
+        enum {
+            DEAD,
+            BEGIN,
+            LIVE,
+            END
+        } state;
+        size_t layer;
+        const record * rec;
+    };
+    std::vector<iterator> _iterators;
+
+    spinlock _iterators_lock;
+
+    std::vector<const record *> _tmp_record_vec;
 
     boost::asio::strand _strand;
 
+    size_t _max_iter_records;
     size_t _max_rotations;
 };
 

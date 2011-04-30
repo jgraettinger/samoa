@@ -14,7 +14,8 @@ using namespace std;
 
 persister::persister(core::proactor & p)
  : _strand(*p.concurrent_io_service()),
-   _max_rotations(5000)
+   _max_iter_records(50),
+   _max_rotations(10)
 { }
 
 persister::~persister()
@@ -60,6 +61,57 @@ void persister::drop(
         std::move(key), std::move(callback)));
 }
 
+size_t persister::begin_iteration()
+{
+    spinlock::guard guard(_iterators_lock);
+
+    size_t i = 0;
+    for(; i != _iterators.size(); ++i)
+    {
+        if(_iterators[i].state == iterator::DEAD)
+        {
+            _iterators[i].state = iterator::BEGIN;
+            _iterators[i].layer = 0;
+            _iterators[i].rec = 0; 
+            return i;
+        }
+    }
+
+    // no iterator slots available? add one
+    if(i == _iterators.size())
+    {
+        _iterators.push_back(iterator({iterator::BEGIN, 0, 0}));
+    }
+    return i;
+}
+
+bool persister::iterate(
+    persister::iterate_callback_t && callback, size_t ticket)
+{
+    spinlock::guard guard(_iterators_lock);
+
+    if(_iterators.at(ticket).state == iterator::DEAD)
+    {
+        throw std::invalid_argument(
+            "persister::iterate(iterate_callback_t, size_t ticket): "\
+            "invalid ticket");
+    }
+
+    if(_iterators.at(ticket).state == iterator::END)
+    {
+        _iterators[ticket].state = iterator::DEAD;
+
+        if(ticket + 1 == _iterators.size())
+            _iterators.pop_back();
+
+        return false;
+    }
+
+    _strand.post(boost::bind(&persister::on_iterate, shared_from_this(),
+        ticket, std::move(callback)));
+    return true;
+}
+
 const rolling_hash & persister::get_layer(size_t index) const
 { return *_layers.at(index); }
 
@@ -79,7 +131,7 @@ void persister::on_get(const std::string & key,
 }
 
 void persister::on_put(const std::string & key,
-    size_t est_value_length,
+    size_t value_length,
     const persister::put_callback_t & callback)
 {
     // first, find a previous record instance
@@ -96,10 +148,10 @@ void persister::on_put(const std::string & key,
     {
         // provision a value size equal to the length of the
         //  update, _plus_ the length of the old record
-        est_value_length += rec->value_length();
+        value_length += rec->value_length();
     }
 
-    if(make_room(key.length(), est_value_length, root_hint, cur_hint, cur_layer))
+    if(make_room(key.length(), value_length, root_hint, cur_hint, cur_layer))
     {
         // while making room, we invalidated the previously found hints,
         //  and we need to find them again
@@ -113,7 +165,7 @@ void persister::on_put(const std::string & key,
         }
     }
 
-    if(!_layers[0]->would_fit(key.length(), est_value_length))
+    if(!_layers[0]->would_fit(key.length(), value_length))
     {
         // won't fit? return error to caller
         callback(boost::system::errc::make_error_code(
@@ -122,7 +174,7 @@ void persister::on_put(const std::string & key,
     }
 
     record * new_rec = _layers[0]->prepare_record(
-        key.begin(), key.end(), est_value_length);
+        key.begin(), key.end(), value_length);
 
     if(!callback(boost::system::error_code(), rec, new_rec))
     {
@@ -140,7 +192,7 @@ void persister::on_put(const std::string & key,
 }
 
 void persister::on_drop(const std::string & key,
-    const persister::drop_callback_t & callback)
+    const drop_callback_t & callback)
 {
     for(size_t i = 0; i != _layers.size(); ++i)
     {
@@ -160,26 +212,71 @@ void persister::on_drop(const std::string & key,
     callback(boost::system::error_code(), 0);
 }
 
+void persister::on_iterate(size_t ticket,
+    const iterate_callback_t & callback)
+{
+    spinlock::guard guard(_iterators_lock);
+
+    iterator & iter = _iterators[ticket];
+    assert(!iter.state == iterator::DEAD);
+
+    if(iter.state == iterator::BEGIN)
+    {
+        iter.state = iterator::LIVE;
+        iter.layer = _layers.size();
+        iter.rec = 0;
+    }
+
+    for(size_t i = 0; i != _max_iter_records; ++i)
+    {
+        // reached the end of this layer? begin the next one up
+        while(iter.rec == 0 && iter.layer)
+            iter.rec = _layers[--iter.layer]->head();
+
+        if(iter.rec == 0)
+        {
+            // end of sequence
+            iter.state = iterator::END;
+            break;
+        }
+
+        if(!iter.rec->is_dead())
+            _tmp_record_vec.push_back(iter.rec);
+
+        iter.rec = _layers[iter.layer]->step(iter.rec);
+    }
+
+    callback(boost::system::error_code(), _tmp_record_vec);
+    _tmp_record_vec.clear();
+}
+
 bool persister::make_room(size_t key_length, size_t val_length,
     record::offset_t root_hint, record::offset_t cur_hint, size_t cur_layer)
 {
-    // turn root_hint into a root record?
-    // turn found_hint into a found record?
     bool invalid = false;
 
     size_t cur_rotation = 0;
 
-    auto invalidate = [&](size_t layer, const record * r)
+    auto invalidates_check = [&](size_t layer)
     {
-        invalid = true;
+        if(layer == 0 && _layers[0]->head_invalidates(root_hint))
+        {
+            invalid = true;
+        }
+        else if(layer == cur_layer && \
+            _layers[cur_layer]->head_invalidates(cur_hint))
+        {
+            invalid = true;
+        }
     };
 
     auto iterator_step = [&](rolling_hash & layer, const record * r)
     {
-        for(size_t i = 0; i != _iterators.size(); ++i)
+        spinlock::guard guard(_iterators_lock);
+        for(auto it = _iterators.begin(); it != _iterators.end(); ++it)
         {
-            if(_iterators[i].second == r)
-                _iterators[i].second = layer.step(r);
+            if(it->state == iterator::LIVE && it->rec == r)
+                it->rec = layer.step(r);
         }
     };
 
@@ -200,13 +297,16 @@ bool persister::make_room(size_t key_length, size_t val_length,
 
         // shift any iterators pointed at head down to
         //  the new record on the lower layer
-        for(size_t i = 0; i != _iterators.size(); ++i)
         {
-            if(_iterators[i].second != head)
-                continue;
-
-            _iterators[i].first += 1;
-            _iterators[i].second = new_rec;
+            spinlock::guard guard(_iterators_lock);
+            for(auto it = _iterators.begin(); it != _iterators.end(); ++it)
+            {
+                if(it->state == iterator::LIVE && it->rec == head)
+                {
+                    it->layer += 1;
+                    it->rec = new_rec;
+                }
+            }
         }
 
         // mark original head record as dead, & reclaim
@@ -225,7 +325,7 @@ bool persister::make_room(size_t key_length, size_t val_length,
             if(++cur_rotation == _max_rotations)
                 return false;
 
-            invalidate(_layers.size() - 1, head);
+            invalidates_check(_layers.size() - 1);
             iterator_step(hash, head);
 
             if(head->is_dead())
@@ -258,7 +358,7 @@ bool persister::make_room(size_t key_length, size_t val_length,
 
             if(head->is_dead())
             {
-                invalidate(layer, head);
+                invalidates_check(layer);
                 iterator_step(hash, head);
                 hash.reclaim_head();
             }
@@ -268,7 +368,7 @@ bool persister::make_room(size_t key_length, size_t val_length,
                 if(!prep(layer + 1, head->key_length(), head->value_length()))
                     return false;
 
-                invalidate(layer, head);
+                invalidates_check(layer);
                 rotate_down(hash, *_layers[layer+1]);
             }
         }

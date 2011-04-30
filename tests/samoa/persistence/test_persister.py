@@ -29,55 +29,79 @@ class TestPersister(unittest.TestCase):
 
     def test_churn(self):
 
-        data = {}
+        keys = [str(uuid.uuid4()) for i in xrange(600)]
+        values = {}
 
         def test():
 
-            # Set all keys / values
-            while True:
-                try:
-                    key = str(uuid.uuid4())
-                    value = '=' * int(random.expovariate(1.0 / 135))
-
-                    yield self.persister.put(lambda cr, nr: \
-                        (nr.set_value(value) or 1),
-                        key, int(len(value) * 1.1))
-
-                    data[key] = value
-
-                except Exception, e:
-                    break
-
-            data_size = sum(len(i) + len(j) for i,j in data.iteritems())
-
             # Randomly churn, dropping & setting keys
-            for i in xrange(5 * len(data)):
-                drop_key, put_key, get_key = random.sample(data.keys(), 3)
+            for i in xrange(10 * len(keys)):
 
-                if len(data[drop_key]) < len(data[put_key]):
-                    drop_key, put_key = put_key, drop_key
- 
-                yield self.persister.drop(lambda r: 1, drop_key)
+                # sample key on exponential distribution
+                ind = min(int(random.expovariate(
+                    2.0 / len(keys))), len(keys) - 1)
 
-                yield self.persister.put(lambda cr, nr: \
-                    (nr.set_value(data[nr.key]) or 1),
-                    put_key, int(len(data[put_key]) * 1.0))
+                key = keys[ind]
+                value = values.get(key)
 
-                yield self.persister.get(lambda r: \
-                    (not r or self.assertEquals(r.value, data[r.key])),
-                    get_key)
+                choice = random.randint(0, 2)
 
-            # Set all keys / values
-            for key, value in data.items():
-                yield self.persister.put(lambda cr, nr: \
-                    (nr.set_value(value) or 1), key,
-                    int(len(value) * 1.0))
+                if choice == 0:
 
-            # contents of rolling hash should
-            #   be identical to data
-            #self.assertEquals(data, self._dict(h))
+                    new_val = '=' * min(350, int(random.expovariate(1.0 / 135)))
+
+                    def on_put(cur_rec, new_rec):
+
+                        self.assertTrue((not cur_rec and not value) \
+                                         or (cur_rec and cur_rec.value == value))
+
+                        new_rec.set_value(new_val)
+                        values[new_rec.key] = new_val
+                        return 1
+
+                    try:
+                        yield self.persister.put(on_put, key, len(new_val))
+                    except Exception, e:
+                        print e
+
+                elif choice == 1:
+
+                    def on_drop(cur_rec):
+
+                        self.assertTrue((not cur_rec and not value) \
+                                         or (cur_rec and cur_rec.value == value))
+
+                        if cur_rec:
+                            del values[cur_rec.key]
+
+                        return 1
+
+                    yield self.persister.drop(on_drop, key)
+
+                elif choice == 2:
+
+                    def on_get(cur_rec):
+
+                        self.assertTrue((not cur_rec and not value) \
+                                         or (cur_rec and cur_rec.value == value))
+
+                    yield self.persister.get(on_get, key)
+
+            # iterate through persister, asserting we see each expected value 
+            def on_iterate(records):
+
+                for rec in records:
+                    self.assertEquals(rec.value, values[rec.key])
+                    del values[rec.key]
+
+            ticket = self.persister.begin_iteration()
+            while (yield self.persister.iterate(on_iterate, ticket)):
+                pass
+
+            self.assertEquals(values, {})
 
             self.proactor.shutdown()
+            yield
 
         self.proactor.spawn(test)
         self.proactor.run()

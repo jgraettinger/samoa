@@ -39,9 +39,6 @@ bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 
 void make_rolling_hash_bindings()
 {
-    bool (rolling_hash::*would_fit1)(size_t, size_t) = &rolling_hash::would_fit;
-    bool (rolling_hash::*would_fit2)(size_t) = &rolling_hash::would_fit;
-
     // use of auto_ptr is non-optimal: unique_ptr is preferred
     bpl::class_<rolling_hash, std::auto_ptr<rolling_hash>, boost::noncopyable>(
             "RollingHash", bpl::no_init)
@@ -58,8 +55,7 @@ void make_rolling_hash_bindings()
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("step", &rolling_hash::step,
             bpl::return_value_policy<bpl::reference_existing_object>())
-        .def("would_fit", would_fit1)
-        .def("would_fit", would_fit2)
+        .def("would_fit", &rolling_hash::would_fit)
         .def("total_region_size", &rolling_hash::total_region_size)
         .def("used_region_size", &rolling_hash::used_region_size)
         .def("total_index_size", &rolling_hash::total_index_size)

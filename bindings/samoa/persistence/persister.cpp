@@ -35,12 +35,12 @@ void py_on_get(
     bpl::object arg = (record ? \
         bpl::object(bpl::handle<>(convert(record))) : bpl::object());
 
-    bpl::object result = callable(arg);
+    callable(arg);
 
     // set the future to re-enter coroutine via post, so that
     //  on_result is guarentted to return immediately
     future->set_reenter_via_post();
-    future->on_result(result);
+    future->on_result(bpl::object());
 }
 
 future::ptr_t py_get(
@@ -88,14 +88,12 @@ bool py_on_put(
             bpl::object()),
         bpl::handle<>(convert(new_record)));
 
-    bpl::object result = callable(*arg);
-
-    bool committed = bpl::extract<bool>(result)();
+    bool committed = bpl::extract<bool>(callable(*arg));
 
     // set the future to re-enter coroutine via post, so that
     //  on_result is guarentted to return immediately
     future->set_reenter_via_post();
-    future->on_result(result);
+    future->on_result(bpl::object());
 
     return committed;
 }
@@ -141,14 +139,12 @@ bool py_on_drop(
     bpl::object arg = (record ? \
         bpl::object(bpl::handle<>(convert(record))) : bpl::object());
 
-    bpl::object result = callable(arg);
-
-    bool committed = bpl::extract<bool>(result)();
+    bool committed = bpl::extract<bool>(callable(arg));
 
     // set the future to re-enter coroutine via post, so that
     //  on_result is guarentted to return immediately
     future->set_reenter_via_post();
-    future->on_result(result);
+    future->on_result(bpl::object());
 
     return committed;
 }
@@ -160,7 +156,7 @@ future::ptr_t py_drop(
 {
     if(!PyCallable_Check(callable.ptr()))
     {
-        throw std::invalid_argument("persister::drop(key, callable): "\
+        throw std::invalid_argument("persister::drop(callable, key): "\
             "argument 'callable' isn't a callable");
     }
 
@@ -171,6 +167,62 @@ future::ptr_t py_drop(
     return f; 
 }
 
+/////////// iterate support
+
+void py_on_iterate(
+    const future::ptr_t & future, 
+    const bpl::object & callable,
+    const boost::system::error_code & ec,
+    const std::vector<const samoa::persistence::record *> & records)
+{
+    pysamoa::python_scoped_lock block;
+
+    if(ec)
+    {
+        future->on_error(ec);
+        return;
+    }
+
+    bpl::reference_existing_object::apply<
+        const samoa::persistence::record *>::type convert;
+
+    // allocate a tuple of containing python wrappers for each record
+    bpl::tuple tuple(bpl::handle<>(PyTuple_New(records.size())));
+
+    for(size_t i = 0; i != records.size(); ++i)
+    {
+        // PyTuple_SET_ITEM consumes reference created by convert
+        PyTuple_SET_ITEM(tuple.ptr(), i, convert(records[i]));
+    }
+
+    callable(tuple);
+
+    future->set_reenter_via_post();
+    future->on_result(bpl::object(bpl::handle<>(bpl::borrowed(Py_True))));
+}
+
+future::ptr_t py_iterate(
+    persister & p,
+    const bpl::object & callable,
+    size_t ticket)
+{
+    if(!PyCallable_Check(callable.ptr()))
+    {
+        throw std::invalid_argument("persister::iterate(callable, ticket): "\
+            "argument 'callable' isn't a callable");
+    }
+
+    future::ptr_t f(boost::make_shared<future>());
+
+    if(!p.iterate(boost::bind(&py_on_iterate, f, callable, _1, _2), ticket))
+    {
+        // iteration is complete; py_on_iterate won't be
+        //   called, so return false via future
+
+        f->on_result(bpl::object(bpl::handle<>(bpl::borrowed(Py_False))));
+    }
+    return f; 
+}
 
 
 void make_persister_bindings()
@@ -180,6 +232,8 @@ void make_persister_bindings()
         .def("get", &py_get)
         .def("put", &py_put)
         .def("drop", &py_drop)
+        .def("begin_iteration", &persister::begin_iteration)
+        .def("iterate", &py_iterate)
         .def("add_heap_hash", &persister::add_heap_hash)
         .def("add_mapped_hash", &persister::add_mapped_hash)
         .def("get_layer_count", &persister::get_layer_count)
