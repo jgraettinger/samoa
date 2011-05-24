@@ -26,7 +26,7 @@ public:
         const callback_t & callback,
         const core::io_service_ptr_t & io_srv,
         const std::string & host,
-        const std::string & port);
+        unsigned short port);
 
 private:
 

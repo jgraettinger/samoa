@@ -1,6 +1,7 @@
 #ifndef SAMOA_SERVER_LISTENER_HPP
 #define SAMOA_SERVER_LISTENER_HPP
 
+#include "samoa/core/fwd.hpp"
 #include "samoa/server/fwd.hpp"
 #include <boost/asio.hpp>
 #include <string>
@@ -15,15 +16,14 @@ public:
 
     typedef listener_ptr_t ptr_t;
 
-    listener(std::string host, std::string port, unsigned listen_backlog,
-        context_ptr_t, protocol_ptr_t);
+    listener(const context_ptr_t &, const protocol_ptr_t &);
 
     ~listener();
 
     void cancel();
 
     std::string get_address();
-    unsigned get_port();
+    unsigned short get_port();
 
 private:
 
@@ -32,6 +32,8 @@ private:
 
     context_ptr_t  _context;
     protocol_ptr_t _protocol;
+
+    core::proactor_ptr_t _proactor;
 
     // Accepting socket
     std::unique_ptr<boost::asio::ip::tcp::acceptor> _accept_sock;

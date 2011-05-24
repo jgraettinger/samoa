@@ -4,47 +4,50 @@
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
+#include "samoa/log.hpp"
 #include <boost/asio.hpp>
-
-#include <iostream>
+#include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
 
 namespace samoa {
 namespace server {
 
 using namespace boost::asio;
 
-listener::listener(std::string host, std::string port, unsigned listen_backlog,
-    context::ptr_t ctxt, protocol::ptr_t prot)
- : _context(ctxt), _protocol(prot)
+listener::listener(const context_ptr_t & context, const protocol_ptr_t & protocol)
+ : _context(context),
+   _protocol(protocol),
+   _proactor(core::proactor::get_proactor())
 {
-    core::proactor::ptr_t proactor = _context->get_proactor();
+    core::io_service_ptr_t io_srv = _proactor->serial_io_service();
 
-    ip::tcp::resolver resolver(*(proactor->serial_io_service()));
+    // build resolution query
+    ip::tcp::resolver::query query(context->get_server_hostname(),
+        boost::lexical_cast<std::string>(context->get_server_port()));
 
-    // Blocks, & throws on resolution failure
-    ip::tcp::endpoint ep = *resolver.resolve(
-        ip::tcp::resolver::query(host, port));
+    // blocks, & throws on resolution failure
+    ip::tcp::endpoint ep = *ip::tcp::resolver(*io_srv).resolve(query);
 
-    // Create & listen on accepting socket, reusing port
-    _accept_sock.reset(new ip::tcp::acceptor(
-        *(proactor->serial_io_service()), ep));
+    // create & listen on accepting socket, reusing port
+    _accept_sock.reset(new ip::tcp::acceptor(*io_srv, ep));
 
-    _accept_sock->listen(listen_backlog);
+    // TODO(johng) make this a configurable?
+    _accept_sock->listen(5);
 
-    // Next connection to accept
+    // next connection to accept
     on_accept(boost::system::error_code());
 
-    std::cerr << "listener::listener()" << std::endl;
+    LOG_INFO("");
 }
 
 listener::~listener()
 {
-    std::cerr << "listener::~listener()" << std::endl;
+    LOG_INFO("");
 }
 
 void listener::cancel()
 {
-    std::cerr << "listener::cancel()" << std::endl;
+    LOG_INFO("");
 
     _accept_sock->get_io_service().dispatch(
         boost::bind(&listener::on_cancel, shared_from_this()));
@@ -53,29 +56,29 @@ void listener::cancel()
 std::string listener::get_address()
 { return _accept_sock->local_endpoint().address().to_string(); }
 
-unsigned listener::get_port()
+unsigned short listener::get_port()
 { return _accept_sock->local_endpoint().port(); }
 
 void listener::on_accept(const boost::system::error_code & ec)
 {
     if(ec == boost::system::errc::operation_canceled)
     {
-        std::cerr << "accept cancelled" << std::endl;
+        LOG_INFO("accept cancelled");
         return;
     }
     if(ec)
     {
-        std::cerr << "listener::on_accept: " << ec.message() << std::endl;
+        LOG_ERR(ec.message());
         return;
     }
 
-    std::cerr << "listener::on_accept() begin" << std::endl;
+    LOG_INFO("");
 
     if(_next_sock.get())
     {
         // Create a client to service the socket
         // Lifetime is managed by client's use in callbacks. Eg, it's
-        //  auto-destroyed when it falls out of event handler state
+        //  auto-destroyed when it falls out of the event-loop
         client::ptr_t c(boost::make_shared<client>(
             _context, _protocol, _next_io_srv, _next_sock));
 
@@ -83,7 +86,7 @@ void listener::on_accept(const boost::system::error_code & ec)
     }
 
     // Next connection to accept
-    _next_io_srv = _context->get_proactor()->serial_io_service();
+    _next_io_srv = _proactor->serial_io_service();
     _next_sock.reset(new ip::tcp::socket(*_next_io_srv));
 
     // Schedule call on accept. Note that bound handler
@@ -94,13 +97,12 @@ void listener::on_accept(const boost::system::error_code & ec)
             &listener::on_accept, this,
             boost::asio::placeholders::error));
 
-    std::cerr << "listener::on_accept() end" << std::endl;
     return;
 }
 
 void listener::on_cancel()
 {
-    std::cerr << "listener::on_cancel()" << std::endl;
+    LOG_INFO("");
     _accept_sock.reset();
     _next_sock.reset();
 }

@@ -2,11 +2,13 @@
 import sqlalchemy.sql.expression as sql_exp
 
 from samoa.core import UUID
+from samoa.persistence import DataType
 import samoa.model
 import samoa.core.protobuf
 
 import peer_set
 import table_set
+from local_partition import LocalPartition
 
 class ClusterState(object):
     """
@@ -94,27 +96,27 @@ class ClusterState(object):
             proto_table = cluster_state.add_table()
 
             # add cluster-shared table state
-            proto_table.uuid = table.uuid.to_hex_str()
-            proto_table.name = table.name
-            proto_table.data_type = table.data_type
-            proto_table.replication_factor = table.replication_factor
-            proto_table.lamport_consistency_bound = \
-                table.lamport_consistency_bound
+            proto_table.uuid = table.get_uuid().to_hex_str()
+            proto_table.name = table.get_name()
+            proto_table.data_type = table.get_data_type().name
+            proto_table.replication_factor = table.get_replication_factor()
 
             # enumerate live partitions
-            for part in table.get_partitions():
+            for part in table.get_ring():
 
                 proto_part = proto_table.add_partition()
 
-                proto_part.uuid = part.uuid.to_hex_str()
-                proto_part.server_uuid = part.server_uuid.to_hex_str()
-                proto_part.ring_position = part.ring_position
-                proto_part.consistent_range_begin = part.consistent_range_begin
-                proto_part.consistent_range_end = part.consistent_range_end
-                proto_part.lamport_ts = part.lamport_ts
-                proto_part.storage_path = part.storage_path
-                proto_part.storage_size = part.storage_size
-                proto_part.index_size = part.index_size
+                proto_part.uuid = part.get_uuid().to_hex_str()
+                proto_part.server_uuid = part.get_server_uuid().to_hex_str()
+                proto_part.ring_position = part.get_ring_position()
+                proto_part.consistent_range_begin = \
+                    part.get_consistent_range_begin()
+                proto_part.consistent_range_end = \
+                    part.get_consistent_range_end()
+                proto_part.lamport_ts = part.get_lamport_ts()
+                #proto_part.storage_path = part.storage_path
+                #proto_part.storage_size = part.storage_size
+                #proto_part.index_size = part.index_size
 
             # enumerate dropped partitions
             for part_uuid in table.get_dropped_partition_uuids():
@@ -216,10 +218,8 @@ class ProtobufUpdator(object):
                 model = samoa.model.Table(
                     uuid = table_uuid,
                     name = proto_table.name,
-                    data_type = proto_table.data_type,
-                    replication_factor = proto_table.replication_factor,
-                    lamport_consistency_bound = \
-                        proto_table.lamport_consistency_bound)
+                    data_type = DataType.names[proto_table.data_type],
+                    replication_factor = proto_table.replication_factor)
                 self.session.add(model)
 
                 # flush here, or we'll violate fk-constraints
@@ -291,8 +291,8 @@ class ProtobufUpdator(object):
                 self.log.info('remotely dropped partition %r (table %r)' % (
                     model.uuid, model.table_uuid))
 
-            elif proto_part.lamport_ts > part.lamport_ts:
-                # Remote partition has been remotely dropped
+            elif proto_part.lamport_ts > part.get_lamport_ts():
+                # Remote partition has updated metadata
                 model = session.query(samoa.model.Partition).filter_by(
                     uuid = part_uuid).one()
 
@@ -305,9 +305,10 @@ class ProtobufUpdator(object):
         tracked_partitions = []
 
         if table and not dirty:
-            # Use the Table's cached copy
-            tracked_partitions = table.get_ring_description()
-
+            # Build from the runtime table
+            tracked_partitions = [
+                (p.get_ring_position(), p.get_uuid(), isinstance(p, LocalPartition)) \
+                for p in table.get_ring()]
         else:
             # One or more local partitions has been modified
             #  We need to rebuild from the database

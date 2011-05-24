@@ -16,8 +16,8 @@ enum CommandType {
     CREATE_PARTITION = 9;
     DROP_PARTITION = 10;
 
-    GET_BLOB = 11;
-    PUT_BLOB = 12;
+    BLOB_GET = 11;
+    BLOB_PUT = 12;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -38,14 +38,14 @@ message ClusterState {
 
     required string local_uuid = 1;
     required string local_hostname = 2;
-    required int32  local_port = 3;
+    required uint32 local_port = 3;
 
     message Peer {
 
         // cluster-shared peer state
         required string uuid = 1;
         required string hostname = 2;
-        required int32  port = 3;
+        required uint32 port = 3;
 
         // local server statistics
         required bool   connected = 6;
@@ -56,28 +56,28 @@ message ClusterState {
 
     message Table {
 
+        // immutable fields
         required string uuid = 1;
+        optional string data_type = 8;
+
         optional bool   dropped = 2 [default = false];
 
+        // mutable fields
         optional string name = 3;
-        optional int32  data_type = 8;
-        optional int64  lamport_consistency_bound = 9;
-        optional int64  replication_factor = 4;
-
+        optional uint64 replication_factor = 4;
+        optional uint64 lamport_ts = 9;
 
         message Partition {
 
             required string uuid = 1;
             optional bool   dropped = 2 [default = false];
 
+            // fields captured by all partitions
             optional string server_uuid = 3;
             optional int64  ring_position = 4;
             optional int64  consistent_range_begin = 8;
             optional int64  consistent_range_end = 9;
             optional int64  lamport_ts = 10;
-            optional string storage_path = 5;
-            optional int64  storage_size = 6;
-            optional int64  index_size = 7;
         };
         repeated Partition partition = 7;
     };
@@ -98,7 +98,6 @@ message PingResponse {
 message DeclareTableRequest {
     required string name = 1;
     required string data_type = 2;
-    required int32 lamport_consistency_bound = 3;
     required bool create_if_not_exists = 4 [default = true];
     required int32 replication_factor = 5 [default = 1];
 };
@@ -107,7 +106,6 @@ message DeclareTableResponse {
     required string uuid = 1;
     required string name = 2;
     required string data_type = 3;
-    required int32 lamport_consistency_bound = 4;
     required int32 replication_factor = 5;
     required bool created = 6;
 };
@@ -143,30 +141,29 @@ message DropPartitionResponse {
 
 // BLOB datatype operations
 
-message GetBlobRequest {
+message BlobGetRequest {
     required string table_uuid = 1;
     required bytes key = 2;
 };
 
-message GetBlobResponse {
+message BlobGetResponse {
     required bool found = 1;
-    optional int32 value_length = 2;
+    repeated int32 value_length = 2;
     optional bytes version_tag = 3;
 };
 
-message PutBlobRequest {
+message BlobPutRequest {
     required string table_uuid = 1;
     required bytes key = 2;
     required int32 value_length = 3;
     optional bytes version_tag = 4;
 };
 
-message PutBlobResponse {
+message BlobPutResponse {
     required bool success = 1;
-    optional bytes version_tag = 2;
-    optional int32 value_length = 3;
 };
 
+// Union container type
 
 message SamoaRequest {
     required CommandType type = 1;
@@ -183,8 +180,8 @@ message SamoaRequest {
     optional CreatePartitionRequest create_partition = 10;
     optional DropPartitionRequest   drop_partition = 11;
 
-    optional GetBlobRequest get_blob = 12;
-    optional PutBlobRequest put_blob = 13;
+    optional BlobGetRequest blob_get = 12;
+    optional BlobPutRequest blob_put = 13;
 
     // generates an error response
     optional Error            error = 6;
@@ -206,7 +203,7 @@ message SamoaResponse {
     optional CreatePartitionResponse create_partition = 10;
     optional DropPartitionResponse   drop_partition = 11;
 
-    optional GetBlobResponse get_blob = 12;
-    optional PutBlobResponse put_blob = 13;
+    optional BlobGetResponse blob_get = 12;
+    optional BlobPutResponse blob_put = 13;
 };
 

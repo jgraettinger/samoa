@@ -3,9 +3,8 @@
 #include "samoa/persistence/rolling_hash.hpp"
 #include "samoa/persistence/heap_rolling_hash.hpp"
 #include "samoa/persistence/mapped_rolling_hash.hpp"
+#include <boost/bind.hpp>
 #include <algorithm>
-
-#include <iostream>
 
 namespace samoa {
 namespace persistence {

@@ -1,5 +1,5 @@
 #ifndef SAMOA_SPINLOCK_HPP
-#define SAMOA__SPINLOCK_HPP
+#define SAMOA_SPINLOCK_HPP
 
 #include "samoa/error.hpp"
 #include <pthread.h>
@@ -13,14 +13,22 @@ public:
 
     spinlock()
     {
-        checked_throw(pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE),
-            "spinlock::spinlock(): pthread_spin_init");
+        SAMOA_ASSERT_ERRNO(pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE));
     }
 
     ~spinlock()
     {
-        checked_abort(pthread_spin_destroy(&_lock),
-            "spinlock::~spinlock(): pthread_spin_destroy");
+        SAMOA_ABORT_ERRNO(pthread_spin_destroy(&_lock));
+    }
+
+    void acquire()
+    {
+        SAMOA_ASSERT_ERRNO(pthread_spin_lock(&_lock));
+    }
+
+    void release()
+    {
+        SAMOA_ABORT_ERRNO(pthread_spin_unlock(&_lock));
     }
 
     class guard
@@ -28,21 +36,19 @@ public:
     public:
 
         guard(spinlock & sl)
-         : _plock(&sl._lock)
+         : _sl(sl)
         {
-            checked_throw(pthread_spin_lock(_plock),
-                "spinlock::guard::guard(): pthread_spin_lock");
+            _sl.acquire();
         }
 
         ~guard()
         {
-            checked_abort(pthread_spin_unlock(_plock),
-                "spinlock::guard::~guard(): pthread_spin_unlock");
+            _sl.release();
         }
 
     private:
 
-        pthread_spinlock_t * _plock;
+        spinlock & _sl;
     };
 
 private:

@@ -70,7 +70,9 @@ void py_run(proactor & p, bool exit_when_idle)
 void make_proactor_bindings()
 {
     bpl::class_<proactor, proactor_ptr_t, boost::noncopyable>(
-        "Proactor", bpl::init<>())
+        "Proactor", bpl::no_init)
+        .def("get_proactor", &proactor::get_proactor)
+        .staticmethod("get_proactor")
         .def("run", &py_run, (
             bpl::arg("exit_when_idle") = true))
         .def("run_later", &py_run_later, (
@@ -84,7 +86,9 @@ void make_proactor_bindings()
             bpl::arg("kwargs") = bpl::dict()))
         .def("shutdown", &proactor::shutdown)
         .def("serial_io_service", &proactor::serial_io_service)
-        .def("concurrent_io_service", &proactor::concurrent_io_service);
+        .def("concurrent_io_service", &proactor::concurrent_io_service)
+        .def("declare_serial_io_service", &proactor::declare_serial_io_service)
+        .def("declare_concurrent_io_service", &proactor::declare_concurrent_io_service);
 
     bpl::class_<boost::asio::io_service, io_service_ptr_t, boost::noncopyable>(
         "_ioservice", bpl::no_init);

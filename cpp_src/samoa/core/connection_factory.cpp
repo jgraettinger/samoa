@@ -1,7 +1,9 @@
 
 #include "samoa/core/connection_factory.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/asio.hpp>
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace core {
@@ -31,12 +33,13 @@ connection_factory::connection_factory(
     const connection_factory::callback_t & callback,
     const core::io_service_ptr_t & io_srv,
     const std::string & host,
-    const std::string & port)
+    unsigned short port)
 
 {
     ptr_t p(boost::make_shared<connection_factory_priv>(io_srv, 60000));
 
-    ip::tcp::resolver::query query(host, port);
+    ip::tcp::resolver::query query(host,
+        boost::lexical_cast<std::string>(port));
 
     // start an async resolution of the host & port
     p->_resolver.async_resolve(query, boost::bind(

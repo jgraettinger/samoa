@@ -1,7 +1,7 @@
 
 #include "samoa/client/server.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
-#include <iostream>
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace client {
@@ -14,7 +14,7 @@ unsigned default_timeout_ms = 60 * 1000;
 ///////////////////////////////////////////////////////////////////////////////
 // Connection & construction 
 
-// private, friend constructor-class for use with boost::make_shared
+//! private, friend constructor-class for use with boost::make_shared
 class server_private_ctor : public server
 {
 public:
@@ -29,7 +29,7 @@ public:
     const server_connect_to_callback_t & callback,
     const core::io_service_ptr_t & io_srv,
     const std::string & host,
-    const std::string & port)
+    unsigned short port)
 {
     return core::connection_factory::connect_to(
         boost::bind(&server::on_connect, _1, io_srv, _2, callback),

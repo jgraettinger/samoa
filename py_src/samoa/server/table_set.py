@@ -22,7 +22,7 @@ class TableSet(object):
                 self._dropped.add(model.uuid)
                 continue
 
-            table = Table(model, context,
+            table = Table.build_table(model, context,
                 prev_table_set and prev_table_set.get_table(model.uuid))
 
             self._tables[model.uuid] = table

@@ -5,7 +5,7 @@
 #include "samoa/client/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/uuid.hpp"
-#include <mutex>
+#include "samoa/spinlock.hpp"
 #include <boost/unordered_map.hpp>
 #include <memory>
 #include <list>
@@ -20,7 +20,7 @@ public:
 
     typedef server_pool_ptr_t ptr_t;
 
-    server_pool(const core::proactor_ptr_t &);
+    server_pool();
     virtual ~server_pool();
 
     // Submits the request via server::schedule_request to a
@@ -38,15 +38,12 @@ public:
     //   connections being re-established
     void close();
 
-    // TODO(johng): Make these protected?
-
-    // A server address must be declared before requests can
-    //  be submitted under the server uuid. Not thread safe.
+    /// A server address must be declared before requests can
+    ///  be submitted under the server uuid.
     void set_server_address(const core::uuid & server_uid,
-        const std::string & host, unsigned port);
+        const std::string & host, unsigned short port);
 
-    // Adds an existing, connected server instance to the pool.
-    //  Not thread safe.
+    /// Adds an existing, connected server instance to the pool.
     void set_connected_server(const core::uuid & server_uid,
         const server::ptr_t & server);
 
@@ -55,11 +52,9 @@ private:
     void on_connect(const boost::system::error_code &,
         server::ptr_t, const core::uuid &);
 
-    std::mutex _mutex;
-    core::proactor_ptr_t _proactor;
-
-    typedef std::pair<std::string, unsigned> address_t;
-
+    spinlock _lock;
+    
+    typedef std::pair<std::string, unsigned short> address_t;
     typedef boost::unordered_map<core::uuid, address_t> address_map_t;
     address_map_t _addresses;
 
@@ -69,6 +64,9 @@ private:
     typedef std::list<server::request_callback_t> callback_list_t;
     typedef boost::unordered_map<core::uuid, callback_list_t> connecting_map_t;
     connecting_map_t _connecting;
+
+    // proactor lifetime management
+    core::proactor_ptr_t _proactor;
 };
 
 }

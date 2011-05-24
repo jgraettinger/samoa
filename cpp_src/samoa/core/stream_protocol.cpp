@@ -1,5 +1,6 @@
 
 #include "samoa/core/stream_protocol.hpp"
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace core {
@@ -295,7 +296,7 @@ void stream_protocol_write_interface::on_write_queued(
 //  stream_protocol
 
 stream_protocol::stream_protocol(
-    io_service_ptr_t io_srv,
+    const io_service_ptr_t & io_srv,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock
 ) :
     stream_protocol_read_interface(),

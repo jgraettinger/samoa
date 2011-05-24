@@ -26,7 +26,7 @@ future::ptr_t py_schedule_request(server_pool & s, const core::uuid & uuid)
 void make_server_pool_bindings()
 {
     bpl::class_<server_pool, server_pool::ptr_t, boost::noncopyable>(
-        "ServerPool", bpl::init<core::proactor::ptr_t>(bpl::args("proactor")))
+        "ServerPool", bpl::init<>())
         .def("set_server_address", &server_pool::set_server_address)
         .def("set_connected_server", &server_pool::set_connected_server)
         .def("schedule_request", &py_schedule_request)

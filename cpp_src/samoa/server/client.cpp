@@ -5,6 +5,7 @@
 #include "samoa/server/command_handler.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include <boost/asio.hpp>
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {

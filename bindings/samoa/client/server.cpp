@@ -32,7 +32,7 @@ void py_on_connect_to(
 
 future::ptr_t py_connect_to(
     const core::io_service_ptr_t & io_srv,
-    const std::string & host, const std::string & port)
+    const std::string & host, unsigned short port)
 {
     future::ptr_t f(boost::make_shared<future>());
     server::connect_to(boost::bind(py_on_connect_to, f, _1, _2),

@@ -50,8 +50,8 @@ class TestPeerDiscovery(unittest.TestCase):
             if tbl_name not in table_names:
                 session.add(samoa.model.table.Table(
                     uuid = tbl_uuid, name = tbl_name,
-                    data_type = samoa.persistence.BLOB_TYPE,
-                    replication_factor = 2, lamport_consistency_bound = 60))
+                    data_type = samoa.persistence.DataType.BLOB_TYPE,
+                    replication_factor = 2))
                 table_names.add(tbl_name)
                 session.flush()
 

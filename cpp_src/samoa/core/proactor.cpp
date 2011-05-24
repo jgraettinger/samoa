@@ -1,10 +1,17 @@
 
 #include "samoa/core/proactor.hpp"
+#include "samoa/error.hpp"
+#include "samoa/log.hpp"
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace core {
 
 void null_cleanup(boost::asio::io_service *){}
+
+// static initialization
+boost::weak_ptr<proactor> proactor::_class_instance;
+spinlock proactor::_class_lock;
 
 // boost::asio uses RTTI to establish a common registry of services,
 //  however RTTI doesn't work well across shared library boundaries.
@@ -14,18 +21,22 @@ proactor::proactor()
  : _next_serial_service(0),
    _concurrent_thread_count(0),
    _io_srv(&null_cleanup)
-{ declare_serial_io_service(); }
+{
+    LOG_DBG("called");
+}
 
 proactor::~proactor()
-{ }
+{
+    LOG_DBG("called");
+}
 
 void proactor::declare_serial_io_service()
 {
-    std::lock_guard<std::mutex> guard(_mutex);
+    spinlock::guard guard(_class_lock);
 
-    if(_io_srv.get())
-        throw std::runtime_error("proactor::declare_serial_io_service(): "
-            "this thread has already declared");
+    SAMOA_ASSERT(!_io_srv.get() && "this thread has already declared");
+
+    LOG_DBG("serial service declared");
 
     // create a new io-service to run
     _serial_io_services.push_back(
@@ -36,13 +47,13 @@ void proactor::declare_serial_io_service()
 
 void proactor::declare_concurrent_io_service()
 {
-    std::lock_guard<std::mutex> guard(_mutex);
+    spinlock::guard guard(_class_lock);
 
-    if(_io_srv.get())
-        throw std::runtime_error("proactor::declare_concurrent_io_service(): "
-            "this thread has already declared");
+    SAMOA_ASSERT(!_io_srv.get() && "this thread has already declared");
 
-    assert(!_serial_io_services.empty()); 
+    SAMOA_ASSERT(!_serial_io_services.empty());
+
+    LOG_DBG("concurrent service declared");
 
     _concurrent_thread_count += 1;
 
@@ -54,9 +65,9 @@ void proactor::declare_concurrent_io_service()
 
 io_service_ptr_t proactor::serial_io_service()
 {
-    std::lock_guard<std::mutex> guard(_mutex);
+    spinlock::guard guard(_class_lock);
 
-    assert(!_serial_io_services.empty()); 
+    SAMOA_ASSERT(!_serial_io_services.empty());
 
     io_service_ptr_t io_srv = _serial_io_services.at(_next_serial_service); 
 
@@ -69,10 +80,18 @@ io_service_ptr_t proactor::serial_io_service()
 
 io_service_ptr_t proactor::concurrent_io_service()
 {
-    if(!_threaded_io_service)
-        return serial_io_service();
+    _class_lock.acquire();
 
-    return _threaded_io_service;
+    if(!_threaded_io_service)
+    {
+        _class_lock.release();
+        return serial_io_service();
+    }
+
+    io_service_ptr_t result = _threaded_io_service;
+    _class_lock.release();
+
+    return result;
 }
 
 // helper for proactor::run_later callback dispatch
@@ -88,7 +107,7 @@ void on_run_later(const boost::system::error_code & ec,
     callback(io_srv);
 }
 
-// Again, deadline_timer doesn't work across shared-library boundaries,
+// deadline_timer doesn't work across shared-library boundaries,
 //  so it's use needs to be encapsulated into libsamoa.
 timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
     unsigned delay_ms)
@@ -107,10 +126,8 @@ timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
 
 void proactor::run(bool exit_when_idle /* = true */)
 {
-    if(!_io_srv.get())
-        throw std::runtime_error("proactor::run(): "
-            "declare_serial_io_service or declare_concurrent_io_service must "
-            "first be called from this thread");
+    SAMOA_ASSERT(_io_srv.get() && "serial or concurrent io-service "
+        "must be declared from this thread");
 
 //    std::unique_ptr<boost::asio::io_service::work> work;
 
@@ -124,7 +141,7 @@ void proactor::run(bool exit_when_idle /* = true */)
 
 void proactor::shutdown()
 {
-    std::lock_guard<std::mutex> guard(_mutex);
+    spinlock::guard guard(_class_lock);
 
     for(size_t i = 0; i != _serial_io_services.size(); ++i)
         _serial_io_services[i]->stop();

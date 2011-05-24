@@ -13,10 +13,9 @@ class Table(ModelBase):
     uuid = sa.Column(UUIDType, primary_key = True)
     dropped = sa.Column(sa.Boolean, default = False)
     name = sa.Column(sa.String, nullable = False)
-    data_type = sa.Column(sa.Integer, nullable = False)
+    data_type = sa.Column(sa.String, nullable = False)
 
     replication_factor = sa.Column(sa.Integer, nullable = False) 
-    lamport_consistency_bound = sa.Column(sa.Integer, nullable = False)
 
     # Partition maps relationship 'table', with
     #   backreference 'partitions'
@@ -25,14 +24,12 @@ class Table(ModelBase):
             uuid,
             name,
             data_type,
-            replication_factor,
-            lamport_consistency_bound):
+            replication_factor):
 
         self.uuid = uuid
         self.name = name
-        self.data_type = data_type
+        self.data_type = data_type.name
         self.replication_factor = replication_factor
-        self.lamport_consistency_bound = lamport_consistency_bound
 
     @classmethod
     def compute_ring_update(cls, tracked_partitions, unknown_partitions):

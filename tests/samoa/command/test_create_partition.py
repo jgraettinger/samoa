@@ -46,7 +46,7 @@ class TestCreatePartition(unittest.TestCase):
             partition = self.context.get_table(
                 table_uuid).get_partition(part_uuid)
             
-            self.assertEquals(partition.ring_position, 1234567)
+            self.assertEquals(partition.get_ring_position(), 1234567)
             self.assertEquals(partition.storage_size, 1 << 20)
             self.assertEquals(partition.index_size, 1 << 12)
 

@@ -23,8 +23,29 @@ typedef boost::shared_ptr<client> client_ptr_t;
 class command_handler;
 typedef boost::shared_ptr<command_handler> command_handler_ptr_t;
 
-};
-};
+class cluster_state;
+typedef boost::shared_ptr<cluster_state> cluster_state_ptr_t;
+
+class table_set;
+typedef boost::shared_ptr<table_set> table_set_ptr_t;
+
+class peer_set;
+typedef boost::shared_ptr<peer_set> peer_set_ptr_t;
+
+class table;
+typedef boost::shared_ptr<table> table_ptr_t;
+
+class partition;
+typedef boost::shared_ptr<partition> partition_ptr_t;
+
+class local_partition;
+typedef boost::shared_ptr<local_partition> local_partition_ptr_t;
+
+class remote_partition;
+typedef boost::shared_ptr<remote_partition> remote_partition_ptr_t;
+
+}
+}
 
 #endif
 

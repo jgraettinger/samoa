@@ -103,7 +103,7 @@ public:
         const server_connect_to_callback_t &,
         const core::io_service_ptr_t &,
         const std::string & host,
-        const std::string & port);
+        unsigned short port);
 
     virtual ~server();
 

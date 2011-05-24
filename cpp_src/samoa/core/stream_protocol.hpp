@@ -1,12 +1,13 @@
 #ifndef SAMOA_CORE_STREAM_PROTOCOL_HPP
 #define SAMOA_CORE_STREAM_PROTOCOL_HPP
 
+#include "samoa/core/fwd.hpp"
 #include "samoa/core/ref_buffer.hpp"
 #include "samoa/core/buffer_region.hpp"
-#include "samoa/core/proactor.hpp"
 #include <boost/asio.hpp>
-#include <boost/system/error_code.hpp>
+#include <boost/function.hpp>
 #include <boost/regex.hpp>
+#include <boost/system/error_code.hpp>
 
 namespace samoa {
 namespace core {
@@ -151,7 +152,7 @@ public:
     typedef stream_protocol_read_interface read_interface_t;
     typedef stream_protocol_write_interface write_interface_t;
 
-    stream_protocol(io_service_ptr_t,
+    stream_protocol(const io_service_ptr_t &,
         std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
 
     virtual ~stream_protocol();
