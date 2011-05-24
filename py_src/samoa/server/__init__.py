@@ -1,3 +1,1 @@
-
-import getty
-
+import samoa.core

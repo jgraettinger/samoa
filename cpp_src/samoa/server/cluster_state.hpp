@@ -42,8 +42,14 @@ public:
     cluster_state(std::unique_ptr<spb::ClusterState> && desc,
         const ptr_t & current);
 
-    const spb::ClusterState & get_protobuf_description()
+    const spb::ClusterState & get_protobuf_description() const
     { return *_desc; }
+
+    const peer_set_ptr_t & get_peer_set() const
+    { return _peer_set; }
+
+    const table_set_ptr_t & get_table_set() const
+    { return _table_set; }
 
     //! Merges a peer cluster_state description into the local description
     /*!
