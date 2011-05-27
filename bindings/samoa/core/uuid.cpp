@@ -9,13 +9,13 @@ namespace core {
 
 namespace bpl = boost::python;
 
-std::string py_to_hex_str(const uuid & u)
+std::string py_to_hex(const uuid & u)
 { return boost::lexical_cast<std::string>(u); }
 
 std::string py_repr(const uuid & u)
-{ return "UUID(" + py_to_hex_str(u) + ")"; }
+{ return "UUID(" + py_to_hex(u) + ")"; }
 
-uuid py_from_hex_str(const bpl::str & s)
+uuid py_from_hex(const bpl::str & s)
 { 
     char * buf;
     Py_ssize_t len;
@@ -27,7 +27,7 @@ uuid py_from_hex_str(const bpl::str & s)
     return gen(buf, buf + len);
 }
 
-uuid py_from_name_str(const bpl::str & s)
+uuid py_from_name(const bpl::str & s)
 {
     char * buf;
     Py_ssize_t len;
@@ -79,11 +79,11 @@ void make_uuid_bindings()
 {
     bpl::class_<uuid>("UUID", bpl::no_init)
         .def("__repr__", &py_repr)
-        .def("to_hex_str", &py_to_hex_str)
-        .def("from_hex_str", &py_from_hex_str)
-        .staticmethod("from_hex_str")
-        .def("from_name_str", &py_from_name_str)
-        .staticmethod("from_name_str")
+        .def("to_hex", &py_to_hex)
+        .def("from_hex", &py_from_hex)
+        .staticmethod("from_hex")
+        .def("from_name", &py_from_name)
+        .staticmethod("from_name")
         .def("from_random", &py_from_random)
         .staticmethod("from_random")
         .def("from_nil", &py_from_nil)

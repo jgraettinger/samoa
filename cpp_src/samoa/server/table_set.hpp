@@ -30,7 +30,7 @@ public:
         \return true iff local was modified
     */
     bool merge_table_set(const spb::ClusterState & peer,
-        spb::ClusterState & local);
+        spb::ClusterState & local) const;
 
 private:
 

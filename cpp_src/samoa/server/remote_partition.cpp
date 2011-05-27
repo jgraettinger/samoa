@@ -12,7 +12,7 @@ remote_partition::remote_partition(
 
 bool remote_partition::merge_partition(
     const spb::ClusterState::Table::Partition & peer,
-    spb::ClusterState::Table::Partition & local)
+    spb::ClusterState::Table::Partition & local) const
 {
     if(peer.lamport_ts() <= local.lamport_ts())
         return false;

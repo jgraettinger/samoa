@@ -61,7 +61,7 @@ public:
         \return true iff local_table was modified
     */
     bool merge_table(const spb::ClusterState::Table & peer_table,
-        spb::ClusterState::Table & local_table);
+        spb::ClusterState::Table & local_table) const;
 
 private:
 

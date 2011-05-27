@@ -45,19 +45,30 @@ table::table(const spb::ClusterState::Table & ptable,
     for(; it != ptable.partition().end(); ++it)
     {
         // check partitions ring-order invariant
-        SAMOA_ASSERT(partition_order_cmp()(*it, *last_it));
+        SAMOA_ASSERT(last_it == it || partition_order_cmp()(*last_it, *it));
         last_it = it;
 
-        if(it->dropped())
-            continue;
-
         core::uuid p_uuid = core::uuid_from_hex(it->uuid());
+
+        if(it->dropped())
+        {
+            // index w/ nullptr, to enforce uuid uniqueness
+            SAMOA_ASSERT(_index.insert(
+                std::make_pair(p_uuid, partition::ptr_t())).second);
+            continue;
+        }
+
+        partition::ptr_t part, old_part;
+
+        if(current)
+        {
+            uuid_index_t::const_iterator p_it = current->_index.find(p_uuid);
+
+            if(p_it != current->_index.end())
+                old_part = p_it->second;
+        }
+
         core::uuid p_server_uuid = core::uuid_from_hex(it->server_uuid());
-
-        partition::ptr_t old_part = (current ?
-            current->get_partition(p_uuid) : partition::ptr_t());
-
-        partition::ptr_t part;
 
         if(p_server_uuid == _server_uuid)
         {
@@ -71,7 +82,7 @@ table::table(const spb::ClusterState::Table & ptable,
         }
 
         // index partition on uuid, checking for duplicates
-        SAMOA_ASSERT(!_index.insert(std::make_pair(p_uuid, part)).second);
+        SAMOA_ASSERT(_index.insert(std::make_pair(p_uuid, part)).second);
         _ring.push_back(part);
     }
 }
@@ -97,7 +108,7 @@ const table::ring_t & table::get_ring() const
 partition::ptr_t table::get_partition(const core::uuid & uuid) const
 {
     uuid_index_t::const_iterator it = _index.find(uuid);
-    if(it == _index.end())
+    if(it == _index.end() || !it->second)
     {
         error::throw_not_found("partition", core::to_hex(uuid));
     }
@@ -124,7 +135,7 @@ void table::route_key(const std::string & key,
 
 bool table::merge_table(
     const spb::ClusterState::Table & peer,
-    spb::ClusterState::Table & local)
+    spb::ClusterState::Table & local) const
 {
     bool dirty = false;
 
@@ -151,7 +162,8 @@ bool table::merge_table(
     while(p_it != peer_parts.end())
     {
         // check partition order invariant
-        SAMOA_ASSERT(partition_order_cmp()(*p_it, *last_p_it));
+        SAMOA_ASSERT(last_p_it == p_it ||
+            partition_order_cmp()(*last_p_it, *p_it));
         last_p_it = p_it;
 
         // eventually, we'll want to study local partitions & the
@@ -162,12 +174,6 @@ bool table::merge_table(
            partition_order_cmp()(*p_it, *l_it))
         {
             // we don't know about this partition
-            LOG_INFO("discovered partition " << p_it->uuid());
-
-            core::uuid server_uuid = core::uuid_from_hex(p_it->server_uuid());
-
-            // a peer cannot tell us of our own partition
-            SAMOA_ASSERT(server_uuid == _server_uuid);
 
             // index where the partition should appear
             int local_ind = std::distance(local_parts.begin(), l_it);
@@ -177,15 +183,22 @@ bool table::merge_table(
 
             new_part->set_uuid(p_it->uuid());
             new_part->set_ring_position(p_it->ring_position());
-            new_part->set_server_uuid(p_it->server_uuid());
 
             if(p_it->dropped())
             {
-                LOG_INFO("partition " << p_it->uuid() << " was dropped");
+                LOG_INFO("discovered (dropped) partition " << p_it->uuid());
                 new_part->set_dropped(true);
             }
             else
             {
+                // check that peer isn't trying to tell us of our own partition
+                core::uuid server_uuid = core::uuid_from_hex(p_it->server_uuid());
+                SAMOA_ASSERT(server_uuid != _server_uuid);
+
+                LOG_INFO("discovered partition " << p_it->uuid());
+
+                new_part->set_server_uuid(p_it->server_uuid());
+
                 // build a temporary remote_partition instance to build
                 //  our local view of the partition
                 remote_partition(*new_part,
@@ -236,9 +249,9 @@ bool table::merge_table(
                 uuid_index_t::const_iterator uuid_it = \
                     _index.find(core::uuid_from_hex(l_it->uuid()));
 
-                assert(uuid_it != _index.end());
+                SAMOA_ASSERT(uuid_it != _index.end());
 
-                dirty = dirty || uuid_it->second->merge_partition(*p_it, *l_it);
+                dirty = uuid_it->second->merge_partition(*p_it, *l_it) || dirty;
             }
             ++l_it; ++p_it;
         }

@@ -19,7 +19,7 @@ cluster_state::cluster_state(
 
 bool cluster_state::merge_cluster_state(
     const spb::ClusterState & peer_state,
-    spb::ClusterState & local_state)
+    spb::ClusterState & local_state) const
 {
     if(!_table_set->merge_table_set(peer_state, local_state))
     {

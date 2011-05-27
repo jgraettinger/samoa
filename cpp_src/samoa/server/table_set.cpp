@@ -8,7 +8,7 @@ namespace samoa {
 namespace server {
 
 table_set::table_set(const spb::ClusterState & state,
-    const ptr_t & old_tset)
+    const ptr_t & current)
 {
     auto it = state.table().begin();
     auto last_it = it;
@@ -28,8 +28,18 @@ table_set::table_set(const spb::ClusterState & state,
 
         core::uuid uuid = core::uuid_from_hex(it->uuid());
 
-        table::ptr_t tbl = boost::make_shared<table>(*it, local_uuid,
-            old_tset ? old_tset->get_table_by_uuid(uuid) : table::ptr_t());
+        table::ptr_t tbl, old_tbl;
+
+        if(current)
+        {
+            uuid_index_t::const_iterator t_it = \
+                current->_uuid_index.find(uuid);
+
+            if(t_it != current->_uuid_index.end())
+                old_tbl = t_it->second;
+        }
+
+        tbl = boost::make_shared<table>(*it, local_uuid, old_tbl);
 
         // index table on uuid
         SAMOA_ASSERT(_uuid_index.insert(std::make_pair(uuid, tbl)).second);
@@ -69,7 +79,7 @@ table::ptr_t table_set::get_table_by_name(const std::string & name)
 }
 
 bool table_set::merge_table_set(const spb::ClusterState & peer,
-    spb::ClusterState & local)
+    spb::ClusterState & local) const
 {
     bool dirty = false;
 
@@ -95,7 +105,6 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
         if(l_it == local_tables.end() || p_it->uuid() < l_it->uuid())
         {
             // we don't know about this table
-            LOG_INFO("discovered table " << p_it->uuid());
 
             // index where the table should appear
             int local_ind = std::distance(local_tables.begin(), l_it);
@@ -106,11 +115,13 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
 
             if(p_it->dropped())
             {
-                LOG_INFO("discovered table " << p_it->uuid() << " was dropped");
+                LOG_INFO("discovered (dropped) table " << p_it->uuid());
                 new_ptable->set_dropped(true);
             }
             else
             {
+                LOG_INFO("discovered table " << p_it->uuid());
+
                 // set ctor-required fields of the new table
                 new_ptable->set_data_type(p_it->data_type());
 
@@ -163,9 +174,9 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
                 uuid_index_t::const_iterator uuid_it = \
                     _uuid_index.find(core::uuid_from_hex(l_it->uuid()));
 
-                assert(uuid_it != _uuid_index.end());
+                SAMOA_ASSERT(uuid_it != _uuid_index.end());
 
-                dirty = dirty || uuid_it->second->merge_table(*p_it, *l_it);
+                dirty = uuid_it->second->merge_table(*p_it, *l_it) || dirty;
             }
             ++l_it; ++p_it;
         }

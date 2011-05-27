@@ -43,7 +43,7 @@ public:
     */
     virtual bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,
-        spb::ClusterState::Table::Partition & local) = 0;
+        spb::ClusterState::Table::Partition & local) const = 0;
 
 protected:
 

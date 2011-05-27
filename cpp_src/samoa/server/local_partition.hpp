@@ -27,7 +27,7 @@ public:
         const ptr_t & current);
 
     bool merge_partition(const spb::ClusterState::Table::Partition & peer,
-        spb::ClusterState::Table::Partition & local);
+        spb::ClusterState::Table::Partition & local) const;
 };
 
 }

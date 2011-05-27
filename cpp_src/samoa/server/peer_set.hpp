@@ -19,7 +19,7 @@ public:
     peer_set(const spb::ClusterState &, const ptr_t &);
 
     void merge_peer_set(const spb::ClusterState & peer,
-        spb::ClusterState & local);
+        spb::ClusterState & local) const;
 };
 
 }

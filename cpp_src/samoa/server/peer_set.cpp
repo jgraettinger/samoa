@@ -30,7 +30,7 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
 }
 
 void peer_set::merge_peer_set(const spb::ClusterState & peer,
-    spb::ClusterState & local)
+    spb::ClusterState & local) const
 {
     // collect uuids of all servers we must peer with
     boost::unordered_set<core::uuid> required_peers;

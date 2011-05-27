@@ -57,7 +57,7 @@ public:
     */
     bool merge_cluster_state(
         const spb::ClusterState & peer_state,
-        spb::ClusterState & local_state);
+        spb::ClusterState & local_state) const;
 
 private:
 

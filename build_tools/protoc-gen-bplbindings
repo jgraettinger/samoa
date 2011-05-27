@@ -197,6 +197,8 @@ def main():
 
 MSG_HEAD = """
 #include <boost/python.hpp>
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include "%s"
 
 namespace bpl = boost::python;
@@ -216,16 +218,45 @@ ENUM_VALUE = """
 """[1:-1]
 
 MSG_DEFINITION = """
-std::string py_SerializeToString(%(msg_name)s & msg)
+bool py_ParseFromBytes(%(msg_name)s & msg, const bpl::str & s)
+{
+    google::protobuf::io::ArrayInputStream input(
+        PyString_AsString(s.ptr()), PyString_Size(s.ptr()));
+
+    return msg.ParseFromZeroCopyStream(&input);
+}
+
+std::string py_SerializeToBytes(%(msg_name)s & msg)
 {
     std::string result;
     msg.SerializeToString(&result);
     return result;
 }
 
+bool py_ParseFromText(%(msg_name)s & msg, const bpl::str & s)
+{
+    google::protobuf::io::ArrayInputStream input(
+        PyString_AsString(s.ptr()), PyString_Size(s.ptr()));
+
+    return google::protobuf::TextFormat::Parse(&input, &msg);
+}
+
+std::string py_SerializeToText(%(msg_name)s & msg)
+{
+    if(!msg.IsInitialized())
+    {
+        throw std::runtime_error("%(msg_name)s isn't initialized");
+    }
+
+    std::string result;
+    google::protobuf::TextFormat::PrintToString(msg, &result);
+    return result;
+}
+
 void make_%(msg_name)s_bindings()
 {
     bpl::class_<%(msg_name)s> binder("%(msg_name)s");
+    binder.def(bpl::init<const %(msg_name)s &>());
 
     void (%(msg_name)s::*copy_from_ptr)(const %(msg_name)s &) = \\
         &%(msg_name)s::CopyFrom;
@@ -233,14 +264,20 @@ void make_%(msg_name)s_bindings()
     // TODO(johng): My preference would be for __slots__-like behavior
     //   on wrapped Message classes. The mechanics of boost::python
     //   make this difficult.
+    //
+    // To prevent typos in assignment from causing inadvertant errors
+    //  where fields are silently added onto the Python message instance,
+    //  I've elected to implement the C++ set_$(field) api for assigment.
 
     // Common message methods
     binder.def("__str__", &%(msg_name)s::DebugString);
     binder.def("IsInitialized", &%(msg_name)s::IsInitialized);
     binder.def("Clear", &%(msg_name)s::Clear);
     binder.def("CopyFrom", copy_from_ptr);
-    binder.def("SerializeToString", &py_SerializeToString);
-    binder.def("ParseFromString", &%(msg_name)s::ParseFromString);
+    binder.def("ParseFromBytes", &py_ParseFromBytes);
+    binder.def("SerializeToBytes", &py_SerializeToBytes);
+    binder.def("ParseFromText", &py_ParseFromText);
+    binder.def("SerializeToText", &py_SerializeToText);
 
 """[1:-1]
 
@@ -331,6 +368,9 @@ public:
 
     bpl::object iter();
 
+    void SwapElements(int ind1, int ind2)
+    { _m.mutable_%(field_name)s()->SwapElements(ind1, ind2); }
+
 private:
 
     %(msg_name)s & _m; 
@@ -399,7 +439,7 @@ method_templates[(FieldDesc.LABEL_REPEATED, 'message')] = \
 
 void %(msg_name)s_%(field_name)s_proxy::setitem(unsigned ind,
     %(cpp_type)s val)
-{ _m.mutable_%(field_name)s(ind)->CopyFrom(*val); }
+{ /* not reachable from bindings */ }
 
 %(cpp_type)s py_add_%(field_name)s(
     %(msg_name)s & m)
@@ -413,15 +453,13 @@ binding_templates = {}
 
 binding_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = """
     binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
-    binder.add_property("%(field_name)s",
-        &py_%(field_name)s,
-        &%(msg_name)s::set_%(field_name)s);
+    binder.def("set_%(field_name)s", &%(msg_name)s::set_%(field_name)s);
+    binder.add_property("%(field_name)s", &py_%(field_name)s);
 """[1:-1]
 
 binding_templates[(FieldDesc.LABEL_REQUIRED, 'basic')] = """
-    binder.add_property("%(field_name)s",
-        &%(msg_name)s::%(field_name)s,
-        &%(msg_name)s::set_%(field_name)s);
+    binder.def("set_%(field_name)s", &%(msg_name)s::set_%(field_name)s);
+    binder.add_property("%(field_name)s", &%(msg_name)s::%(field_name)s);
 """[1:-1]
 
 # STRING types
@@ -430,21 +468,20 @@ binding_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = """
     void (%(msg_name)s::*set_%(field_name)s_ptr)(const std::string &) = \\
         &%(msg_name)s::set_%(field_name)s;
 
+    binder.def("set_%(field_name)s", set_%(field_name)s_ptr);
     binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
-    binder.add_property("%(field_name)s",
-        &py_%(field_name)s,
-        set_%(field_name)s_ptr);
+    binder.add_property("%(field_name)s", &py_%(field_name)s);
 """[:-1]
 
 binding_templates[(FieldDesc.LABEL_REQUIRED, 'str')] = """
     void (%(msg_name)s::*set_%(field_name)s_ptr)(const std::string &) = \\
         &%(msg_name)s::set_%(field_name)s;
 
+    binder.def("set_%(field_name)s", set_%(field_name)s_ptr);
     binder.add_property("%(field_name)s",
         bpl::make_function(
             &%(msg_name)s::%(field_name)s,
-            bpl::return_value_policy<bpl::copy_const_reference>()),
-        set_%(field_name)s_ptr);
+            bpl::return_value_policy<bpl::copy_const_reference>()));
 """[:-1]
 
 # MESSAGE type
@@ -477,10 +514,10 @@ repeated_binding_common = """
         "%(msg_name)s_%(field_name)s_proxy", bpl::no_init);
     %(field_name)s_proxy_binder.def("__len__",
         &%(msg_name)s_%(field_name)s_proxy::len);
-    %(field_name)s_proxy_binder.def("__setitem__",
-        &%(msg_name)s_%(field_name)s_proxy::setitem);
     %(field_name)s_proxy_binder.def("__iter__",
         &%(msg_name)s_%(field_name)s_proxy::iter);
+    %(field_name)s_proxy_binder.def("SwapElements",
+        &%(msg_name)s_%(field_name)s_proxy::SwapElements);
 
 """
 
@@ -490,10 +527,14 @@ binding_templates[(FieldDesc.LABEL_REPEATED, 'basic')] = \
     %(field_name)s_proxy_binder.def("__getitem__",
         &%(msg_name)s_%(field_name)s_proxy::getitem);
 
+    %(field_name)s_proxy_binder.def("__setitem__",
+        &%(msg_name)s_%(field_name)s_proxy::setitem);
+
     binder.def("add_%(field_name)s", &py_add_%(field_name)s);
 
     %(field_name)s_iter_binder.def("next",
         &%(msg_name)s_%(field_name)s_iter::next);
+
 """
 
 binding_templates[(FieldDesc.LABEL_REPEATED, 'str')] = \
@@ -502,6 +543,9 @@ binding_templates[(FieldDesc.LABEL_REPEATED, 'str')] = \
     %(field_name)s_proxy_binder.def("__getitem__",
         &%(msg_name)s_%(field_name)s_proxy::getitem,
         bpl::return_value_policy<bpl::copy_const_reference>());
+
+    %(field_name)s_proxy_binder.def("__setitem__",
+        &%(msg_name)s_%(field_name)s_proxy::setitem);
 
     binder.def("add_%(field_name)s", &py_add_%(field_name)s);
 
@@ -516,6 +560,8 @@ binding_templates[(FieldDesc.LABEL_REPEATED, 'message')] = \
     %(field_name)s_proxy_binder.def("__getitem__",
         &%(msg_name)s_%(field_name)s_proxy::getitem,
         bpl::return_value_policy<bpl::reference_existing_object>());
+
+    // __setitem__ not defined
 
     binder.def("add_%(field_name)s", &py_add_%(field_name)s,
         bpl::return_value_policy<bpl::reference_existing_object>());

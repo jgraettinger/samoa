@@ -29,7 +29,7 @@ public:
 
     bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,
-        spb::ClusterState::Table::Partition & local);
+        spb::ClusterState::Table::Partition & local) const;
 };
 
 }

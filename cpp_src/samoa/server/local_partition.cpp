@@ -12,10 +12,10 @@ local_partition::local_partition(
 
 bool local_partition::merge_partition(
     const spb::ClusterState::Table::Partition & peer,
-    spb::ClusterState::Table::Partition & local)
+    spb::ClusterState::Table::Partition & local) const
 {
     // with the exception of dropping, local_partitions are
-    //  only be modified... locally
+    //  only to be modified... locally
     SAMOA_ASSERT(local.lamport_ts() >= peer.lamport_ts());
     return false;
 }
