@@ -21,7 +21,7 @@ public:
     table_set(const spb::ClusterState &,
         const ptr_t &);
 
-    table_ptr_t get_table_by_uuid(const core::uuid &);
+    table_ptr_t get_table(const core::uuid &);
 
     table_ptr_t get_table_by_name(const std::string &);
 

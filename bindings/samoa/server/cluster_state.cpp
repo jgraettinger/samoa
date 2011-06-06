@@ -1,6 +1,8 @@
 
 #include <boost/python.hpp>
 #include "samoa/server/cluster_state.hpp"
+#include "samoa/server/peer_set.hpp"
+#include "samoa/server/table_set.hpp"
 
 namespace samoa {
 namespace server {
@@ -14,9 +16,9 @@ void make_cluster_state_bindings()
         .def("get_protobuf_description", &cluster_state::get_protobuf_description,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("get_peer_set", &cluster_state::get_peer_set,
-            bpl::return_value_policy<bpl::reference_existing_object>())
+            bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_table_set", &cluster_state::get_table_set,
-            bpl::return_value_policy<bpl::reference_existing_object>())
+            bpl::return_value_policy<bpl::copy_const_reference>())
         .def("merge_cluster_state", &cluster_state::merge_cluster_state);
 }
 

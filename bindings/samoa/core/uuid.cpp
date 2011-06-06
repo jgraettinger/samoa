@@ -13,7 +13,7 @@ std::string py_to_hex(const uuid & u)
 { return boost::lexical_cast<std::string>(u); }
 
 std::string py_repr(const uuid & u)
-{ return "UUID(" + py_to_hex(u) + ")"; }
+{ return "UUID('" + py_to_hex(u) + "')"; }
 
 uuid py_from_hex(const bpl::str & s)
 { 
@@ -25,6 +25,13 @@ uuid py_from_hex(const bpl::str & s)
 
     boost::uuids::string_generator gen;
     return gen(buf, buf + len);
+}
+
+uuid * py_hex_ctor(const bpl::str & s)
+{
+    // boost::python expects a new reference when this function
+    //  is used within boost::python::make_constructor()
+    return new uuid(py_from_hex(s));
 }
 
 uuid py_from_name(const bpl::str & s)
@@ -77,7 +84,8 @@ size_t py_hash(const uuid & self)
 
 void make_uuid_bindings()
 {
-    bpl::class_<uuid>("UUID", bpl::no_init)
+    bpl::class_<uuid>("UUID", bpl::init<const uuid &>())
+        .def("__init__", bpl::make_constructor(py_hex_ctor))
         .def("__repr__", &py_repr)
         .def("to_hex", &py_to_hex)
         .def("from_hex", &py_from_hex)

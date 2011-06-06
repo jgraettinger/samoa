@@ -22,7 +22,7 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
         set_server_address(core::uuid_from_hex(it->uuid()),
             it->hostname(), it->port());
 
-        if(current)
+        if(current && current->has_server(uuid))
         {
             set_connected_server(uuid, current->get_server(uuid));
         }
@@ -108,8 +108,10 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
                 new_peer->set_uuid(p_it->uuid());
                 new_peer->set_hostname(p_it->hostname());
                 new_peer->set_port(p_it->port());
+
+                ++l_it; 
             }
-            ++l_it; ++p_it;
+            ++p_it;
         }
         else if(l_it->uuid() < p_it->uuid())
         {
@@ -120,7 +122,8 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
                 LOG_INFO("dropped peer " << l_it->uuid());
                 remove_record();
             }
-            ++l_it;
+            else
+                ++l_it;
         }
         else
         {
@@ -131,7 +134,10 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
                 LOG_INFO("dropped peer " << l_it->uuid());
                 remove_record();
             }
-            ++l_it; ++p_it;
+            else
+                ++l_it;
+
+            ++p_it;
         }
     }
     while(l_it != local.peer().end())
@@ -142,7 +148,8 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
             LOG_INFO("dropped peer " << l_it->uuid());
             remove_record();
         }
-        ++l_it;
+        else
+            ++l_it;
     }
 }
 

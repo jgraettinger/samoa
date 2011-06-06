@@ -52,7 +52,7 @@ table_set::table_set(const spb::ClusterState & state,
     }
 }
 
-table::ptr_t table_set::get_table_by_uuid(const core::uuid & uuid)
+table::ptr_t table_set::get_table(const core::uuid & uuid)
 {
     uuid_index_t::const_iterator it = _uuid_index.find(uuid);
     if(it == _uuid_index.end())

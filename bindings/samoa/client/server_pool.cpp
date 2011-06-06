@@ -30,7 +30,10 @@ void make_server_pool_bindings()
         .def("set_server_address", &server_pool::set_server_address)
         .def("set_connected_server", &server_pool::set_connected_server)
         .def("schedule_request", &py_schedule_request)
+        .def("has_server", &server_pool::has_server)
         .def("get_server", &server_pool::get_server)
+        .def("get_server_hostname", &server_pool::get_server_hostname)
+        .def("get_server_port", &server_pool::get_server_port)
         .def("close", &server_pool::close);
 }
 

@@ -29,6 +29,8 @@ void server_pool::set_connected_server(const core::uuid & uuid,
 {
     spinlock::guard guard(_lock);
 
+    SAMOA_ASSERT(_addresses.find(uuid) != _addresses.end());
+
     _servers[uuid] = server;
 }
 
@@ -71,16 +73,53 @@ void server_pool::schedule_request(
     pending_callbacks.push_back(callback);
 }
 
+bool server_pool::has_server(const core::uuid & uuid)
+{
+    spinlock::guard guard(_lock);
+
+    return _addresses.find(uuid) != _addresses.end();
+}
+
 server::ptr_t server_pool::get_server(const core::uuid & uuid)
 {
     spinlock::guard guard(_lock);
 
     server_map_t::const_iterator it = _servers.find(uuid);
+    if(it == _servers.end())
+    {
+        error::throw_not_found("server", core::to_hex(uuid));
+    }
 
-    if(it != _servers.end() && it->second && it->second->is_open())
+    if(it->second && it->second->is_open())
         return it->second;
     else
         return server::ptr_t();
+}
+
+std::string server_pool::get_server_hostname(const core::uuid & uuid)
+{
+    spinlock::guard guard(_lock);
+
+    address_map_t::const_iterator it = _addresses.find(uuid);
+    if(it == _addresses.end())
+    {
+        error::throw_not_found("server", core::to_hex(uuid));
+    }
+
+    return it->second.first;
+}
+
+unsigned short server_pool::get_server_port(const core::uuid & uuid)
+{
+    spinlock::guard guard(_lock);
+
+    address_map_t::const_iterator it = _addresses.find(uuid);
+    if(it == _addresses.end())
+    {
+        error::throw_not_found("server", core::to_hex(uuid));
+    }
+
+    return it->second.second;
 }
 
 void server_pool::close()

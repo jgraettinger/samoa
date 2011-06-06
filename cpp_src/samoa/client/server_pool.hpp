@@ -23,14 +23,25 @@ public:
     server_pool();
     virtual ~server_pool();
 
-    // Submits the request via server::schedule_request to a
-    //  connected server instance. If none is available, a
-    //  connection is first established.
+    /// Submits the request via server::schedule_request to a
+    ///  connected server instance. If none is available, a
+    ///  connection is first established.
     void schedule_request(const server::request_callback_t &,
         const core::uuid & server_uid);
 
-    // Returns a server only if a connected instance is available
-    server::ptr_t get_server(const core::uuid & server_uid);
+    /// Returns true if the server UUID is known
+    bool has_server(const core::uuid &);
+
+    /// Throws if the uuid is known
+    /// Returns nullptr if no connected instance is available
+    /// Otherwise, returns a connected instance
+    server::ptr_t get_server(const core::uuid &);
+
+    /// Throws if the server uuid is unknown
+    std::string get_server_hostname(const core::uuid &);
+
+    /// Throws if the server uuid is unknown
+    unsigned short get_server_port(const core::uuid &);
 
     // Closes all currently-connected server instances
     //   Connections being established are unaffected, and

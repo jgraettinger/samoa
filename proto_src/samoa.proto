@@ -48,7 +48,7 @@ message ClusterState {
         required uint32 port = 3;
 
         // local server statistics
-        required bool   connected = 6;
+        optional bool   connected = 6;
         optional uint32 queue_size = 7;
         optional uint32 latency_ms = 8;
     };
