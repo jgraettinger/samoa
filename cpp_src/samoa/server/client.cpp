@@ -4,6 +4,8 @@
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/core/stream_protocol.hpp"
+#include "samoa/error.hpp"
+#include "samoa/log.hpp"
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 
@@ -24,7 +26,14 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    _start_called(false),
    _timeout_ms(default_timeout_ms),
    _timeout_timer(*get_io_service())
-{ }
+{
+    LOG_DBG("created");    
+}
+
+client::~client()
+{
+    LOG_DBG("destroyed");
+}
 
 void client::init()
 {
@@ -40,14 +49,14 @@ void client::init()
     _ignore_timeout = false;
 }
 
-void client::set_error(const std::string & err_type,
+void client::set_error(unsigned int err_code,
     const std::string & err_msg, bool closing)
 {
     _response.Clear();
 
     _response.set_type(core::protobuf::ERROR);
     _response.set_closing(closing);
-    _response.mutable_error()->set_type(err_type);
+    _response.mutable_error()->set_code(err_code);
     _response.mutable_error()->set_message(err_msg);
 }
 
@@ -56,24 +65,14 @@ void client::start_response()
     if(_start_called)
         return;
 
-    _start_called = true;
+    SAMOA_ASSERT(!has_queued_writes());
 
-    if(has_queued_writes())
-    {
-        close();
-        throw std::runtime_error("client::start_response() "
-            "client already has queued writes (but shouldn't)");
-    }
+    _start_called = true;
 
     // serlialize & queue core::protobuf::SamoaResponse for writing
     _response.SerializeToZeroCopyStream(&_proto_out_adapter);
 
-    if(_proto_out_adapter.ByteCount() > (1<<16))
-    {
-        close();
-        throw std::runtime_error("client::start_response() "
-            "core::protobuf::SamoaResponse overflow (larger than 65K)");
-    }
+    SAMOA_ASSERT(_proto_out_adapter.ByteCount() < (1<<16));
 
     // write network order unsigned short length
     uint16_t len = htons((uint16_t)_proto_out_adapter.ByteCount());
@@ -88,12 +87,7 @@ void client::start_response()
 
 core::stream_protocol::write_interface_t & client::write_interface()
 {
-    if(!_start_called)
-    {
-        close();
-        throw std::runtime_error(
-            "client::write_interface(): start_response() hasn't been called");
-    }
+    SAMOA_ASSERT(_start_called);
     return core::stream_protocol::write_interface();
 }
 
@@ -127,8 +121,8 @@ void client::on_request_length(const boost::system::error_code & ec,
     if(ec)
     {
         close();
-        throw boost::system::system_error(ec,
-            "client::on_request_length()");
+        LOG_WARN("connection error: " << ec);
+        return;
     }
 
     uint16_t len;
@@ -145,14 +139,13 @@ void client::on_request_body(const boost::system::error_code & ec,
     if(ec)
     {
         close();
-        throw boost::system::system_error(ec,
-            "client::on_request_body()");
+        LOG_WARN("connection error: " << ec);
     }
 
     _proto_in_adapter.reset(read_body);
     if(!_request.ParseFromZeroCopyStream(&_proto_in_adapter))
     {
-        set_error("request error", "malformed request", true);
+        set_error(400, "protobuf parse error", true);
         finish_response();
         return;
     }
@@ -165,7 +158,7 @@ void client::on_request_body(const boost::system::error_code & ec,
 
     if(!handler)
     {
-        set_error("request error", "unknown operation type", false);
+        set_error(501, "unknown operation type", false);
         finish_response();
         return;
     }
@@ -186,8 +179,7 @@ void client::on_response_finish(const boost::system::error_code & ec)
     if(ec)
     {
         close();
-        throw boost::system::system_error(ec,
-            "client::on_response_finish()");
+        LOG_WARN("connection error: " << ec);
     }
 
     // close after writing this response?
@@ -210,7 +202,6 @@ void client::on_timeout(boost::system::error_code ec)
     // _timeout_timer will call on_timeout with ec == 0 on timeout
     if(!ec && _ignore_timeout)
     {
-
         // start a timeout timer, waiting for requests from the client
         _timeout_timer.expires_from_now(
             boost::posix_time::milliseconds(_timeout_ms));
@@ -226,8 +217,7 @@ void client::on_timeout(boost::system::error_code ec)
             boost::system::errc::stream_timeout);
 
         close();
-        throw boost::system::system_error(ec,
-            "client::on_timeout()");
+        LOG_INFO("client timeout");
     }
 }
 

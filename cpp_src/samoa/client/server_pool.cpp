@@ -66,7 +66,6 @@ void server_pool::schedule_request(
         server::connect_to(
             boost::bind(&server_pool::on_connect, shared_from_this(),
                 _1, _2, uuid),
-            _proactor->serial_io_service(),
             addr_it->second.first,
             addr_it->second.second);
     }

@@ -30,13 +30,10 @@ void py_on_connect_to(
     future->on_result(bpl::object(server));
 }
 
-future::ptr_t py_connect_to(
-    const core::io_service_ptr_t & io_srv,
-    const std::string & host, unsigned short port)
+future::ptr_t py_connect_to(const std::string & host, unsigned short port)
 {
     future::ptr_t f(boost::make_shared<future>());
-    server::connect_to(boost::bind(py_on_connect_to, f, _1, _2),
-        io_srv, host, port);
+    server::connect_to(boost::bind(py_on_connect_to, f, _1, _2), host, port);
     return f;
 }
 
@@ -96,7 +93,7 @@ void make_server_bindings()
 {
     bpl::class_<server::request_interface>(
         "_Server_RequestInterface", bpl::no_init)
-        .def("get_request", &server::request_interface::get_request,
+        .def("get_message", &server::request_interface::get_message,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("start_request", &server::request_interface::start_request)
         .def("write_interface", &server::request_interface::write_interface,
@@ -105,10 +102,11 @@ void make_server_bindings()
 
     bpl::class_<server::response_interface>(
         "_Server_ResponseInterface", bpl::no_init)
-        .def("get_response", &server::response_interface::get_response,
+        .def("get_message", &server::response_interface::get_message,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("read_interface", &server::response_interface::read_interface,
             bpl::return_value_policy<bpl::reference_existing_object>())
+        .def("is_error", &server::response_interface::is_error)
         .def("finish_response", &server::response_interface::finish_response);
 
     bpl::class_<server, server::ptr_t, boost::noncopyable,

@@ -85,7 +85,7 @@ public:
     {}
 
     virtual const char * what() const throw()
-    { return p_what.c_str(); }
+    { return _what.c_str(); }
 
     const std::string type;
     const std::string msg;
@@ -96,11 +96,11 @@ public:
 
 private:
 
-    std::string p_what;
+    std::string _what;
 };
 
 void throw_not_found(const std::string & what,
-    const std::string & ident);
+    const std::string & identity);
 
 void generate_core_file();
 

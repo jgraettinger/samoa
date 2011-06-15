@@ -23,19 +23,21 @@ public:
 
 connection_factory::connection_factory(
     const core::io_service_ptr_t & io_srv, unsigned timeout_ms)
- : _timeout_ms(timeout_ms),
-   _sock(new ip::tcp::socket(*io_srv)),
+ :  _timeout_ms(timeout_ms),
+    _io_srv(io_srv),
+    _sock(new ip::tcp::socket(*io_srv)),
     _resolver(_sock->get_io_service()),
     _timer(_sock->get_io_service())
 { }
 
 /* static */ connection_factory::ptr_t connection_factory::connect_to(
     const connection_factory::callback_t & callback,
-    const core::io_service_ptr_t & io_srv,
     const std::string & host,
     unsigned short port)
-
 {
+    core::io_service_ptr_t io_srv = \
+        proactor::get_proactor()->serial_io_service();
+
     ptr_t p(boost::make_shared<connection_factory_priv>(io_srv, 60000));
 
     ip::tcp::resolver::query query(host,
@@ -67,7 +69,7 @@ void connection_factory::on_resolve(
         // resolution failed or timed out
         _timer.cancel();
         _sock->close();
-        callback(ec, _sock);
+        callback(ec, io_service_ptr_t(), _sock);
     }
 
     // resolution succeeded
@@ -101,13 +103,13 @@ void connection_factory::on_connect(
         // attempt failed, no more endpoints
         _timer.cancel();
         _sock->close();
-        callback(ec, _sock);
+        callback(ec, io_service_ptr_t(), _sock);
     }
     else
     {
         // successfully connected
         _timer.cancel();
-        callback(ec, _sock);
+        callback(ec, _io_srv, _sock);
     }
 }
 

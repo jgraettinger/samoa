@@ -33,7 +33,7 @@ public:
     // Request to be written to the server. This object is fully mutable
     //  and exclusively available to the current "renter" of the
     //  server::request_interface, *until start_request() is called*
-    core::protobuf::SamoaRequest & get_request();
+    core::protobuf::SamoaRequest & get_message();
 
     // Serializes & writes the current core::protobuf::SamoaRequest
     //   Postcondition: the core::protobuf::SamoaRequest is no longer mutable
@@ -68,12 +68,15 @@ public:
 
     server_response_interface();
 
-    const core::protobuf::SamoaResponse & get_response() const;
+    const core::protobuf::SamoaResponse & get_message() const;
 
     core::stream_protocol::read_interface_t & read_interface();
 
-    // Called when reading of the response is complete.
-    //  Releases ownership of the server::response_interface
+    /// Returns true iff the SamoaResonse is of type ERROR.
+    bool is_error();
+
+    /// Called when reading of the response is complete.
+    ///  Releases ownership of the server::response_interface
     void finish_response();
 
 private:
@@ -101,7 +104,6 @@ public:
 
     static core::connection_factory::ptr_t connect_to(
         const server_connect_to_callback_t &,
-        const core::io_service_ptr_t &,
         const std::string & host,
         unsigned short port);
 
@@ -146,9 +148,10 @@ private:
     void on_response_length(
         const boost::system::error_code &, const core::buffer_regions_t &);
 
-    // reads server response & dispatches through strand to on_response_pop()
     void on_response_body(
         const boost::system::error_code &, const core::buffer_regions_t &);
+
+    void on_next_response();
 
     void on_timeout(const boost::system::error_code &);
     void on_error(const boost::system::error_code &);

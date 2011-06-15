@@ -228,7 +228,7 @@ future::ptr_t py_iterate(
 void make_persister_bindings()
 {
     bpl::class_<persister, persister::ptr_t, boost::noncopyable>(
-        "Persister", bpl::init<core::proactor &>())
+        "Persister", bpl::init<>())
         .def("get", &py_get)
         .def("put", &py_put)
         .def("drop", &py_drop)

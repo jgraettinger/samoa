@@ -19,12 +19,12 @@ public:
 
     typedef boost::function<
         void(const boost::system::error_code & ec,
+            const io_service_ptr_t &,
             std::unique_ptr<boost::asio::ip::tcp::socket> &)
     > callback_t;
 
     static ptr_t connect_to(
         const callback_t & callback,
-        const core::io_service_ptr_t & io_srv,
         const std::string & host,
         unsigned short port);
 
@@ -44,6 +44,7 @@ private:
         const callback_t &);
 
     unsigned _timeout_ms;
+    io_service_ptr_t _io_srv;
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
     boost::asio::ip::tcp::resolver _resolver;
     boost::asio::ip::tcp::resolver::iterator _endpoint_iter;

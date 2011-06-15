@@ -3,6 +3,7 @@
 #include "samoa/persistence/rolling_hash.hpp"
 #include "samoa/persistence/heap_rolling_hash.hpp"
 #include "samoa/persistence/mapped_rolling_hash.hpp"
+#include "samoa/core/proactor.hpp"
 #include <boost/bind.hpp>
 #include <algorithm>
 
@@ -11,8 +12,9 @@ namespace persistence {
 
 using namespace std;
 
-persister::persister(core::proactor & p)
- : _strand(*p.concurrent_io_service()),
+persister::persister()
+ : _proactor(core::proactor::get_proactor()),
+   _strand(*_proactor->concurrent_io_service()),
    _max_iter_records(50),
    _max_rotations(10)
 { }

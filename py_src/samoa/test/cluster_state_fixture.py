@@ -6,7 +6,7 @@ from samoa.core.uuid import UUID
 from samoa.core import protobuf as pb
 from samoa.persistence.data_type import DataType
 
-class ClusterStateGenerator(object):
+class ClusterStateFixture(object):
 
     def __init__(self, random_seed = None, state = None):
 
@@ -42,7 +42,7 @@ class ClusterStateGenerator(object):
 
     def clone_peer(self, uuid = None):
 
-        cln = ClusterStateGenerator(
+        cln = ClusterStateFixture(
             random_seed = self.rnd.randint(0, 1<<32))
 
         cln.server_uuid = self._coerce_uuid(uuid or cln.server_uuid)

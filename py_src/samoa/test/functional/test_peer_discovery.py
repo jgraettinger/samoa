@@ -9,10 +9,10 @@ import samoa.model.meta
 import samoa.model.server
 import samoa.model.table
 import samoa.model.partition
-import samoa.core
 import samoa.client
 import samoa.server.context
 import samoa.core.protobuf
+import samoa.core.proactor
 import samoa.command.shutdown
 import samoa.command.cluster_state
 import samoa.persistence

@@ -3,7 +3,7 @@
 
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/persistence/record.hpp"
-#include "samoa/core/proactor.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
@@ -36,7 +36,7 @@ public:
         void (const boost::system::error_code &, const std::vector<const record*> &)
     > iterate_callback_t;
 
-    persister(core::proactor &);
+    persister();
     virtual ~persister();
 
     void add_heap_hash(size_t region_size, size_t table_size);
@@ -108,6 +108,7 @@ private:
 
     std::vector<const record *> _tmp_record_vec;
 
+    core::proactor_ptr_t _proactor;
     boost::asio::strand _strand;
 
     size_t _max_iter_records;

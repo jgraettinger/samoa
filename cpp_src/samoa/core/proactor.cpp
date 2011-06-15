@@ -7,6 +7,7 @@
 namespace samoa {
 namespace core {
 
+// lifetime is already managed by shared_ptr
 void null_cleanup(boost::asio::io_service *){}
 
 // static initialization

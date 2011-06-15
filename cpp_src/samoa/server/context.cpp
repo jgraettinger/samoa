@@ -26,6 +26,13 @@ context::context(const spb::ClusterState & state)
         std::move(state_copy), cluster_state::ptr_t());
 }
 
+cluster_state_ptr_t context::get_cluster_state() const
+{
+    spinlock::guard guard(_cluster_state_lock);
+
+    return _cluster_state;
+}
+
 void context::cluster_state_transaction(
     const cluster_state_callback_t & callback)
 {
@@ -54,8 +61,11 @@ void context::on_cluster_state_transaction(
 
     // TODO(johng) commit next_cluster_state to disk
 
-    // 'commit' transaction by updating held instance
-    _cluster_state = next_state;
+    // 'commit' transaction by atomically updating held instance
+    {
+        spinlock::guard guard(_cluster_state_lock);
+        _cluster_state = next_state;
+    }
 }
 
 }

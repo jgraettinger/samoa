@@ -10,16 +10,13 @@ class TestPersister(unittest.TestCase):
 
     def setUp(self):
 
-        proactor = Proactor.get_proactor()
-        proactor.declare_serial_io_service()
-
-        self.persister = Persister(proactor)
+        self.persister = Persister()
         self.persister.add_heap_hash(1<<14, 10)
         self.persister.add_heap_hash(1<<16, 1000)
 
     def test_basic(self):
 
-        proactor = proactor.get_proactor()
+        proactor = Proactor.get_proactor()
 
         def test():
             yield self.persister.put(
@@ -34,7 +31,7 @@ class TestPersister(unittest.TestCase):
 
     def test_churn(self):
 
-        proactor = proactor.get_proactor()
+        proactor = Proactor.get_proactor()
 
         keys = [str(uuid.uuid4()) for i in xrange(600)]
         values = {}

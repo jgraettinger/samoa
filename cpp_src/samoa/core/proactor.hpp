@@ -22,18 +22,25 @@ public:
     *  Only one proactor instance exists at a time, but the instance
     *  will be destroyed when the last client-held pointer goes out of
     *  scope.
+    *
+    * The first thread to call get_proactor() implicitly calls
+    *  declare_serial_io_service()
     */
     static proactor::ptr_t get_proactor()
     {
-        spinlock::guard guard(_class_lock);
-
-        ptr_t result = _class_instance.lock();
-
-        if(!result)
+        ptr_t result;
         {
+            spinlock::guard guard(_class_lock);
+
+            result = _class_instance.lock();
+
+            if(result)
+                return result;
+
             result = ptr_t(new proactor());
             _class_instance = result;
         }
+        result->declare_serial_io_service();
         return result;
     }
 

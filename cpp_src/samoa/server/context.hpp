@@ -5,6 +5,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
+#include "samoa/spinlock.hpp"
 #include <boost/function.hpp>
 #include <string>
 
@@ -31,8 +32,7 @@ public:
     unsigned short get_server_port() const
     { return _port; }
 
-    const cluster_state_ptr_t & get_cluster_state() const
-    { return _cluster_state; }
+    cluster_state_ptr_t get_cluster_state() const;
 
     typedef boost::function<bool (spb::ClusterState &)
         > cluster_state_callback_t;
@@ -75,13 +75,14 @@ private:
 
     void on_cluster_state_transaction(const cluster_state_callback_t &);
 
-    core::uuid  _uuid;
-    std::string _hostname;
-    unsigned short _port;
+    const core::uuid  _uuid;
+    const std::string _hostname;
+    const unsigned short _port;
 
-    core::proactor_ptr_t   _proactor;
-    core::io_service_ptr_t _io_srv;
+    const core::proactor_ptr_t   _proactor;
+    const core::io_service_ptr_t _io_srv;
 
+    mutable spinlock _cluster_state_lock;
     cluster_state_ptr_t _cluster_state;
 };
 

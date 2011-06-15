@@ -1,66 +1,102 @@
 
-import unittest
 import getty
+import unittest
 
-import samoa.module
-import samoa.client.server
-import samoa.server.context
-import samoa.command.declare_table
-import samoa.command.create_partition
+from samoa.core.protobuf import CommandType
+from samoa.core.uuid import UUID
+from samoa.core.proactor import Proactor
+from samoa.server.listener import Listener
+from samoa.client.server import Server
+
+from samoa.test.module import TestModule
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestCreatePartition(unittest.TestCase):
 
     def setUp(self):
-        module = samoa.module.TestModule()
-        self.injector = module.configure(getty.Injector())
-        self.context = self.injector.get_instance(samoa.server.context.Context)
-        self.proactor = self.context.get_proactor()
-        self.port = self.context.get_listener().get_port()
+
+        self.proactor = Proactor.get_proactor()
+
+        self.injector = TestModule().configure(getty.Injector())
+        self.fixture = self.injector.get_instance(ClusterStateFixture)
 
     def test_create_partition(self):
 
+        self.fixture.add_table(name = 'test_table',
+            uuid = UUID.from_name('test_table'))
+
+        listener = self.injector.get_instance(Listener)
+        context = listener.get_context()
+
         def test():
 
-            server = yield samoa.client.server.Server.connect_to(
-                self.proactor.serial_io_service(), 'localhost', str(self.port))
-
-            # create a test table
-            cmd = samoa.command.declare_table.DeclareTable(
-                name = 'test_table',
-                replication_factor = 1)
-            resp = yield cmd.request(server)
-
-            table_uuid = samoa.core.UUID.from_hex_str(resp.uuid)
+            server = yield Server.connect_to(
+                listener.get_address(), listener.get_port())
 
             # create a partition
-            cmd = samoa.command.create_partition.CreatePartition(
-                table_uuid = table_uuid,
-                ring_position = 1234567,
-                storage_size = (1 << 20),
-                index_size = (1 << 12))
-            resp = yield cmd.request(server)
+            request = yield server.schedule_request()
 
-            part_uuid = samoa.core.UUID.from_hex_str(resp.uuid)
+            request.get_message().set_type(CommandType.CREATE_PARTITION)
+
+            cp = request.get_message().mutable_create_partition()
+            cp.set_table_uuid(UUID.from_name('test_table').to_hex())
+            cp.set_ring_position(1234567)
+            cp.set_storage_size(1<<20)
+            cp.set_index_size(1<<12)
+
+            # extract created UUID from response
+            response = yield request.finish_request()
+            self.assertFalse(response.is_error())
+
+            part_uuid = UUID(response.get_message().create_partition.uuid)
+            response.finish_response()
 
             # assert partition is live on the server
-            partition = self.context.get_table(
-                table_uuid).get_partition(part_uuid)
+            cluster_state = context.get_cluster_state()
             
-            self.assertEquals(partition.get_ring_position(), 1234567)
-            self.assertEquals(partition.storage_size, 1 << 20)
-            self.assertEquals(partition.index_size, 1 << 12)
+            part = cluster_state.get_table_set().get_table(
+                UUID.from_name('test_table')).get_partition(part_uuid)
 
-            # creating a partition for an unknown table fails
-            table_uuid = samoa.core.UUID.from_random()
-            cmd.table_uuid = table_uuid
+            self.assertEquals(part.get_ring_position(), 1234567)
+            #self.assertEquals(part.get_storage_size(), 1 << 20)
+            #self.assertEquals(part.get_index_size(), 1 << 12)
 
-            try:
-                response = yield cmd.request(server)
-                self.assertFalse(True)
-            except Exception, e:
-                pass
+            server.close()
+            listener.cancel()
+            yield
 
-            self.proactor.shutdown()
+        self.proactor.spawn(test)
+        self.proactor.run()
+
+    def test_create_partition_unknown_table(self):
+
+        listener = self.injector.get_instance(Listener)
+
+        def test():
+
+            server = yield Server.connect_to(
+                listener.get_address(), listener.get_port())
+
+            # create a partition
+            request = yield server.schedule_request()
+
+            request.get_message().set_type(CommandType.CREATE_PARTITION)
+
+            cp = request.get_message().mutable_create_partition()
+            cp.set_table_uuid(UUID.from_name('unknown_table').to_hex())
+            cp.set_ring_position(1234567)
+            cp.set_storage_size(1<<20)
+            cp.set_index_size(1<<12)
+
+            # extract created UUID from response
+            response = yield request.finish_request()
+
+            self.assertTrue(response.is_error())
+            self.assertEquals(response.get_message().error.code, 404)
+
+            server.close()
+            listener.cancel()
             yield
 
         self.proactor.spawn(test)

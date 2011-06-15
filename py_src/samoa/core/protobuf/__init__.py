@@ -4,6 +4,8 @@ import bisect
 from _samoa import *
 del _samoa
 
+from samoa.core.uuid import UUID
+
 def add_peer(state, uuid):
     assert isinstance(state, ClusterState)
 
@@ -50,4 +52,34 @@ def add_partition(state, uuid, ring_position):
 
     return part
 
+def find_peer(state, uuid):
+    assert isinstance(state, ClusterState)
+
+    keys = [UUID(t.uuid) for t in state.peer]
+    ind = bisect.bisect_left(keys, uuid)
+
+    if ind == len(keys) or UUID(keys[ind]) != uuid:
+        return None
+
+    return state.peer[ind]
+
+def find_table(state, uuid):
+    assert isinstance(state, ClusterState)
+
+    keys = [UUID(t.uuid) for t in state.table]
+    ind = bisect.bisect_left(keys, uuid)
+
+    if ind == len(keys) or UUID(keys[ind]) != uuid:
+        return None
+
+    return state.table[ind]
+
+def find_partition(state, uuid, ring_position):
+    assert isinstance(state, ClusterState_Table)
+
+    for part in state.partition:
+        if part.ring_position == ring_position and UUID(part.uuid) == uuid:
+            return part
+
+    return None
 

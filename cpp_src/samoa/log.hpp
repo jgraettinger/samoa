@@ -5,6 +5,7 @@
 
 #define LOG_DBG(what)  (std::cerr << "DBG " << LOG_HEADER << what << std::endl)
 #define LOG_INFO(what) (std::cerr << "INF " << LOG_HEADER << what << std::endl)
+#define LOG_WARN(what) (std::cerr << "WRN " << LOG_HEADER << what << std::endl)
 #define LOG_ERR(what)  (std::cerr << "ERR " << LOG_HEADER << what << std::endl)
 
 // to disable debug logging at compile-time
@@ -17,7 +18,6 @@ unsigned gettid();
 
 }
 }
-
 
 #endif
 

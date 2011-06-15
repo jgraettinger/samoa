@@ -22,7 +22,7 @@ enum CommandType {
 
 // Returned by Samoa to indicate an error in the operation
 message Error {
-    required string type = 1;
+    required uint32 code = 1;
     optional string message = 2;
 };
 
@@ -123,7 +123,7 @@ message CreatePartitionRequest {
     required string table_uuid = 1;
     required int32  ring_position = 2;
 
-    required int64 storage_size = 3;
+    required int64  storage_size = 3;
     required int64  index_size = 4;
 };
 

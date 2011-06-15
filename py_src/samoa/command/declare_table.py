@@ -1,34 +1,8 @@
 
 import samoa.command
-from samoa.persistence import DataType
+
+from samoa.persistence.data_type import DataType
 from samoa.core import protobuf
-from samoa.server import cluster_state
-
-class DeclareTable(samoa.command.Command):
-
-    def __init__(self, name, data_type = DataType.BLOB_TYPE, replication_factor = 1,
-        create_if_not_exists = True):
-
-        samoa.command.Command.__init__(self)
-        self.name = name
-        self.data_type = data_type
-        self.replication_factor = replication_factor
-        self.create_if_not_exists = create_if_not_exists
-
-    def _write_request(self, request, server):
-        request.type = protobuf.CommandType.DECLARE_TABLE
-        decl_tbl = request.mutable_declare_table()
-
-        decl_tbl.name = self.name
-        decl_tbl.data_type = self.data_type.name
-        decl_tbl.replication_factor = self.replication_factor
-        decl_tbl.create_if_not_exists = self.create_if_not_exists
-        yield
-
-    def _read_response(self, response, server):
-        decl_tbl_cpy = protobuf.DeclareTableResponse()
-        decl_tbl_cpy.CopyFrom(response.declare_table)
-        yield decl_tbl_cpy
 
 class DeclareTableHandler(samoa.command.CommandHandler):
 

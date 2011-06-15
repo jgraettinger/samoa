@@ -60,14 +60,14 @@ future::ptr_t py_cluster_state_transaction(
 void make_context_bindings()
 {
     bpl::class_<context, context::ptr_t, boost::noncopyable>(
-            "Context", bpl::init<const spb::ClusterState &>())
+            "Context", bpl::init<const spb::ClusterState &>(
+                bpl::args("cluster_state")))
         .def("get_server_uuid", &context::get_server_uuid,
             bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_server_hostname", &context::get_server_hostname,
             bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_server_port", &context::get_server_port)
-        .def("get_cluster_state", &context::get_cluster_state,
-            bpl::return_value_policy<bpl::copy_const_reference>())
+        .def("get_cluster_state", &context::get_cluster_state)
         .def("cluster_state_transaction", &py_cluster_state_transaction);
 }
 

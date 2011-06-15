@@ -13,7 +13,6 @@ class TestContext(unittest.TestCase):
     def setUp(self):
 
         proactor = Proactor.get_proactor()
-        proactor.declare_serial_io_service()
 
         gen = ClusterStateGenerator()
 

@@ -25,15 +25,22 @@ public:
     std::string get_address();
     unsigned short get_port();
 
+    const context_ptr_t & get_context() const
+    { return _context; }
+
+    const protocol_ptr_t & get_protocol() const
+    { return _protocol; }
+
 private:
 
     void on_accept(const boost::system::error_code & ec);
     void on_cancel();
 
-    context_ptr_t  _context;
-    protocol_ptr_t _protocol;
+    const context_ptr_t  _context;
+    const protocol_ptr_t _protocol;
 
-    core::proactor_ptr_t _proactor;
+    // proactor lifetime management
+    const core::proactor_ptr_t _proactor;
 
     // Accepting socket
     std::unique_ptr<boost::asio::ip::tcp::acceptor> _accept_sock;

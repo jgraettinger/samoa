@@ -1,6 +1,9 @@
 
 #include "samoa/client/server.hpp"
+#include "samoa/core/connection_factory.hpp"
+#include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
+#include <boost/bind/protect.hpp>
 #include <boost/bind.hpp>
 
 namespace samoa {
@@ -27,13 +30,12 @@ public:
 
 /* static */ core::connection_factory::ptr_t server::connect_to(
     const server_connect_to_callback_t & callback,
-    const core::io_service_ptr_t & io_srv,
     const std::string & host,
     unsigned short port)
 {
     return core::connection_factory::connect_to(
-        boost::bind(&server::on_connect, _1, io_srv, _2, callback),
-        io_srv, host, port);
+        boost::bind(&server::on_connect, _1, _2, _3, callback),
+        host, port);
 }
 
 /* static */ void server::on_connect(
@@ -49,8 +51,7 @@ public:
         ptr_t p(boost::make_shared<server_private_ctor>(io_srv, sock));
 
         // start initial response read
-        p->read_data(boost::bind(&server::on_response_length,
-            p, _1, _3), 2);
+        p->on_next_response();
 
         callback(ec, p);
     }
@@ -65,7 +66,9 @@ server::server(const core::io_service_ptr_t & io_srv,
     _ignore_timeout(false),
     _timeout_ms(default_timeout_ms),
     _timeout_timer(*get_io_service())
-{ }
+{
+    LOG_DBG("created");
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 //  server::request_interface
@@ -79,7 +82,7 @@ server_request_interface::server_request_interface(const server::ptr_t & p)
     }
 }
 
-core::protobuf::SamoaRequest & server_request_interface::get_request()
+core::protobuf::SamoaRequest & server_request_interface::get_message()
 { return _srv->_request; }
 
 void server_request_interface::start_request()
@@ -161,24 +164,31 @@ server_response_interface::server_response_interface(const server::ptr_t & p)
  : _srv(p)
 { }
 
-const core::protobuf::SamoaResponse & server_response_interface::get_response() const
+const core::protobuf::SamoaResponse &
+server_response_interface::get_message() const
 { return _srv->_response; }
 
 core::stream_protocol::read_interface_t &
-    server_response_interface::read_interface()
+server_response_interface::read_interface()
 { return _srv->read_interface(); }
+
+bool server_response_interface::is_error()
+{
+    const core::protobuf::SamoaResponse & resp = get_message();
+    return resp.type() == core::protobuf::ERROR;
+}
 
 void server_response_interface::finish_response()
 {
     if(!_srv->_response.closing())
     {
-        // start next response read
-        _srv->read_data(boost::bind(&server::on_response_length,
-            _srv, _1, _3), 2);
+        // post next response read
+        _srv->get_io_service()->post(boost::bind(
+            &server::on_next_response, _srv));
     }
     else
     {
-        // server indicated it's closing it's
+        // server indicated it's closing its
         //   connection: close ours too
         _srv->close();
     }
@@ -188,7 +198,9 @@ void server_response_interface::finish_response()
 //  server interface
 
 server::~server()
-{ }
+{
+    LOG_DBG("destroyed");    
+}
 
 void server::schedule_request(const server::request_callback_t & callback)
 {
@@ -273,6 +285,13 @@ void server::on_request_written(const boost::system::error_code & ec,
         _in_request = false;
 }
 
+void server::on_next_response()
+{
+    // start response read
+    read_data(boost::bind(&server::on_response_length,
+        shared_from_this(), _1, _3), 2);
+}
+    
 void server::on_response_length(const boost::system::error_code & ec,
     const core::buffer_regions_t & read_body)
 {

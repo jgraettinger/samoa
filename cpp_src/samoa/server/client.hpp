@@ -23,6 +23,8 @@ public:
         core::io_service_ptr_t,
         std::unique_ptr<boost::asio::ip::tcp::socket> &);
 
+    ~client();
+
     // Begins reading requests
     void init();
 
@@ -49,7 +51,7 @@ public:
     // Helper which clears any set state in the response, and
     //  instead generates an error of the given type & value.
     // finish_response() must still be called to start the write
-    void set_error(const std::string & err_type,
+    void set_error(unsigned int err_code,
         const std::string & err_msg, bool closing);
 
     // Serializes & writes the current core::protobuf::SamoaResponse

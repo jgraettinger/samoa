@@ -29,7 +29,7 @@ samoa_exception::samoa_exception(
         s << "\n\t" << file << ":" << line_no << " {" << func << "}";
     }
 
-    p_what = s.str();
+    _what = s.str();
 }
 
 void throw_not_found(const std::string & what,
@@ -41,7 +41,7 @@ void throw_not_found(const std::string & what,
 
 void generate_core_file()
 {
-    LOG_ERR(__PRETTY_FUNCTION__ << ": I would if i could...");
+    LOG_ERR("I would if i could...");
 }
 
 
