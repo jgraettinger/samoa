@@ -44,6 +44,7 @@ public:
 
     const ring_t & get_ring() const;
 
+    /// Returns nullptr if none exists
     partition_ptr_t get_partition(const core::uuid &) const;
 
     //! Routes a key to set of partitions responsible for it

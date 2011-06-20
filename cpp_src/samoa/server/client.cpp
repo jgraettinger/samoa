@@ -37,8 +37,7 @@ client::~client()
 
 void client::init()
 {
-    read_data(boost::bind(&client::on_request_length,
-        shared_from_this(), _1, _3), 2);
+    on_next_request();
 
     // start a timeout timer, waiting for requests from the client
     _timeout_timer.expires_from_now(
@@ -50,7 +49,7 @@ void client::init()
 }
 
 void client::set_error(unsigned int err_code,
-    const std::string & err_msg, bool closing)
+    const std::string & err_msg, bool closing /* = false */)
 {
     _response.Clear();
 
@@ -59,6 +58,9 @@ void client::set_error(unsigned int err_code,
     _response.mutable_error()->set_code(err_code);
     _response.mutable_error()->set_message(err_msg);
 }
+
+bool client::is_error_set() const
+{ return _response.type() == core::protobuf::ERROR; }
 
 void client::start_response()
 {
@@ -115,6 +117,13 @@ void client::close()
     core::stream_protocol::close();
 }
 
+void client::on_next_request()
+{
+    // start request read
+    read_data(boost::bind(&client::on_request_length,
+        shared_from_this(), _1, _3), 2);
+}
+
 void client::on_request_length(const boost::system::error_code & ec,
     const core::buffer_regions_t & read_body)
 {
@@ -140,6 +149,7 @@ void client::on_request_body(const boost::system::error_code & ec,
     {
         close();
         LOG_WARN("connection error: " << ec);
+        return;
     }
 
     _proto_in_adapter.reset(read_body);
@@ -180,6 +190,7 @@ void client::on_response_finish(const boost::system::error_code & ec)
     {
         close();
         LOG_WARN("connection error: " << ec);
+        return;
     }
 
     // close after writing this response?
@@ -189,12 +200,12 @@ void client::on_response_finish(const boost::system::error_code & ec)
         return;
     }
 
-    // start next request
     _start_called = false;
     _response.Clear();
-    read_data(boost::bind(&client::on_request_length,
-        shared_from_this(), _1, _3), 2);
-    return;
+
+    // post to begin next request
+    get_io_service()->post(boost::bind(
+        &client::on_next_request, shared_from_this()));
 }
 
 void client::on_timeout(boost::system::error_code ec)
@@ -218,6 +229,7 @@ void client::on_timeout(boost::system::error_code ec)
 
         close();
         LOG_INFO("client timeout");
+        return;
     }
 }
 

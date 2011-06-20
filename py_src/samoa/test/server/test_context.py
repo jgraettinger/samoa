@@ -6,7 +6,8 @@ from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.context import Context
-from samoa.test.cluster_state_generator import ClusterStateGenerator
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestContext(unittest.TestCase):
 
@@ -14,7 +15,7 @@ class TestContext(unittest.TestCase):
 
         proactor = Proactor.get_proactor()
 
-        gen = ClusterStateGenerator()
+        gen = ClusterStateFixture()
 
         tbl = gen.add_table()
         gen.add_remote_partition(tbl)
@@ -28,7 +29,7 @@ class TestContext(unittest.TestCase):
 
         def callback(should_commit, state):
 
-            gen = ClusterStateGenerator(state = state)
+            gen = ClusterStateFixture(state = state)
 
             # add a new table & local partition
             tbl = gen.add_table(name = 'new_table',
@@ -47,12 +48,10 @@ class TestContext(unittest.TestCase):
             table_set = self.context.get_cluster_state().get_table_set()
 
             # can't query table by UUID
-            with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-                table_set.get_table(UUID.from_name('new_table'))
+            self.assertFalse(table_set.get_table(UUID.from_name('new_table')))
 
             # can't query table by name
-            with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-                table_set.get_table_by_name('new_table')
+            self.assertFalse(table_set.get_table_by_name('new_table'))
 
             # start a transaction which commits
             yield self.context.cluster_state_transaction(

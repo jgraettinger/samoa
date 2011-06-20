@@ -326,14 +326,28 @@ cpp_type_map = {
 method_templates = {}
 
 method_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = \
-method_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = \
+method_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = """
+bpl::object py_%(field_name)s(%(msg_name)s & msg)
+{
+    if(msg.has_%(field_name)s())
+    {
+        return bpl::object(msg.%(field_name)s());
+    }
+    // return None
+    return bpl::object();
+}
+""" 
+
 method_templates[(FieldDesc.LABEL_OPTIONAL, 'message')] = \
 method_templates[(FieldDesc.LABEL_REQUIRED, 'message')] = """
 bpl::object py_%(field_name)s(%(msg_name)s & msg)
 {
     if(msg.has_%(field_name)s())
     {
-        return bpl::object(msg.%(field_name)s());
+        bpl::reference_existing_object::apply<
+            const %(cpp_type)s &>::type convert;
+
+        return bpl::object(bpl::handle<>(convert(msg.%(field_name)s())));
     }
     // return None
     return bpl::object();

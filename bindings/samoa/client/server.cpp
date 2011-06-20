@@ -106,7 +106,7 @@ void make_server_bindings()
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("read_interface", &server::response_interface::read_interface,
             bpl::return_value_policy<bpl::reference_existing_object>())
-        .def("is_error", &server::response_interface::is_error)
+        .def("get_error_code", &server::response_interface::get_error_code)
         .def("finish_response", &server::response_interface::finish_response);
 
     bpl::class_<server, server::ptr_t, boost::noncopyable,

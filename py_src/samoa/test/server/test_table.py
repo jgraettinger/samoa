@@ -4,13 +4,14 @@ import unittest
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.table import Table
-from samoa.test.cluster_state_generator import ClusterStateGenerator
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestTable(unittest.TestCase):
 
     def setUp(self):
 
-        self.gen = ClusterStateGenerator()
+        self.gen = ClusterStateFixture()
         self.gen.add_table(name = 'table', uuid = UUID.from_name('table'))
         self.state = self.gen.state.table[0]
 
@@ -155,15 +156,14 @@ class TestTable(unittest.TestCase):
         table = Table(self.state, self.gen.server_uuid, None)
 
         # p1 is locally dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table.get_partition(UUID.from_name('p1'))
+        self.assertFalse(table.get_partition(UUID.from_name('p1')))
 
         # p2 is locally updated
         self.assertEquals(table.get_partition(UUID.from_name('p2')
             ).get_consistent_range_end(), p2_cre)
 
         # p3 isn't yet dropped
-        table.get_partition(UUID.from_name('p3'))
+        self.assertTrue(table.get_partition(UUID.from_name('p3')))
 
         # p4 isn't yet updated
         self.assertEquals(table.get_partition(UUID.from_name('p4')
@@ -181,16 +181,14 @@ class TestTable(unittest.TestCase):
         self.assertEquals(len(table.get_ring()), 7)
 
         # p1 is still dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table.get_partition(UUID.from_name('p1'))
+        self.assertFalse(table.get_partition(UUID.from_name('p1')))
 
         # p2 is still updated
         self.assertEquals(table.get_partition(UUID.from_name('p2')
             ).get_consistent_range_end(), p2_cre)
 
         # p3 is now dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table.get_partition(UUID.from_name('p3'))
+        self.assertFalse(table.get_partition(UUID.from_name('p3')))
 
         # p4 is now updated
         self.assertEquals(table.get_partition(UUID.from_name('p4')

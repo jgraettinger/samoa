@@ -72,8 +72,9 @@ public:
 
     core::stream_protocol::read_interface_t & read_interface();
 
-    /// Returns true iff the SamoaResonse is of type ERROR.
-    bool is_error();
+    /// Iff the response type is ERROR, returns the corresponding non-zero
+    //   error code. Otherwise 0 is returned, indicating a non-error.
+    unsigned get_error_code();
 
     /// Called when reading of the response is complete.
     ///  Releases ownership of the server::response_interface

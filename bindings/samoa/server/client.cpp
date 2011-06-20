@@ -32,7 +32,11 @@ void make_client_bindings()
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("get_response", &client::get_response,
             bpl::return_value_policy<bpl::reference_existing_object>())
-        .def("set_error", &client::set_error)
+        .def("set_error", &client::set_error,
+            (bpl::arg("error_code"),
+             bpl::arg("error_message"),
+             bpl::arg("closing") = false))
+        .def("is_error_set", &client::is_error_set)
         .def("start_response", &client::start_response)
         .def("write_interface", &client::write_interface,
             bpl::return_value_policy<bpl::reference_existing_object>())

@@ -3,6 +3,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
+#include <ctime>
 
 namespace samoa {
 namespace server {
@@ -17,7 +18,7 @@ table_set::table_set(const spb::ClusterState & state,
 
     for(; it != state.table().end(); ++it)
     {
-        // assert table uuid order invariant
+        // assert table uuid uniqueness and order invariant
         SAMOA_ASSERT(it == last_it || last_it->uuid() < it->uuid());
         last_it = it;
 
@@ -54,28 +55,27 @@ table_set::table_set(const spb::ClusterState & state,
 
 table::ptr_t table_set::get_table(const core::uuid & uuid)
 {
+    table::ptr_t result;
+
     uuid_index_t::const_iterator it = _uuid_index.find(uuid);
-    if(it == _uuid_index.end())
+    if(it != _uuid_index.end())
     {
-        error::throw_not_found("table uuid", core::to_hex(uuid));
+        result = it->second;
     }
-    return it->second;
+    return result;
 }
 
 table::ptr_t table_set::get_table_by_name(const std::string & name)
 {
-    name_index_t::const_iterator it = _name_index.find(name);
+    table::ptr_t result;
 
-    if(it == _name_index.end())
+    name_index_t::const_iterator it = _name_index.find(name);
+    if(it != _name_index.end() && it->second)
     {
-        error::throw_not_found("table name", name);
+        // nullptr indicates an ambiguous name, which is treated as not found
+        result = it->second;
     }
-    if(!it->second)
-    {
-        // nullptr means multiple tables have this name
-        error::throw_not_found("table name (ambiguous)", name);
-    }
-    return it->second;
+    return result;
 }
 
 bool table_set::merge_table_set(const spb::ClusterState & peer,
@@ -117,6 +117,7 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
             {
                 LOG_INFO("discovered (dropped) table " << p_it->uuid());
                 new_ptable->set_dropped(true);
+                new_ptable->set_dropped_timestamp(time(0));
             }
             else
             {
@@ -165,6 +166,7 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
                 l_it->Clear();
                 l_it->set_uuid(p_it->uuid());
                 l_it->set_dropped(true);
+                l_it->set_dropped_timestamp(time(0));
                 dirty = true;
             }
             else

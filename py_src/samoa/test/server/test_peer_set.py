@@ -5,13 +5,14 @@ from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.peer_set import PeerSet
 from samoa.server.table_set import TableSet
-from samoa.test.cluster_state_generator import ClusterStateGenerator
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestPeerSet(unittest.TestCase):
 
     def setUp(self):
 
-        self.gen = ClusterStateGenerator()
+        self.gen = ClusterStateFixture()
         self.table = self.gen.add_table()
 
     def test_ctor_edge_cases(self):
@@ -132,11 +133,11 @@ class TestPeerSet(unittest.TestCase):
         peer_set.get_server_hostname(UUID(p5))
 
         # p6 isn't yet known
-        with self.assertRaisesRegexp(RuntimeError, "<not_found>"):
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p6))
 
         # p7 isn't known
-        with self.assertRaisesRegexp(RuntimeError, "<not_found>"):
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p7))
 
         # MERGE from peer, & rebuild peer_set / table_set
@@ -148,11 +149,11 @@ class TestPeerSet(unittest.TestCase):
         table_set = TableSet(out, table_set)
 
         # p1 is not kept (partition locally dropped)
-        with self.assertRaisesRegexp(RuntimeError, "<not_found>"):
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p1))
 
         # p2 is not kept (partition remotely dropped)
-        with self.assertRaisesRegexp(RuntimeError, "<not_found>"):
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p2))
 
         # p3 is known / referenced by both
@@ -162,11 +163,11 @@ class TestPeerSet(unittest.TestCase):
         peer_set.get_server_hostname(UUID(p4))
 
         # p5 is not kept (not referenced)
-        with self.assertRaisesRegexp(RuntimeError, "<not_found>"):
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p5))
 
         # p6 was never added (not referenced)
-        with self.assertRaisesRegexp(RuntimeError, "<not_found>"):
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p6))
 
         # p6 is now known

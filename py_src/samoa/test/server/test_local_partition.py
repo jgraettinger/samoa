@@ -4,13 +4,14 @@ import unittest
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.local_partition import LocalPartition
-from samoa.test.cluster_state_generator import ClusterStateGenerator
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestLocalPartition(unittest.TestCase):
 
     def setUp(self):
 
-        self.gen = ClusterStateGenerator()
+        self.gen = ClusterStateFixture()
         table = self.gen.add_table()
         self.state = self.gen.add_local_partition(table)
 

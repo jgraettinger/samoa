@@ -4,20 +4,21 @@ package samoa.core.protobuf;
 enum CommandType {
 
     // Present only in SamoaResponse
-    ERROR = 5;
+    ERROR = 1;
 
-    PING = 1;
-    SHUTDOWN = 2;
-    CLUSTER_STATE = 6;
+    PING = 2;
+    SHUTDOWN = 3;
+    CLUSTER_STATE = 4;
 
-    DECLARE_TABLE = 7;
-    DROP_TABLE = 8;
+    CREATE_TABLE = 5;
+    ALTER_TABLE = 6;
+    DROP_TABLE = 7;
 
-    CREATE_PARTITION = 9;
-    DROP_PARTITION = 10;
+    CREATE_PARTITION = 8;
+    DROP_PARTITION = 9;
 
-    BLOB_GET = 11;
-    BLOB_PUT = 12;
+    BLOB_GET = 10;
+    BLOB_PUT = 11;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -61,6 +62,7 @@ message ClusterState {
         optional string data_type = 8;
 
         optional bool   dropped = 2 [default = false];
+        optional uint64 dropped_timestamp = 10;
 
         // mutable fields
         optional string name = 3;
@@ -70,7 +72,9 @@ message ClusterState {
         message Partition {
 
             required string uuid = 1;
+
             optional bool   dropped = 2 [default = false];
+            optional uint64 dropped_timestamp = 11;
 
             // fields captured by all partitions
             optional string server_uuid = 3;
@@ -86,35 +90,26 @@ message ClusterState {
 
 // Operations
 
-message PingRequest {
-    required int64 value_len = 1 [default = 0];
-};
-message PingResponse {
-    required int64 value_len = 1 [default = 0];
-};
-
 // Table Manipulation
 
-message DeclareTableRequest {
+message CreateTableRequest {
     required string name = 1;
     required string data_type = 2;
-    required bool create_if_not_exists = 4 [default = true];
-    required int32 replication_factor = 5 [default = 1];
+    required int32  replication_factor = 3;
 };
 
-message DeclareTableResponse {
-    required string uuid = 1;
-    required string name = 2;
-    required string data_type = 3;
-    required int32 replication_factor = 5;
-    required bool created = 6;
+message CreateTableResponse {
+    required string table_uuid = 1;
+};
+
+message AlterTableRequest {
+    required string table_uuid = 1;
+    optional string name = 2;
+    optional uint32 replication_factor = 3;
 };
 
 message DropTableRequest {
-    required string uuid = 1;
-};
-
-message DropTableResponse {
+    required string table_uuid = 1;
 };
 
 // Partition Manipulation
@@ -128,15 +123,12 @@ message CreatePartitionRequest {
 };
 
 message CreatePartitionResponse {
-    required string uuid = 1;
+    required string partition_uuid = 1;
 };
 
 message DropPartitionRequest {
     required string table_uuid = 1;
-    required string uuid = 2;
-};
-
-message DropPartitionResponse {
+    required string partition_uuid = 2;
 };
 
 // BLOB datatype operations
@@ -166,42 +158,38 @@ message BlobPutResponse {
 // Union container type
 
 message SamoaRequest {
+
     required CommandType type = 1;
 
     // whether the client will be closing the connection after this request
     optional bool closing = 3 [default = false];
 
-    optional PingRequest      ping = 2;
     optional ClusterState     cluster_state = 7;
 
-    optional DeclareTableRequest declare_table = 8;
-    optional DropTableRequest    drop_table = 9;
+    optional CreateTableRequest create_table = 8;
+    optional AlterTableRequest  alter_table = 9;
+    optional DropTableRequest   drop_table = 10;
 
-    optional CreatePartitionRequest create_partition = 10;
-    optional DropPartitionRequest   drop_partition = 11;
+    optional CreatePartitionRequest create_partition = 11;
+    optional DropPartitionRequest   drop_partition = 12;
 
-    optional BlobGetRequest blob_get = 12;
-    optional BlobPutRequest blob_put = 13;
-
-    // generates an error response
-    optional Error            error = 6;
+    optional BlobGetRequest blob_get = 13;
+    optional BlobPutRequest blob_put = 14;
 };
 
 message SamoaResponse {
+
     required CommandType type = 1;
 
     // whether the server will be closing the connection after this request
     optional bool closing = 6 [default = false];
 
     optional Error         error = 2;
-    optional PingResponse  ping = 3;
     optional ClusterState  cluster_state = 7;
 
-    optional DeclareTableResponse declare_table = 8;
-    optional DropTableResponse    drop_table = 9;
+    optional CreateTableResponse create_table = 8;
 
     optional CreatePartitionResponse create_partition = 10;
-    optional DropPartitionResponse   drop_partition = 11;
 
     optional BlobGetResponse blob_get = 12;
     optional BlobPutResponse blob_put = 13;

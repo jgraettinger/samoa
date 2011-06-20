@@ -215,10 +215,10 @@ void make_stream_protocol_bindings()
         .def("compile_regex", &py_compile_regex)
         .def("is_open", &stream_protocol::is_open)
         .def("close", &stream_protocol::close)
-        .add_property("local_address", &stream_protocol::get_local_address)
-        .add_property("remote_address", &stream_protocol::get_remote_address)
-        .add_property("local_port", &stream_protocol::get_local_port)
-        .add_property("remote_port", &stream_protocol::get_remote_port);
+        .def("get_local_address", &stream_protocol::get_local_address)
+        .def("get_remote_address", &stream_protocol::get_remote_address)
+        .def("get_local_port", &stream_protocol::get_local_port)
+        .def("get_remote_port", &stream_protocol::get_remote_port);
 }
 
 }

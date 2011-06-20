@@ -52,7 +52,11 @@ public:
     //  instead generates an error of the given type & value.
     // finish_response() must still be called to start the write
     void set_error(unsigned int err_code,
-        const std::string & err_msg, bool closing);
+        const std::string & err_msg, bool closing = false);
+
+    /// Returns whether an error response has already 
+    ///  been set for the current request
+    bool is_error_set() const;
 
     // Serializes & writes the current core::protobuf::SamoaResponse
     //   Postcondition: the core::protobuf::SamoaResponse is no longer mutable
@@ -93,6 +97,8 @@ private:
     bool _ignore_timeout;
     unsigned _timeout_ms;
     boost::asio::deadline_timer _timeout_timer;
+
+    void on_next_request();
 
     void on_request_length(
         const boost::system::error_code &, const core::buffer_regions_t &);

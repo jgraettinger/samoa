@@ -16,8 +16,6 @@ class TestCreatePartition(unittest.TestCase):
 
     def setUp(self):
 
-        self.proactor = Proactor.get_proactor()
-
         self.injector = TestModule().configure(getty.Injector())
         self.fixture = self.injector.get_instance(ClusterStateFixture)
 
@@ -47,14 +45,15 @@ class TestCreatePartition(unittest.TestCase):
 
             # extract created UUID from response
             response = yield request.finish_request()
-            self.assertFalse(response.is_error())
+            self.assertFalse(response.get_error_code())
 
-            part_uuid = UUID(response.get_message().create_partition.uuid)
+            part_uuid = UUID(response.get_message(
+                ).create_partition.partition_uuid)
             response.finish_response()
 
             # assert partition is live on the server
             cluster_state = context.get_cluster_state()
-            
+
             part = cluster_state.get_table_set().get_table(
                 UUID.from_name('test_table')).get_partition(part_uuid)
 
@@ -66,10 +65,14 @@ class TestCreatePartition(unittest.TestCase):
             listener.cancel()
             yield
 
-        self.proactor.spawn(test)
-        self.proactor.run()
+        proactor = Proactor.get_proactor()
+        proactor.spawn(test)
+        proactor.run()
 
-    def test_create_partition_unknown_table(self):
+    def test_error_cases(self):
+
+        self.fixture.add_table(name = 'test_table',
+            uuid = UUID.from_name('test_table'))
 
         listener = self.injector.get_instance(Listener)
 
@@ -78,9 +81,8 @@ class TestCreatePartition(unittest.TestCase):
             server = yield Server.connect_to(
                 listener.get_address(), listener.get_port())
 
-            # create a partition
+            # non-existent table 
             request = yield server.schedule_request()
-
             request.get_message().set_type(CommandType.CREATE_PARTITION)
 
             cp = request.get_message().mutable_create_partition()
@@ -89,16 +91,30 @@ class TestCreatePartition(unittest.TestCase):
             cp.set_storage_size(1<<20)
             cp.set_index_size(1<<12)
 
-            # extract created UUID from response
             response = yield request.finish_request()
+            self.assertEquals(response.get_error_code(), 404)
+            response.finish_response()
 
-            self.assertTrue(response.is_error())
-            self.assertEquals(response.get_message().error.code, 404)
+            # malformed UUID 
+            request = yield server.schedule_request()
+            request.get_message().set_type(CommandType.CREATE_PARTITION)
 
+            cp = request.get_message().mutable_create_partition()
+            cp.set_table_uuid('invalid uuid')
+            cp.set_ring_position(1234567)
+            cp.set_storage_size(1<<20)
+            cp.set_index_size(1<<12)
+
+            response = yield request.finish_request()
+            self.assertEquals(response.get_error_code(), 400)
+            response.finish_response()
+
+            # cleanup
             server.close()
             listener.cancel()
             yield
 
-        self.proactor.spawn(test)
-        self.proactor.run()
+        proactor = Proactor.get_proactor()
+        proactor.spawn(test)
+        proactor.run()
 

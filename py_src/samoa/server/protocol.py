@@ -1,56 +1,53 @@
 
 import getty
 
-import samoa.command.error
-import samoa.command.ping
-import samoa.command.shutdown
-import samoa.command.cluster_state
-import samoa.command.declare_table
-import samoa.command.drop_table
-import samoa.command.create_partition
-import samoa.command.drop_partition
+import samoa.server.command.ping
+import samoa.server.command.create_table
+import samoa.server.command.alter_table
+import samoa.server.command.drop_table
+import samoa.server.command.create_partition
+import samoa.server.command.drop_partition
+import samoa.server.command.cluster_state
 
-import samoa.command as cmd
-import samoa.core.protobuf as proto
+import samoa.server.command as cmd
+from samoa.core.protobuf import CommandType
 
 import _server
 
 class Protocol(_server.Protocol):
 
     @getty.requires(
-        error = cmd.error.ErrorHandler,
         ping = cmd.ping.PingHandler,
-        shutdown = cmd.shutdown.ShutdownHandler,
-        cluster_state = cmd.cluster_state.ClusterStateHandler,
-        declare_table = cmd.declare_table.DeclareTableHandler,
+        create_table = cmd.create_table.CreateTableHandler,
+        alter_table = cmd.alter_table.AlterTableHandler,
         drop_table = cmd.drop_table.DropTableHandler,
         create_partition = cmd.create_partition.CreatePartitionHandler,
-        drop_partition = cmd.drop_partition.DropPartitionHandler)
+        drop_partition = cmd.drop_partition.DropPartitionHandler,
+        cluster_state = cmd.cluster_state.ClusterStateHandler,
+    )
     def __init__(self,
-           error,
            ping,
-           shutdown,
-           cluster_state,
-           declare_table,
+           create_table,
+           alter_table,
            drop_table,
            create_partition,
-           drop_partition):
+           drop_partition,
+           cluster_state):
 
         _server.Protocol.__init__(self)
 
         self.set_command_handler(
-            proto.CommandType.ERROR, error)
+            CommandType.PING, ping)
         self.set_command_handler(
-            proto.CommandType.PING, ping)
+            CommandType.CREATE_TABLE, create_table)
         self.set_command_handler(
-            proto.CommandType.SHUTDOWN, shutdown)
+            CommandType.ALTER_TABLE, alter_table)
         self.set_command_handler(
-            proto.CommandType.CLUSTER_STATE, cluster_state)
+            CommandType.DROP_TABLE, drop_table)
         self.set_command_handler(
-            proto.CommandType.DECLARE_TABLE, declare_table)
+            CommandType.CREATE_PARTITION, create_partition)
         self.set_command_handler(
-            proto.CommandType.DROP_TABLE, drop_table)
+            CommandType.DROP_PARTITION, drop_partition)
         self.set_command_handler(
-            proto.CommandType.CREATE_PARTITION, create_partition)
-        self.set_command_handler(
-            proto.CommandType.DROP_PARTITION, drop_partition)
+            CommandType.CLUSTER_STATE, cluster_state)
+

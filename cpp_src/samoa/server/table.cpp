@@ -7,6 +7,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
+#include <ctime>
 
 namespace samoa {
 namespace server {
@@ -107,12 +108,15 @@ const table::ring_t & table::get_ring() const
 
 partition::ptr_t table::get_partition(const core::uuid & uuid) const
 {
+    partition::ptr_t result;
+
     uuid_index_t::const_iterator it = _index.find(uuid);
-    if(it == _index.end() || !it->second)
+    if(it != _index.end() && it->second)
     {
-        error::throw_not_found("partition", core::to_hex(uuid));
+        // nullptr is used to mark dropped partitions
+        result = it->second;
     }
-    return it->second;
+    return result;
 }
 
 void table::route_key(const std::string & key,
@@ -188,6 +192,7 @@ bool table::merge_table(
             {
                 LOG_INFO("discovered (dropped) partition " << p_it->uuid());
                 new_part->set_dropped(true);
+                new_part->set_dropped_timestamp(time(0));
             }
             else
             {
@@ -240,6 +245,7 @@ bool table::merge_table(
                 l_it->set_uuid(p_it->uuid());
                 l_it->set_ring_position(p_it->ring_position());
                 l_it->set_dropped(true);
+                l_it->set_dropped_timestamp(time(0));
                 dirty = true;
             }
             else

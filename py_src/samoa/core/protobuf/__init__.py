@@ -74,11 +74,20 @@ def find_table(state, uuid):
 
     return state.table[ind]
 
-def find_partition(state, uuid, ring_position):
+def find_table_by_name(state, name):
+    assert isinstance(state, ClusterState)
+
+    for table in state.table:
+        if not table.dropped and table.name == name:
+            return table
+
+    return None
+
+def find_partition(state, uuid):
     assert isinstance(state, ClusterState_Table)
 
     for part in state.partition:
-        if part.ring_position == ring_position and UUID(part.uuid) == uuid:
+        if UUID(part.uuid) == uuid:
             return part
 
     return None

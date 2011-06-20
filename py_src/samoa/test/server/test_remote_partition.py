@@ -4,13 +4,14 @@ import unittest
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.remote_partition import RemotePartition
-from samoa.test.cluster_state_generator import ClusterStateGenerator
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestRemotePartition(unittest.TestCase):
 
     def setUp(self):
 
-        self.gen = ClusterStateGenerator()
+        self.gen = ClusterStateFixture()
         table = self.gen.add_table()
         self.gen.add_remote_partition(table)
 

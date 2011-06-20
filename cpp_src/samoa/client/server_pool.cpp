@@ -84,10 +84,7 @@ server::ptr_t server_pool::get_server(const core::uuid & uuid)
     spinlock::guard guard(_lock);
 
     server_map_t::const_iterator it = _servers.find(uuid);
-    if(it == _servers.end())
-    {
-        error::throw_not_found("server", core::to_hex(uuid));
-    }
+    SAMOA_ASSERT(it != _servers.end());
 
     if(it->second && it->second->is_open())
         return it->second;
@@ -100,10 +97,7 @@ std::string server_pool::get_server_hostname(const core::uuid & uuid)
     spinlock::guard guard(_lock);
 
     address_map_t::const_iterator it = _addresses.find(uuid);
-    if(it == _addresses.end())
-    {
-        error::throw_not_found("server", core::to_hex(uuid));
-    }
+    SAMOA_ASSERT(it != _addresses.end());
 
     return it->second.first;
 }
@@ -113,10 +107,7 @@ unsigned short server_pool::get_server_port(const core::uuid & uuid)
     spinlock::guard guard(_lock);
 
     address_map_t::const_iterator it = _addresses.find(uuid);
-    if(it == _addresses.end())
-    {
-        error::throw_not_found("server", core::to_hex(uuid));
-    }
+    SAMOA_ASSERT(it != _addresses.end());
 
     return it->second.second;
 }

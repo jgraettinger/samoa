@@ -99,9 +99,6 @@ private:
     std::string _what;
 };
 
-void throw_not_found(const std::string & what,
-    const std::string & identity);
-
 void generate_core_file();
 
 }

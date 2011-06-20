@@ -32,13 +32,6 @@ samoa_exception::samoa_exception(
     _what = s.str();
 }
 
-void throw_not_found(const std::string & what,
-    const std::string & ident)
-{
-    throw samoa_exception("not_found",
-        what + " " + ident);
-}
-
 void generate_core_file()
 {
     LOG_ERR("I would if i could...");

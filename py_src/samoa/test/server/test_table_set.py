@@ -4,13 +4,14 @@ import unittest
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.table_set import TableSet
-from samoa.test.cluster_state_generator import ClusterStateGenerator
+from samoa.test.cluster_state_fixture import ClusterStateFixture
+
 
 class TestTableSet(unittest.TestCase):
 
     def setUp(self):
 
-        self.gen = ClusterStateGenerator()
+        self.gen = ClusterStateFixture()
         
     def test_ctor_edge_cases(self):
 
@@ -36,7 +37,7 @@ class TestTableSet(unittest.TestCase):
         tst_state = pb.ClusterState(self.gen.state)
         tst_state.table[1].set_uuid(tst_state.table[0].uuid)
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             TableSet(tst_state, None)
 
         # duplicate table name
@@ -46,12 +47,14 @@ class TestTableSet(unittest.TestCase):
 
         # doesn't throw, and we can query by uuid...
         table_set = TableSet(tst_state, None)
-        table_set.get_table(UUID.from_hex(tst_state.table[0].uuid))
-        table_set.get_table(UUID.from_hex(tst_state.table[1].uuid))
+
+        self.assertEquals(table_set.get_table(
+            UUID.from_hex(tst_state.table[0].uuid)).get_name(), 'tbl')
+        self.assertEquals(table_set.get_table(
+            UUID.from_hex(tst_state.table[1].uuid)).get_name(), 'tbl')
 
         # ... but we can't query tables by name
-        with self.assertRaisesRegexp(RuntimeError, 'ambiguous'):
-            table_set.get_table_by_name('tbl')
+        self.assertFalse(table_set.get_table_by_name('tbl'))
 
     def test_merge_edge_cases(self):
 
@@ -120,8 +123,7 @@ class TestTableSet(unittest.TestCase):
         table_set = TableSet(self.gen.state, None)
 
         # tbl1 is locally dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table_set.get_table_by_name('tbl1')
+        self.assertFalse(table_set.get_table_by_name('tbl1'))
 
         # tbl2 is locally renamed
         self.assertEquals(table_set.get_table_by_name(
@@ -152,16 +154,14 @@ class TestTableSet(unittest.TestCase):
         self.assertEquals(len(out.table), 8)
 
         # tbl1 is still locally dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table_set.get_table_by_name('tbl1')
+        self.assertFalse(table_set.get_table_by_name('tbl1'))
 
         # tbl2 is still locally renamed
         self.assertEquals(table_set.get_table_by_name(
             'tbl2_new').get_name(), 'tbl2_new')
 
         # tbl3 is now dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table_set.get_table_by_name('tbl3')
+        self.assertFalse(table_set.get_table_by_name('tbl3'))
 
         # tbl4 is now renamed
         self.assertEquals(table_set.get_table_by_name(
@@ -172,14 +172,10 @@ class TestTableSet(unittest.TestCase):
             'tbl5').get_name(), 'tbl5')
 
         # tbl7 is dropped
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>'):
-            table_set.get_table_by_name('tbl7')
+        self.assertFalse(table_set.get_table_by_name('tbl7'))
 
         # both tables named 'name_conflict' can be queried by UUID
         #  but are not available by name
-        with self.assertRaisesRegexp(RuntimeError, '<not_found>.*(ambiguous)'):
-            table_set.get_table_by_name('name_conflict')
-
         uuid1 = UUID(self.gen.get_table_by_name('name_conflict').uuid)
         uuid2 = UUID(pgen.get_table_by_name('name_conflict').uuid)
 
@@ -187,6 +183,8 @@ class TestTableSet(unittest.TestCase):
             'name_conflict')
         self.assertEquals(table_set.get_table(uuid2).get_name(),
             'name_conflict')
+
+        self.assertFalse(table_set.get_table_by_name('name_conflict'))
 
         # no further changes detected from peer
         out2 = pb.ClusterState(out)

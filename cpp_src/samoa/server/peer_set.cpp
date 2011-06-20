@@ -19,8 +19,7 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
 
         core::uuid uuid = core::uuid_from_hex(it->uuid());
 
-        set_server_address(core::uuid_from_hex(it->uuid()),
-            it->hostname(), it->port());
+        set_server_address(uuid, it->hostname(), it->port());
 
         if(current && current->has_server(uuid))
         {

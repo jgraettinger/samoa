@@ -32,15 +32,15 @@ public:
     /// Returns true if the server UUID is known
     bool has_server(const core::uuid &);
 
-    /// Throws if the uuid is known
+    /// Precondition: has_server(uuid) is True
     /// Returns nullptr if no connected instance is available
     /// Otherwise, returns a connected instance
     server::ptr_t get_server(const core::uuid &);
 
-    /// Throws if the server uuid is unknown
+    /// Precondition: has_server(uuid) is True
     std::string get_server_hostname(const core::uuid &);
 
-    /// Throws if the server uuid is unknown
+    /// Precondition: has_server(uuid) is True
     unsigned short get_server_port(const core::uuid &);
 
     // Closes all currently-connected server instances

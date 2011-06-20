@@ -15,6 +15,25 @@ std::string py_to_hex(const uuid & u)
 std::string py_repr(const uuid & u)
 { return "UUID('" + py_to_hex(u) + "')"; }
 
+bool py_check_hex(const bpl::str & s)
+{
+    char * buf;
+    Py_ssize_t len;
+
+    if(PyString_AsStringAndSize(s.ptr(), &buf, &len) == -1)
+        bpl::throw_error_already_set();
+
+    try
+    {
+        boost::uuids::string_generator()(buf, buf + len);
+        return true;
+    }
+    catch(const std::runtime_error & e)
+    {
+        return false;
+    }
+}
+
 uuid py_from_hex(const bpl::str & s)
 { 
     char * buf;
@@ -88,6 +107,8 @@ void make_uuid_bindings()
         .def("__init__", bpl::make_constructor(py_hex_ctor))
         .def("__repr__", &py_repr)
         .def("to_hex", &py_to_hex)
+        .def("check_hex", &py_check_hex)
+        .staticmethod("check_hex")
         .def("from_hex", &py_from_hex)
         .staticmethod("from_hex")
         .def("from_name", &py_from_name)

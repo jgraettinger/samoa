@@ -73,7 +73,7 @@ class ClusterStateFixture(object):
                 self._part_ind[(UUID(table.uuid), UUID(part.uuid))] = part
 
     def generate_name(self):
-        return ''.join(chr(self.rnd.choice(xrange(0, 256))) \
+        return ''.join(self.rnd.choice('abcdefghijklmnopqrstuvwxyz') \
             for i in xrange(0, self.rnd.randint(4, 10)))
 
     def generate_uuid(self):

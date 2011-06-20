@@ -13,7 +13,7 @@ data_type data_type_from_string(const std::string & s)
     if(s == "MAP_TYPE")
         return MAP_TYPE;
 
-    error::throw_not_found("data_type", s);
+    SAMOA_ASSERT(0 && "no such data_type");
     return BLOB_TYPE; // not reached
 }
 

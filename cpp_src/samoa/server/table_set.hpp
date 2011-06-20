@@ -21,8 +21,10 @@ public:
     table_set(const spb::ClusterState &,
         const ptr_t &);
 
+    /// Returns nullptr if none exists
     table_ptr_t get_table(const core::uuid &);
 
+    /// Returns nullptr if none exists
     table_ptr_t get_table_by_name(const std::string &);
 
     //! Merges peer table descriptions into the local description

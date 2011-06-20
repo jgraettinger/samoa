@@ -101,6 +101,7 @@ void server_request_interface::start_request()
 
     // serlialize & queue core::protobuf::SamoaRequest for writing
     _srv->_request.SerializeToZeroCopyStream(&_srv->_proto_out_adapter);
+    _srv->_request.Clear();
 
     if(_srv->_proto_out_adapter.ByteCount() > (1<<16))
     {
@@ -172,10 +173,14 @@ core::stream_protocol::read_interface_t &
 server_response_interface::read_interface()
 { return _srv->read_interface(); }
 
-bool server_response_interface::is_error()
+unsigned server_response_interface::get_error_code()
 {
     const core::protobuf::SamoaResponse & resp = get_message();
-    return resp.type() == core::protobuf::ERROR;
+    if(resp.type() == core::protobuf::ERROR)
+    {
+        return resp.error().code();
+    }
+    return 0;
 }
 
 void server_response_interface::finish_response()
