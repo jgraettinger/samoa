@@ -18,6 +18,8 @@ public:
 
     peer_set(const spb::ClusterState &, const ptr_t &);
 
+    void spawn_tasklets(const core::tasklet_group_ptr_t &);
+
     void merge_peer_set(const spb::ClusterState & peer,
         spb::ClusterState & local) const;
 };

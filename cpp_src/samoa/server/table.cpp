@@ -4,6 +4,7 @@
 #include "samoa/server/remote_partition.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/persistence/data_type.hpp"
+#include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
@@ -135,6 +136,11 @@ void table::route_key(const std::string & key,
         if(++it == _ring.end())
             it = _ring.begin();
     }
+}
+
+void table::spawn_tasklets(const core::tasklet_group::ptr_t & tlet_group)
+{
+
 }
 
 bool table::merge_table(

@@ -46,6 +46,7 @@ class TestDropTable(unittest.TestCase):
 
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
+            response.finish_response()
 
             # postcondition: table is no longer on server
             table = context.get_cluster_state().get_table_set().get_table(
@@ -53,8 +54,7 @@ class TestDropTable(unittest.TestCase):
             self.assertFalse(table) 
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()
@@ -105,8 +105,7 @@ class TestDropTable(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

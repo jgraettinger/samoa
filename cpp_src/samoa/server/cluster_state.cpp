@@ -2,6 +2,7 @@
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/table_set.hpp"
+#include "samoa/core/tasklet_group.hpp"
 
 namespace samoa {
 namespace server {
@@ -15,6 +16,13 @@ cluster_state::cluster_state(
         *_desc, current ? current->_peer_set : peer_set::ptr_t());
     _table_set = boost::make_shared<table_set>(
         *_desc, current ? current->_table_set : table_set::ptr_t());
+}
+
+void cluster_state::spawn_tasklets(
+    const core::tasklet_group::ptr_t & tlet_group)
+{
+    _peer_set->spawn_tasklets(tlet_group);
+    _table_set->spawn_tasklets(tlet_group);
 }
 
 bool cluster_state::merge_cluster_state(

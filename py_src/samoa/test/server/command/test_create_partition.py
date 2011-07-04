@@ -61,8 +61,8 @@ class TestCreatePartition(unittest.TestCase):
             #self.assertEquals(part.get_storage_size(), 1 << 20)
             #self.assertEquals(part.get_index_size(), 1 << 12)
 
-            server.close()
-            listener.cancel()
+            # cleanup
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()
@@ -75,6 +75,7 @@ class TestCreatePartition(unittest.TestCase):
             uuid = UUID.from_name('test_table'))
 
         listener = self.injector.get_instance(Listener)
+        context = listener.get_context()
 
         def test():
 
@@ -110,8 +111,7 @@ class TestCreatePartition(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

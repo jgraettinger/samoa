@@ -57,8 +57,7 @@ class TestAlterTable(unittest.TestCase):
             # replication factor has been updated
             self.assertEquals(table.get_replication_factor(), 10)
 
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()
@@ -105,8 +104,7 @@ class TestAlterTable(unittest.TestCase):
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

@@ -5,6 +5,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
+#include "samoa/core/fwd.hpp"
 #include <boost/shared_ptr.hpp>
 
 namespace samoa {
@@ -23,10 +24,14 @@ public:
         \param current The local_partition which this instance will
             be replacing. May be nullptr if there is none.
     */
-    local_partition(const spb::ClusterState::Table::Partition &,
+    local_partition(
+        const spb::ClusterState::Table::Partition &,
         const ptr_t & current);
 
-    bool merge_partition(const spb::ClusterState::Table::Partition & peer,
+    void spawn_tasklets(const core::tasklet_group_ptr_t &);
+
+    bool merge_partition(
+        const spb::ClusterState::Table::Partition & peer,
         spb::ClusterState::Table::Partition & local) const;
 };
 

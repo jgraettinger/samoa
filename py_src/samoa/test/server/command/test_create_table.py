@@ -57,8 +57,8 @@ class TestCreateTable(unittest.TestCase):
             self.assertEquals(table.get_data_type(), DataType.BLOB_TYPE)
             self.assertEquals(table.get_replication_factor(), 3)
 
-            server.close()
-            listener.cancel()
+            # cleanup
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()
@@ -112,8 +112,7 @@ class TestCreateTable(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

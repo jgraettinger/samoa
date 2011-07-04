@@ -6,6 +6,7 @@
 #include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/stream_protocol.hpp"
+#include "samoa/core/tasklet.hpp"
 #include <boost/asio.hpp>
 
 namespace samoa {
@@ -13,11 +14,11 @@ namespace server {
 
 class client :
     public core::stream_protocol,
-    public boost::enable_shared_from_this<client>
+    public core::tasklet<client>
 {
 public:
 
-    typedef client_ptr_t ptr_t;
+    using core::tasklet<client>::ptr_t;
 
     client(context_ptr_t, protocol_ptr_t,
         core::io_service_ptr_t,
@@ -25,8 +26,11 @@ public:
 
     ~client();
 
-    // Begins reading requests
-    void init();
+    void run_tasklet();
+    void halt_tasklet();
+
+    // both bases define equivalent methods; pick one
+    using core::stream_protocol::get_io_service;
 
     const context_ptr_t & get_context() const
     { return _context; }

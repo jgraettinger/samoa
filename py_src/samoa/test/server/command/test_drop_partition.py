@@ -59,8 +59,7 @@ class TestDropPartition(unittest.TestCase):
             self.assertFalse(part)
             
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()
@@ -73,6 +72,7 @@ class TestDropPartition(unittest.TestCase):
         test_part = self.fixture.add_local_partition(test_table)
 
         listener = self.injector.get_instance(Listener)
+        context = listener.get_context()
 
         def test():
 
@@ -136,8 +136,7 @@ class TestDropPartition(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

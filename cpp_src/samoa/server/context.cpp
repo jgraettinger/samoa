@@ -3,6 +3,7 @@
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/core/uuid.hpp"
+#include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
 #include <boost/bind.hpp>
@@ -15,7 +16,8 @@ context::context(const spb::ClusterState & state)
    _hostname(state.local_hostname()),
    _port(state.local_port()),
    _proactor(core::proactor::get_proactor()),
-   _io_srv(_proactor->serial_io_service())
+   _io_srv(_proactor->serial_io_service()),
+   _tasklet_group(boost::make_shared<core::tasklet_group>())
 {
     SAMOA_ASSERT(state.IsInitialized());
 
@@ -31,6 +33,11 @@ cluster_state_ptr_t context::get_cluster_state() const
     spinlock::guard guard(_cluster_state_lock);
 
     return _cluster_state;
+}
+
+void context::spawn_tasklets()
+{
+    _cluster_state->spawn_tasklets(get_tasklet_group());
 }
 
 void context::cluster_state_transaction(

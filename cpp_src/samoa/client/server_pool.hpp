@@ -27,7 +27,7 @@ public:
     ///  connected server instance. If none is available, a
     ///  connection is first established.
     void schedule_request(const server::request_callback_t &,
-        const core::uuid & server_uid);
+        const core::uuid & server_uuid);
 
     /// Returns true if the server UUID is known
     bool has_server(const core::uuid &);

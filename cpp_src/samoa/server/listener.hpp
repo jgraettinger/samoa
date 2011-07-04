@@ -2,6 +2,7 @@
 #define SAMOA_SERVER_LISTENER_HPP
 
 #include "samoa/core/fwd.hpp"
+#include "samoa/core/tasklet.hpp"
 #include "samoa/server/fwd.hpp"
 #include <boost/asio.hpp>
 #include <string>
@@ -9,18 +10,18 @@
 namespace samoa {
 namespace server {
 
-class listener :
-    public boost::enable_shared_from_this<listener>
+class listener : public core::tasklet<listener>
 {
 public:
 
-    typedef listener_ptr_t ptr_t;
+    using core::tasklet<listener>::ptr_t;
 
     listener(const context_ptr_t &, const protocol_ptr_t &);
 
     ~listener();
 
-    void cancel();
+    void run_tasklet();
+    void halt_tasklet();
 
     std::string get_address();
     unsigned short get_port();
@@ -38,9 +39,6 @@ private:
 
     const context_ptr_t  _context;
     const protocol_ptr_t _protocol;
-
-    // proactor lifetime management
-    const core::proactor_ptr_t _proactor;
 
     // Accepting socket
     std::unique_ptr<boost::asio::ip::tcp::acceptor> _accept_sock;

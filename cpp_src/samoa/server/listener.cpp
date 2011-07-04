@@ -4,6 +4,7 @@
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
+#include "samoa/core/tasklet_group.hpp"
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
@@ -14,43 +15,50 @@ namespace server {
 
 using namespace boost::asio;
 
-listener::listener(const context_ptr_t & context, const protocol_ptr_t & protocol)
- : _context(context),
-   _protocol(protocol),
-   _proactor(core::proactor::get_proactor())
+listener::listener(const context_ptr_t & context,
+    const protocol_ptr_t & protocol)
+ : core::tasklet<listener>(
+        core::proactor::get_proactor()->serial_io_service()),
+   _context(context),
+   _protocol(protocol)
 {
-    core::io_service_ptr_t io_srv = _proactor->serial_io_service();
+    std::string str_port = boost::lexical_cast<std::string>(
+        context->get_server_port());
+
+    set_tasklet_name("listener<" + \
+        context->get_server_hostname() + ":" + str_port + ">");
 
     // build resolution query
-    ip::tcp::resolver::query query(context->get_server_hostname(),
-        boost::lexical_cast<std::string>(context->get_server_port()));
+    ip::tcp::resolver::query query(context->get_server_hostname(), str_port);
 
     // blocks, & throws on resolution failure
-    ip::tcp::endpoint ep = *ip::tcp::resolver(*io_srv).resolve(query);
+    ip::tcp::endpoint ep = *ip::tcp::resolver(
+        *get_io_service()).resolve(query);
 
     // create & listen on accepting socket, reusing port
-    _accept_sock.reset(new ip::tcp::acceptor(*io_srv, ep));
+    _accept_sock.reset(new ip::tcp::acceptor(*get_io_service(), ep));
 
     // TODO(johng) make this a configurable?
     _accept_sock->listen(5);
 
-    // next connection to accept
-    on_accept(boost::system::error_code());
-
-    LOG_INFO("");
+    LOG_DBG("");
 }
 
 listener::~listener()
 {
-    LOG_INFO("");
+    LOG_DBG("");
 }
 
-void listener::cancel()
+void listener::run_tasklet()
 {
-    LOG_INFO("");
+    // next connection to accept
+    on_accept(boost::system::error_code());
+}
 
-    _accept_sock->get_io_service().dispatch(
-        boost::bind(&listener::on_cancel, shared_from_this()));
+void listener::halt_tasklet()
+{
+    // halt_tasklet is called from listener io_service    
+    on_cancel();
 }
 
 std::string listener::get_address()
@@ -63,7 +71,7 @@ void listener::on_accept(const boost::system::error_code & ec)
 {
     if(ec == boost::system::errc::operation_canceled)
     {
-        LOG_INFO("accept cancelled");
+        LOG_DBG("accept cancelled");
         return;
     }
     if(ec)
@@ -72,7 +80,7 @@ void listener::on_accept(const boost::system::error_code & ec)
         return;
     }
 
-    LOG_INFO("");
+    LOG_DBG("");
 
     if(_next_sock.get())
     {
@@ -82,19 +90,16 @@ void listener::on_accept(const boost::system::error_code & ec)
         client::ptr_t c(boost::make_shared<client>(
             _context, _protocol, _next_io_srv, _next_sock));
 
-        c->init();
+        _context->get_tasklet_group()->start_orphaned_tasklet(c);
     }
 
     // Next connection to accept
-    _next_io_srv = _proactor->serial_io_service();
+    _next_io_srv = core::proactor::get_proactor()->serial_io_service();
     _next_sock.reset(new ip::tcp::socket(*_next_io_srv));
 
-    // Schedule call on accept. Note that bound handler
-    // DOES NOT have a smart-pointer. This means, when
-    // the owning pointer goes out of scope, and no
-    // active connections remain, the server will exit.
+    // Schedule call on accept
     _accept_sock->async_accept(*_next_sock, boost::bind(
-            &listener::on_accept, this,
+            &listener::on_accept, shared_from_this(),
             boost::asio::placeholders::error));
 
     return;
@@ -102,7 +107,7 @@ void listener::on_accept(const boost::system::error_code & ec)
 
 void listener::on_cancel()
 {
-    LOG_INFO("");
+    LOG_DBG("");
     _accept_sock.reset();
     _next_sock.reset();
 }

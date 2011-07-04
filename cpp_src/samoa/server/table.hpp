@@ -3,8 +3,9 @@
 #define SAMOA_SERVER_TABLE_HPP
 
 #include "samoa/server/fwd.hpp"
-#include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/persistence/data_type.hpp"
+#include "samoa/core/fwd.hpp"
+#include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
 #include <boost/unordered_set.hpp>
 #include <boost/unordered_map.hpp>
@@ -56,6 +57,8 @@ public:
         \param out (Output) responsible partitions
     */
     void route_key(const std::string & key, ring_t & out) const;
+
+    void spawn_tasklets(const core::tasklet_group_ptr_t &);
 
     //! Merges a peer table description into the local description
     /*!

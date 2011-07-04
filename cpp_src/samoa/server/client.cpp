@@ -8,6 +8,7 @@
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
 
 namespace samoa {
 namespace server {
@@ -21,13 +22,17 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
     core::io_service_ptr_t io_srv,
     std::unique_ptr<ip::tcp::socket> & sock)
  : core::stream_protocol(io_srv, sock),
+   core::tasklet<client>(io_srv),
    _context(context),
    _protocol(protocol),
    _start_called(false),
    _timeout_ms(default_timeout_ms),
    _timeout_timer(*get_io_service())
 {
-    LOG_DBG("created");    
+    LOG_DBG("created");
+
+    set_tasklet_name("client@<" + get_remote_address() + ":" +
+        boost::lexical_cast<std::string>(get_remote_port()) + ">"); 
 }
 
 client::~client()
@@ -35,7 +40,7 @@ client::~client()
     LOG_DBG("destroyed");
 }
 
-void client::init()
+void client::run_tasklet()
 {
     on_next_request();
 
@@ -46,6 +51,12 @@ void client::init()
         &client::on_timeout, shared_from_this(), _1));
 
     _ignore_timeout = false;
+}
+
+void client::halt_tasklet()
+{
+    close();
+    _timeout_timer.cancel();
 }
 
 void client::set_error(unsigned int err_code,

@@ -18,6 +18,7 @@ class TestPing(unittest.TestCase):
     def test_ping(self):
 
         listener = self.injector.get_instance(Listener)
+        context = listener.get_context()
 
         def test():
 
@@ -33,8 +34,7 @@ class TestPing(unittest.TestCase):
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

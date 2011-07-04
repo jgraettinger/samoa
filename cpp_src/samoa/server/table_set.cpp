@@ -1,5 +1,6 @@
 #include "samoa/server/table_set.hpp"
 #include "samoa/server/table.hpp"
+#include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
@@ -76,6 +77,11 @@ table::ptr_t table_set::get_table_by_name(const std::string & name)
         result = it->second;
     }
     return result;
+}
+
+void table_set::spawn_tasklets(const core::tasklet_group::ptr_t & tlet_group)
+{
+
 }
 
 bool table_set::merge_table_set(const spb::ClusterState & peer,

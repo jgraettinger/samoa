@@ -70,8 +70,7 @@ class TestClusterState(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()
@@ -110,8 +109,7 @@ class TestClusterState(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            server.close()
-            listener.cancel()
+            context.get_tasklet_group().cancel_tasklets()
             yield
 
         proactor = Proactor.get_proactor()

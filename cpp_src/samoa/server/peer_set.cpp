@@ -1,5 +1,6 @@
 
 #include "samoa/server/peer_set.hpp"
+#include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/unordered_set.hpp>
@@ -26,6 +27,11 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
             set_connected_server(uuid, current->get_server(uuid));
         }
     }
+}
+
+void peer_set::spawn_tasklets(const core::tasklet_group::ptr_t & tlet_group)
+{
+
 }
 
 void peer_set::merge_peer_set(const spb::ClusterState & peer,

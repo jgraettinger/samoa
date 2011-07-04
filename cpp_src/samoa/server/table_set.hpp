@@ -5,6 +5,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
+#include "samoa/core/fwd.hpp"
 #include <boost/unordered_map.hpp>
 
 namespace samoa {
@@ -18,14 +19,15 @@ public:
 
     typedef table_set_ptr_t ptr_t;
 
-    table_set(const spb::ClusterState &,
-        const ptr_t &);
+    table_set(const spb::ClusterState &, const ptr_t & current);
 
     /// Returns nullptr if none exists
     table_ptr_t get_table(const core::uuid &);
 
     /// Returns nullptr if none exists
     table_ptr_t get_table_by_name(const std::string &);
+
+    void spawn_tasklets(const core::tasklet_group_ptr_t &);
 
     //! Merges peer table descriptions into the local description
     /*!

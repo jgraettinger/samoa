@@ -3,8 +3,8 @@
 #define SAMOA_SERVER_CLUSTER_STATE_HPP
 
 #include "samoa/server/fwd.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
-#include "samoa/core/uuid.hpp"
 
 namespace samoa {
 namespace server {
@@ -50,6 +50,8 @@ public:
 
     const table_set_ptr_t & get_table_set() const
     { return _table_set; }
+
+    void spawn_tasklets(const core::tasklet_group_ptr_t &);
 
     //! Merges a peer cluster_state description into the local description
     /*!

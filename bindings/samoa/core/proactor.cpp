@@ -3,6 +3,7 @@
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
+#include "pysamoa/future.hpp"
 #include <boost/python/operators.hpp>
 #include <boost/bind.hpp>
 
@@ -67,10 +68,26 @@ void py_run(proactor & p, bool exit_when_idle)
     p.run(exit_when_idle);
 }
 
+void on_py_sleep(const pysamoa::future::ptr_t & future)
+{
+    pysamoa::python_scoped_lock block;
+
+    future->on_result(bpl::object());
+}
+
+pysamoa::future::ptr_t py_sleep(proactor & p, unsigned delay_ms)
+{
+    pysamoa::future::ptr_t f(boost::make_shared<pysamoa::future>());
+
+    p.run_later(boost::bind(&on_py_sleep, f), delay_ms);
+    return f;
+}
+
+
 void make_proactor_bindings()
 {
     bpl::class_<proactor, proactor_ptr_t, boost::noncopyable>(
-        "Proactor", bpl::no_init)
+            "Proactor", bpl::no_init)
         .def("get_proactor", &proactor::get_proactor)
         .staticmethod("get_proactor")
         .def("run", &py_run, (
@@ -84,6 +101,7 @@ void make_proactor_bindings()
             bpl::arg("callable"),
             bpl::arg("args") = bpl::tuple(),
             bpl::arg("kwargs") = bpl::dict()))
+        .def("sleep", &py_sleep)
         .def("shutdown", &proactor::shutdown)
         .def("serial_io_service", &proactor::serial_io_service)
         .def("concurrent_io_service", &proactor::concurrent_io_service)
