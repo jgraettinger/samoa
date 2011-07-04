@@ -13,7 +13,7 @@ class TestLocalPartition(unittest.TestCase):
 
         self.gen = ClusterStateFixture()
         table = self.gen.add_table()
-        self.state = self.gen.add_local_partition(table)
+        self.state = self.gen.add_local_partition(table.uuid)
 
     def test_merge(self):
 

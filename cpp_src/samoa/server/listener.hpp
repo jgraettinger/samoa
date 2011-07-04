@@ -20,9 +20,6 @@ public:
 
     ~listener();
 
-    void run_tasklet();
-    void halt_tasklet();
-
     std::string get_address();
     unsigned short get_port();
 
@@ -32,20 +29,21 @@ public:
     const protocol_ptr_t & get_protocol() const
     { return _protocol; }
 
+    void run_tasklet();
+    void halt_tasklet();
+
 private:
 
     void on_accept(const boost::system::error_code & ec);
-    void on_cancel();
 
     const context_ptr_t  _context;
     const protocol_ptr_t _protocol;
 
-    // Accepting socket
-    std::unique_ptr<boost::asio::ip::tcp::acceptor> _accept_sock;
+    boost::asio::ip::tcp::acceptor _accept_sock;
 
     // Next connection to accept, and it's io_service
     std::unique_ptr<boost::asio::ip::tcp::socket> _next_sock;
-    boost::shared_ptr<boost::asio::io_service> _next_io_srv;
+    core::io_service_ptr_t _next_io_srv;
 };
 
 }

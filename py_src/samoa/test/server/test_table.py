@@ -17,9 +17,9 @@ class TestTable(unittest.TestCase):
 
     def test_ctor_edge_cases(self):
 
-        self.gen.add_local_partition(self.state)
-        self.gen.add_remote_partition(self.state)
-        self.gen.add_dropped_partition(self.state)
+        self.gen.add_local_partition(self.state.uuid)
+        self.gen.add_remote_partition(self.state.uuid)
+        self.gen.add_dropped_partition(self.state.uuid)
 
         # null hypothesis - should build
         Table(self.state, self.gen.server_uuid, None)
@@ -43,8 +43,8 @@ class TestTable(unittest.TestCase):
         pgen = self.gen.clone_peer()
         pstate = pgen.state.table[0]
 
-        pgen.add_local_partition(pstate)
-        pgen.add_local_partition(pstate)
+        pgen.add_local_partition(pstate.uuid)
+        pgen.add_local_partition(pstate.uuid)
 
         table = Table(self.state, self.gen.server_uuid, None)
 
@@ -104,10 +104,10 @@ class TestTable(unittest.TestCase):
         tbl_uuid = UUID.from_name('table')
 
         # common set of known partitions
-        self.gen.add_local_partition(self.state,  uuid = UUID.from_name('p1'))
-        self.gen.add_remote_partition(self.state, uuid = UUID.from_name('p2'))
-        self.gen.add_remote_partition(self.state, uuid = UUID.from_name('p3'))
-        self.gen.add_remote_partition(self.state, uuid = UUID.from_name('p4'))
+        self.gen.add_local_partition(tbl_uuid,  uuid = UUID.from_name('p1'))
+        self.gen.add_remote_partition(tbl_uuid, uuid = UUID.from_name('p2'))
+        self.gen.add_remote_partition(tbl_uuid, uuid = UUID.from_name('p3'))
+        self.gen.add_remote_partition(tbl_uuid, uuid = UUID.from_name('p4'))
 
         pgen = self.gen.clone_peer()
         pstate = pgen.state.table[0]
@@ -143,14 +143,14 @@ class TestTable(unittest.TestCase):
         p4_cre = part.consistent_range_end
 
         # additional partitions known only locally
-        self.gen.add_local_partition(self.state)
-        self.gen.add_remote_partition(self.state)
-        self.gen.add_remote_partition(self.state)
+        self.gen.add_local_partition(tbl_uuid)
+        self.gen.add_remote_partition(tbl_uuid)
+        self.gen.add_remote_partition(tbl_uuid)
 
         # additional partitions known only by peer
-        pgen.add_remote_partition(self.state)
-        pgen.add_dropped_partition(self.state)
-        pgen.add_remote_partition(self.state)
+        pgen.add_remote_partition(tbl_uuid)
+        pgen.add_dropped_partition(tbl_uuid)
+        pgen.add_remote_partition(tbl_uuid)
 
 
         table = Table(self.state, self.gen.server_uuid, None)
@@ -203,11 +203,12 @@ class TestTable(unittest.TestCase):
 
     def test_ring_order(self):
 
-        self.gen.add_local_partition(self.state)
-        self.gen.add_remote_partition(self.state)
-        self.gen.add_local_partition(self.state)
-        self.gen.add_remote_partition(self.state)
-        self.gen.add_remote_partition(self.state)
+        tbl_uuid = UUID.from_name('table')
+        self.gen.add_local_partition(tbl_uuid)
+        self.gen.add_remote_partition(tbl_uuid)
+        self.gen.add_local_partition(tbl_uuid)
+        self.gen.add_remote_partition(tbl_uuid)
+        self.gen.add_remote_partition(tbl_uuid)
 
         table = Table(self.state, self.gen.server_uuid, None)
 

@@ -2,6 +2,7 @@
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/table_set.hpp"
+#include "samoa/server/context.hpp"
 #include "samoa/core/tasklet_group.hpp"
 
 namespace samoa {
@@ -19,10 +20,10 @@ cluster_state::cluster_state(
 }
 
 void cluster_state::spawn_tasklets(
-    const core::tasklet_group::ptr_t & tlet_group)
+    const context::ptr_t & context)
 {
-    _peer_set->spawn_tasklets(tlet_group);
-    _table_set->spawn_tasklets(tlet_group);
+    _peer_set->spawn_tasklets(context);
+    _table_set->spawn_tasklets(context);
 }
 
 bool cluster_state::merge_cluster_state(

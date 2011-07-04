@@ -20,8 +20,10 @@ class context :
 public:
 
     typedef context_ptr_t ptr_t;
+    typedef context_weak_ptr_t weak_ptr_t;
 
     context(const spb::ClusterState &);
+    ~context();
 
     const core::uuid & get_server_uuid() const
     { return _uuid; }

@@ -162,7 +162,7 @@ void server_pool::on_connect(const boost::system::error_code & ec,
     if(ec)
     {
         LOG_INFO("connection to peer " << uuid << "@"
-            << addr.first << ":" << addr.second << "failed: " << ec);
+            << addr.first << ":" << addr.second << "failed: " << ec.message());
 
         // errorback *outside* of lock context,
         //   (the callback may make new requests) 

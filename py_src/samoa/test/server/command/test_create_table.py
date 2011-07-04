@@ -58,7 +58,7 @@ class TestCreateTable(unittest.TestCase):
             self.assertEquals(table.get_replication_factor(), 3)
 
             # cleanup
-            context.get_tasklet_group().cancel_tasklets()
+            context.get_tasklet_group().cancel_group()
             yield
 
         proactor = Proactor.get_proactor()
@@ -112,7 +112,7 @@ class TestCreateTable(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_tasklets()
+            context.get_tasklet_group().cancel_group()
             yield
 
         proactor = Proactor.get_proactor()

@@ -1,5 +1,7 @@
 
 #include "samoa/server/peer_set.hpp"
+#include "samoa/server/peer_discovery.hpp"
+#include "samoa/server/context.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -25,13 +27,28 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
         if(current && current->has_server(uuid))
         {
             set_connected_server(uuid, current->get_server(uuid));
+
+            _discovery_tasklets[uuid] = current->_discovery_tasklets[uuid];
+        }
+        else
+        {
+            _discovery_tasklets[uuid] = peer_discovery::ptr_t();
         }
     }
 }
 
-void peer_set::spawn_tasklets(const core::tasklet_group::ptr_t & tlet_group)
+void peer_set::spawn_tasklets(const context::ptr_t & context)
 {
+    for(discovery_tasklets_t::iterator it = _discovery_tasklets.begin();
+        it != _discovery_tasklets.end(); ++it)
+    {
+        // does a tasklet already exist?
+        if(it->second)
+            continue;
 
+        it->second = boost::make_shared<peer_discovery>(context, it->first);
+        context->get_tasklet_group()->start_managed_tasklet(it->second);
+    }
 }
 
 void peer_set::merge_peer_set(const spb::ClusterState & peer,
@@ -155,6 +172,32 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         }
         else
             ++l_it;
+    }
+
+    // should we have a record for the peer itself?
+    if(required_peers.find(core::uuid_from_hex(
+        peer.local_uuid())) != required_peers.end())
+    {
+        // identify where the record should be located
+        l_it = std::lower_bound(local.peer().begin(), local.peer().end(),
+            peer.local_uuid(),
+            [](const spb::ClusterState::Peer & peer,
+               const std::string & peer_uuid) -> bool
+            {
+                return peer.uuid() < peer_uuid;
+            });
+
+        // if a record isn't present, add one
+        if(l_it == local.peer().end() || l_it->uuid() != peer.local_uuid())
+        {
+            spb::ClusterState::Peer * new_peer = add_record();
+
+            new_peer->set_uuid(peer.local_uuid());
+            new_peer->set_hostname(peer.local_hostname());
+            new_peer->set_port(peer.local_port());
+
+            LOG_INFO("discovered (local) peer " << peer.local_uuid());
+        }
     }
 }
 

@@ -3,6 +3,7 @@
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/remote_partition.hpp"
 #include "samoa/server/partition.hpp"
+#include "samoa/server/context.hpp"
 #include "samoa/persistence/data_type.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
@@ -138,7 +139,7 @@ void table::route_key(const std::string & key,
     }
 }
 
-void table::spawn_tasklets(const core::tasklet_group::ptr_t & tlet_group)
+void table::spawn_tasklets(const context::ptr_t & context)
 {
 
 }

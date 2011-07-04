@@ -123,10 +123,11 @@ class ClusterStateFixture(object):
         self._table_name_ind[tbl.name] = tbl
         return tbl
 
-    def add_dropped_partition(self, table, uuid = None, ring_pos = None):
+    def add_dropped_partition(self, table_uuid, uuid = None, ring_pos = None):
 
         uuid = self._coerce_uuid(uuid)
         ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
+        table = self.get_table(table_uuid)
 
         part = pb.add_partition(table, uuid, ring_pos)
         part.set_dropped(True)
@@ -134,11 +135,12 @@ class ClusterStateFixture(object):
         self._part_ind[(UUID(table.uuid), uuid)] = part
         return part
 
-    def add_local_partition(self, table, uuid = None, ring_pos = None):
+    def add_local_partition(self, table_uuid, uuid = None, ring_pos = None):
 
         uuid = self._coerce_uuid(uuid)
         ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
         lamport_ts = self.rnd.randint(1, 256)
+        table = self.get_table(table_uuid)
 
         part = pb.add_partition(table, uuid, ring_pos)
         part.set_server_uuid(self.server_uuid.to_hex())
@@ -149,7 +151,7 @@ class ClusterStateFixture(object):
         self._part_ind[(UUID(table.uuid), uuid)] = part
         return part
 
-    def add_remote_partition(self, table, uuid = None, ring_pos = None,
+    def add_remote_partition(self, table_uuid, uuid = None, ring_pos = None,
         server_uuid = None):
 
         if not server_uuid:
@@ -165,6 +167,7 @@ class ClusterStateFixture(object):
         ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
         server_uuid = self._coerce_uuid(server_uuid)
         lamport_ts = self.rnd.randint(1, 256)
+        table = self.get_table(table_uuid)
 
         part = pb.add_partition(table, uuid, ring_pos)
         part.set_server_uuid(server_uuid.to_hex())

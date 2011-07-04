@@ -5,6 +5,7 @@
 #include "samoa/core/uuid.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
+#include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
 #include <boost/bind.hpp>
 
@@ -26,6 +27,13 @@ context::context(const spb::ClusterState & state)
 
     _cluster_state = boost::make_shared<cluster_state>(
         std::move(state_copy), cluster_state::ptr_t());
+
+    LOG_DBG("context created");
+}
+
+context::~context()
+{
+    LOG_DBG("context destroyed");
 }
 
 cluster_state_ptr_t context::get_cluster_state() const
@@ -37,7 +45,7 @@ cluster_state_ptr_t context::get_cluster_state() const
 
 void context::spawn_tasklets()
 {
-    _cluster_state->spawn_tasklets(get_tasklet_group());
+    _cluster_state->spawn_tasklets(shared_from_this());
 }
 
 void context::cluster_state_transaction(
@@ -65,6 +73,8 @@ void context::on_cluster_state_transaction(
     //   responsible for checking invariants of the new description
     cluster_state::ptr_t next_state = boost::make_shared<cluster_state>(
         std::move(next_pb_state), _cluster_state);
+
+    next_state->spawn_tasklets(shared_from_this());
 
     // TODO(johng) commit next_cluster_state to disk
 

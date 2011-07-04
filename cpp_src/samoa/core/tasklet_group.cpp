@@ -9,6 +9,7 @@ namespace samoa {
 namespace core {
 
 tasklet_group::tasklet_group()
+ : _cancelled(false)
 { }
 
 tasklet_group::~tasklet_group()
@@ -30,9 +31,10 @@ void tasklet_group::cancel_tasklet(const std::string & tlet_name)
     }
 }
 
-void tasklet_group::cancel_tasklets()
+void tasklet_group::cancel_group()
 {
     samoa::spinlock::guard guard(_lock);
+    _cancelled = true;
 
     for(tasklets_t::iterator it = _tasklets.begin();
         it != _tasklets.end(); ++it)
@@ -54,6 +56,13 @@ void tasklet_group::start_managed_tasklet(const tasklet_base::ptr_t & tlet)
 
     samoa::spinlock::guard guard(_lock);
 
+    if(_cancelled)
+    {
+        LOG_WARN("attempt to start tasklet " << tlet->get_tasklet_name() << \
+            " on a cancelled tasklet_group");
+        return;
+    }
+
     // see note in tasklet.hpp for the rationale here
     tasklet_base::weak_ptr_t weak_tlet = \
         tlet->shared_tasklet_base_from_this();
@@ -73,6 +82,13 @@ void tasklet_group::start_orphaned_tasklet(const tasklet_base::ptr_t & tlet)
     SAMOA_ASSERT(!tlet->get_tasklet_name().empty());
 
     samoa::spinlock::guard guard(_lock);
+
+    if(_cancelled)
+    {
+        LOG_WARN("attempt to start tasklet " << tlet->get_tasklet_name() << \
+            " on a cancelled tasklet_group");
+        return;
+    }
 
     // see note in tasklet.hpp for the rationale here
     tasklet_base::weak_ptr_t weak_tlet = \

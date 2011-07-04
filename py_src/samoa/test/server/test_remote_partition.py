@@ -13,7 +13,7 @@ class TestRemotePartition(unittest.TestCase):
 
         self.gen = ClusterStateFixture()
         table = self.gen.add_table()
-        self.gen.add_remote_partition(table)
+        self.gen.add_remote_partition(table.uuid)
 
     def test_merge(self):
 

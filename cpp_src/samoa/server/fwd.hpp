@@ -10,6 +10,7 @@ namespace server {
 
 class context;
 typedef boost::shared_ptr<context> context_ptr_t;
+typedef boost::weak_ptr<context> context_weak_ptr_t;
 
 class protocol;
 typedef boost::shared_ptr<protocol> protocol_ptr_t;
@@ -43,6 +44,9 @@ typedef boost::shared_ptr<local_partition> local_partition_ptr_t;
 
 class remote_partition;
 typedef boost::shared_ptr<remote_partition> remote_partition_ptr_t;
+
+class peer_discovery;
+typedef boost::shared_ptr<peer_discovery> peer_discovery_ptr_t;
 
 }
 }

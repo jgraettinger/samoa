@@ -1,6 +1,7 @@
 
 #include "samoa/client/server.hpp"
 #include "samoa/core/connection_factory.hpp"
+#include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
 #include <boost/bind/protect.hpp>
@@ -78,7 +79,7 @@ server_request_interface::server_request_interface(const server::ptr_t & p)
 {
     if(_srv)
     {
-        assert(!_srv->has_queued_writes());
+        SAMOA_ASSERT(!_srv->has_queued_writes());
     }
 }
 
@@ -335,7 +336,7 @@ void server::on_response_body(const boost::system::error_code & ec,
         return;
     }
 
-    assert(!_response_queue.empty());
+    SAMOA_ASSERT(!_response_queue.empty());
 
     // invoke callback
     response_interface resp_int(shared_from_this());
@@ -357,7 +358,7 @@ void server::on_timeout(const boost::system::error_code & ec)
         // timeout timer was cancelled; not an error
         return;
     }
-    assert(!ec);
+    SAMOA_ASSERT(!ec);
 
     if(_ignore_timeout)
     {

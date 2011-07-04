@@ -13,7 +13,7 @@ class TestPeerSet(unittest.TestCase):
     def setUp(self):
 
         self.gen = ClusterStateFixture()
-        self.table = self.gen.add_table()
+        self.table = self.gen.add_table().uuid
 
     def test_ctor_edge_cases(self):
 
@@ -87,7 +87,7 @@ class TestPeerSet(unittest.TestCase):
         pgen = self.gen.clone_peer()
 
         # locally drop part1
-        part = self.gen.get_partition(self.table.uuid, part1)
+        part = self.gen.get_partition(self.table, part1)
         rpos = part.ring_position
 
         part.Clear()
@@ -96,7 +96,7 @@ class TestPeerSet(unittest.TestCase):
         part.set_dropped(True)
 
         # peer drops part2
-        part = pgen.get_partition(self.table.uuid, part2)
+        part = pgen.get_partition(self.table, part2)
         rpos = part.ring_position
 
         part.Clear()
@@ -113,6 +113,9 @@ class TestPeerSet(unittest.TestCase):
         p6 = pgen.add_peer().uuid
         p7 = pgen.add_peer().uuid
         pgen.add_remote_partition(self.table, server_uuid = p7)
+
+        # peer has a local partition => peer itself should be tracked
+        pgen.add_local_partition(self.table)
 
         peer_set = PeerSet(self.gen.state, None)
         table_set = TableSet(self.gen.state, None)
@@ -139,6 +142,10 @@ class TestPeerSet(unittest.TestCase):
         # p7 isn't known
         with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p7))
+
+        # peer itself isn't yet known
+        with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
+            peer_set.get_server_hostname(UUID(pgen.state.local_uuid))
 
         # MERGE from peer, & rebuild peer_set / table_set
         out = pb.ClusterState(self.gen.state)
@@ -170,8 +177,11 @@ class TestPeerSet(unittest.TestCase):
         with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p6))
 
-        # p6 is now known
+        # p7 is now known
         peer_set.get_server_hostname(UUID(p7))
+
+        # peer itself is now known
+        peer_set.get_server_hostname(UUID(pgen.state.local_uuid))
 
         # no further changes detected from peer
         out2 = pb.ClusterState(out)
@@ -180,4 +190,6 @@ class TestPeerSet(unittest.TestCase):
 
         self.assertEquals(out.SerializeToText(),
             out2.SerializeToText())
+
+        print out.SerializeToText()
 

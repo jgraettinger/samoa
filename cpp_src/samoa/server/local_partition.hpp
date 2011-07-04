@@ -28,7 +28,7 @@ public:
         const spb::ClusterState::Table::Partition &,
         const ptr_t & current);
 
-    void spawn_tasklets(const core::tasklet_group_ptr_t &);
+    void spawn_tasklets(const context_ptr_t &);
 
     bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,

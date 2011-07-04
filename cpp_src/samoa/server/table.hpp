@@ -58,7 +58,7 @@ public:
     */
     void route_key(const std::string & key, ring_t & out) const;
 
-    void spawn_tasklets(const core::tasklet_group_ptr_t &);
+    void spawn_tasklets(const context_ptr_t &);
 
     //! Merges a peer table description into the local description
     /*!

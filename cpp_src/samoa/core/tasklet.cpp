@@ -9,7 +9,8 @@ namespace samoa {
 namespace core {
 
 tasklet_base::tasklet_base(const core::io_service_ptr_t & io_service)
- : _io_service(io_service)
+ : _proactor(proactor::get_proactor()),
+   _io_service(io_service)
 { }
 
 tasklet_base::~tasklet_base()

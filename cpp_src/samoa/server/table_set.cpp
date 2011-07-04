@@ -1,5 +1,7 @@
+
 #include "samoa/server/table_set.hpp"
 #include "samoa/server/table.hpp"
+#include "samoa/server/context.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -79,7 +81,7 @@ table::ptr_t table_set::get_table_by_name(const std::string & name)
     return result;
 }
 
-void table_set::spawn_tasklets(const core::tasklet_group::ptr_t & tlet_group)
+void table_set::spawn_tasklets(const context::ptr_t & context)
 {
 
 }

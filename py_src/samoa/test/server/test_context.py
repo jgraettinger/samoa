@@ -18,8 +18,8 @@ class TestContext(unittest.TestCase):
         gen = ClusterStateFixture()
 
         tbl = gen.add_table()
-        gen.add_remote_partition(tbl)
-        gen.add_local_partition(tbl)
+        gen.add_remote_partition(tbl.uuid)
+        gen.add_local_partition(tbl.uuid)
 
         self.context = Context(gen.state)
 
@@ -34,7 +34,7 @@ class TestContext(unittest.TestCase):
             # add a new table & local partition
             tbl = gen.add_table(name = 'new_table',
                 uuid = UUID.from_name('new_table'))
-            gen.add_local_partition(tbl,
+            gen.add_local_partition(tbl.uuid,
                 uuid = UUID.from_name('new_part'))
 
             return should_commit

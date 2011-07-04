@@ -27,8 +27,10 @@ public:
     /*!
      * For each held tasklet, posts a call to tasklet::halt_tasklet() on
      *  that tasklet's io_service.
+     *
+     * Further attempts to start tasklets on this group will fail with a warning
      */
-    void cancel_tasklets();
+    void cancel_group();
 
     /*!
      * Posts a call to tasklet_base::run_tasklet() on the tasklet's io_service,
@@ -56,6 +58,8 @@ private:
 
     typedef std::map<std::string, tasklet_base_weak_ptr_t> tasklets_t;
     tasklets_t _tasklets;
+
+    bool _cancelled;
 
     samoa::spinlock _lock;
 

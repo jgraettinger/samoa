@@ -141,7 +141,7 @@ void client::on_request_length(const boost::system::error_code & ec,
     if(ec)
     {
         close();
-        LOG_WARN("connection error: " << ec);
+        LOG_WARN("connection error: " << ec.message());
         return;
     }
 
@@ -159,7 +159,7 @@ void client::on_request_body(const boost::system::error_code & ec,
     if(ec)
     {
         close();
-        LOG_WARN("connection error: " << ec);
+        LOG_WARN("connection error: " << ec.message());
         return;
     }
 
@@ -200,7 +200,7 @@ void client::on_response_finish(const boost::system::error_code & ec)
     if(ec)
     {
         close();
-        LOG_WARN("connection error: " << ec);
+        LOG_WARN("connection error: " << ec.message());
         return;
     }
 

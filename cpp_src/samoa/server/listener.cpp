@@ -20,7 +20,8 @@ listener::listener(const context_ptr_t & context,
  : core::tasklet<listener>(
         core::proactor::get_proactor()->serial_io_service()),
    _context(context),
-   _protocol(protocol)
+   _protocol(protocol),
+   _accept_sock(*get_io_service())
 {
     std::string str_port = boost::lexical_cast<std::string>(
         context->get_server_port());
@@ -35,11 +36,11 @@ listener::listener(const context_ptr_t & context,
     ip::tcp::endpoint ep = *ip::tcp::resolver(
         *get_io_service()).resolve(query);
 
-    // create & listen on accepting socket, reusing port
-    _accept_sock.reset(new ip::tcp::acceptor(*get_io_service(), ep));
-
-    // TODO(johng) make this a configurable?
-    _accept_sock->listen(5);
+    // open & bind the listening socket
+    _accept_sock.open(ep.protocol());
+    _accept_sock.set_option(ip::tcp::acceptor::reuse_address(true));
+    _accept_sock.bind(ep);
+    _accept_sock.listen();
 
     LOG_DBG("");
 }
@@ -49,6 +50,12 @@ listener::~listener()
     LOG_DBG("");
 }
 
+std::string listener::get_address()
+{ return _accept_sock.local_endpoint().address().to_string(); }
+
+unsigned short listener::get_port()
+{ return _accept_sock.local_endpoint().port(); }
+
 void listener::run_tasklet()
 {
     // next connection to accept
@@ -57,15 +64,10 @@ void listener::run_tasklet()
 
 void listener::halt_tasklet()
 {
-    // halt_tasklet is called from listener io_service    
-    on_cancel();
+    LOG_DBG("");
+    _accept_sock.close();
+    _next_sock.reset();
 }
-
-std::string listener::get_address()
-{ return _accept_sock->local_endpoint().address().to_string(); }
-
-unsigned short listener::get_port()
-{ return _accept_sock->local_endpoint().port(); }
 
 void listener::on_accept(const boost::system::error_code & ec)
 {
@@ -98,18 +100,11 @@ void listener::on_accept(const boost::system::error_code & ec)
     _next_sock.reset(new ip::tcp::socket(*_next_io_srv));
 
     // Schedule call on accept
-    _accept_sock->async_accept(*_next_sock, boost::bind(
+    _accept_sock.async_accept(*_next_sock, boost::bind(
             &listener::on_accept, shared_from_this(),
             boost::asio::placeholders::error));
 
     return;
-}
-
-void listener::on_cancel()
-{
-    LOG_DBG("");
-    _accept_sock.reset();
-    _next_sock.reset();
 }
 
 }

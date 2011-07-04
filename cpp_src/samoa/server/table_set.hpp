@@ -27,7 +27,7 @@ public:
     /// Returns nullptr if none exists
     table_ptr_t get_table_by_name(const std::string &);
 
-    void spawn_tasklets(const core::tasklet_group_ptr_t &);
+    void spawn_tasklets(const context_ptr_t &);
 
     //! Merges peer table descriptions into the local description
     /*!

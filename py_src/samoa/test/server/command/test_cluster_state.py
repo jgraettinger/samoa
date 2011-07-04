@@ -21,13 +21,12 @@ class TestClusterState(unittest.TestCase):
 
     def test_cluster_state(self):
 
-        test_table = self.fixture.add_table()
+        test_table = self.fixture.add_table().uuid
         peer_fixture = self.fixture.clone_peer()
 
         # local server & peer share common table, but divergent partitions
         test_local_part = self.fixture.add_local_partition(test_table)
-        test_peer_part = peer_fixture.add_local_partition(
-            peer_fixture.state.table[0])
+        test_peer_part = peer_fixture.add_local_partition(test_table)
 
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
@@ -46,7 +45,7 @@ class TestClusterState(unittest.TestCase):
 
             # verify state reflects the local server
             result_table = response.get_message().cluster_state.table[0]
-            self.assertEquals(result_table.uuid, test_table.uuid)
+            self.assertEquals(result_table.uuid, test_table)
             self.assertEquals(len(result_table.partition), 1)
             self.assertEquals(result_table.partition[0].uuid,
                 test_local_part.uuid)
@@ -64,13 +63,13 @@ class TestClusterState(unittest.TestCase):
 
             # verify state reflects merging of peer & local server
             result_table = response.get_message().cluster_state.table[0]
-            self.assertEquals(result_table.uuid, test_table.uuid)
+            self.assertEquals(result_table.uuid, test_table)
             self.assertEquals(len(result_table.partition), 2)
 
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_tasklets()
+            context.get_tasklet_group().cancel_group()
             yield
 
         proactor = Proactor.get_proactor()
@@ -79,13 +78,12 @@ class TestClusterState(unittest.TestCase):
 
     def test_error_cases(self):
 
-        test_table = self.fixture.add_table()
+        test_table = self.fixture.add_table().uuid
         peer_fixture = self.fixture.clone_peer()
 
         # local server & peer share common table, but divergent partitions
         test_local_part = self.fixture.add_local_partition(test_table)
-        test_peer_part = peer_fixture.add_local_partition(
-            peer_fixture.state.table[0])
+        test_peer_part = peer_fixture.add_local_partition(test_table)
 
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
@@ -109,7 +107,7 @@ class TestClusterState(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_tasklets()
+            context.get_tasklet_group().cancel_group()
             yield
 
         proactor = Proactor.get_proactor()

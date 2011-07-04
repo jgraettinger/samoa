@@ -1,129 +1,99 @@
 
-import socket
-import unittest
 import getty
+import unittest
 
-"""
+from samoa.core.uuid import UUID
+from samoa.core.proactor import Proactor
+from samoa.server.listener import Listener
 
-import samoa.module
-import samoa.model.server
-import samoa.model.table
-import samoa.model.partition
-import samoa.client
-import samoa.server.context
-import samoa.core.protobuf
-import samoa.core.proactor
-import samoa.command.cluster_state
-import samoa.persistence
-"""
+from samoa.test.module import TestModule
+from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestPeerDiscovery(unittest.TestCase):
 
-    def setUp(self):
-        self.proactor = samoa.core.Proactor()
+    def test_peer_discovery(self):
 
-    def _server_bootstrap(self, server_uuid, port, local_partitions, peers):
+        proactor = Proactor.get_proactor()
 
-        class _Server(object): pass
+        injectors, fixtures = [], []
 
-        module = samoa.module.TestModule(server_uuid, port, self.proactor)
-        injector = module.configure(getty.Injector())
-
-        meta = injector.get_instance(samoa.model.meta.Meta)
-        session = meta.new_session()
-
-        # add records for known peers
-        for peer_uuid, peer_port in peers:
-            session.add(samoa.model.server.Server(uuid = peer_uuid,
-                hostname = 'localhost', port = peer_port))
-
-        session.flush()
-
-        table_names = set()
-
-        # add local partitions
-        for tbl_name, local_uuid, ring_pos in local_partitions:
-
-            tbl_uuid = samoa.core.UUID.from_name_str(tbl_name)
-
-            if tbl_name not in table_names:
-                session.add(samoa.model.table.Table(
-                    uuid = tbl_uuid, name = tbl_name,
-                    data_type = samoa.persistence.DataType.BLOB_TYPE,
-                    replication_factor = 2))
-                table_names.add(tbl_name)
-                session.flush()
-
-            session.add(samoa.model.partition.Partition(
-                uuid = local_uuid,
-                table_uuid = tbl_uuid,
-                server_uuid = server_uuid,
-                ring_position = ring_pos,
-                consistent_range_begin = ring_pos,
-                consistent_range_end = ring_pos,
-                lamport_ts = 1,
-                storage_path = '/tmp/%s' % local_uuid.to_hex_str(),
-                storage_size = (1 << 24), # 1 MB
-                index_size = 1000))
-
-        session.commit()
-
-        # Cause the context to spring into life
-        injector.get_instance(
-            samoa.server.context.Context)
-
-        return meta
-
-    def _DISABLE_test_basic(self):
-
-        ports = []
+        # create injectors & inject fixtures for each of four servers
         for i in xrange(4):
+            injectors.append(TestModule().configure(getty.Injector()))
+            fixtures.append(injectors[-1].get_instance(ClusterStateFixture))
 
-            # determine an available port
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.bind(('localhost', 0))
-            ports.append(sock.getsockname()[1])
-            sock.close()
+        tbl0 = UUID.from_name('tbl0')
+        tbl1 = UUID.from_name('tbl1')
 
-        max_ring_pos = samoa.model.Table.RING_SIZE
+        # servers 0 & 2 know of tbl0 only
+        fixtures[0].add_table(tbl0)
+        fixtures[2].add_table(tbl0)
 
-        u = samoa.core.UUID.from_name_str
+        # server 3 knows of tbl1 only
+        fixtures[3].add_table(tbl1)
 
-        server_meta = []
-        server_meta.append(self._server_bootstrap(u('server_0'), ports[0],
-            # local partitions
-            [('tbl0', u('srv0_tbl0_part1'), random.randint(0, max_ring_pos)),
-             ('tbl0', u('srv0_tbl0_part2'), random.randint(0, max_ring_pos)),
-             ('tbl0', u('srv0_tbl0_part3'), random.randint(0, max_ring_pos))],
-            # no known peers
-            []))
+        # server 1 knows of both tbl0 & tbl1
+        fixtures[1].add_table(tbl0)
+        fixtures[1].add_table(tbl1)
 
-        server_meta.append(self._server_bootstrap(u('server_1'), ports[1],
-            # local partitions
-            [('tbl0', u('srv1_tbl0_part1'), random.randint(0, max_ring_pos)),
-             ('tbl1', u('srv1_tbl1_part2'), random.randint(0, max_ring_pos))],
-            # knows of server 0
-            [(u('server_0'), ports[0])]))
+        # note tbl0 & tbl1 share UUID & data-type across servers,
+        #  but differ in name, lamport-timestamp, and replication factor
 
-        server_meta.append(self._server_bootstrap(u('server_2'), ports[2],
-            # local partitions
-            [('tbl0', u('srv2_tbl0_part1'), random.randint(0, max_ring_pos))],
-            # knows of server 0
-            [(u('server_0'), ports[0])]))
+        # server 0 has three partitions in tbl0
+        fixtures[0].add_local_partition(tbl0, UUID.from_name('s0_tbl0_p0'))
+        fixtures[0].add_local_partition(tbl0, UUID.from_name('s0_tbl0_p1'))
+        fixtures[0].add_local_partition(tbl0, UUID.from_name('s0_tbl0_p2'))
 
-        server_meta.append(self._server_bootstrap(u('server_3'), ports[3],
-            # local partitions
-            [('tbl1', u('srv3_tbl1_part1'), random.randint(0, max_ring_pos))],
-            # knows of server 2
-            [(u('server_2'), ports[2])]))
+        # server 1 has one partition each in tbl0 & tbl1
+        fixtures[1].add_local_partition(tbl0, UUID.from_name('s1_tbl0_p0'))
+        fixtures[1].add_local_partition(tbl1, UUID.from_name('s1_tbl1_p1'))
 
-        self.proactor.run_later(self.proactor.shutdown, 1000)
-        self.proactor.run()
+        # server 2 has one partition on tbl0
+        fixtures[2].add_local_partition(tbl0, UUID.from_name('s2_tbl0_p0'))
 
-        # check all servers know of all partitions
-        for meta in server_meta:
-            session = meta.new_session()
-            self.assertEquals(session.query(samoa.model.Partition).count(), 7)
+        # server 3 has one partition on tbl1
+        fixtures[3].add_local_partition(tbl1, UUID.from_name('s3_tbl1_p0'))
+
+        # server 0 has no known peers
+
+        # server 1 knows of server 0
+        fixtures[1].add_peer(uuid = fixtures[0].state.local_uuid,
+            port = fixtures[0].state.local_port)
+
+        # server 2 knows of server 1
+        fixtures[2].add_peer(uuid = fixtures[1].state.local_uuid,
+            port = fixtures[1].state.local_port)
+
+        # server 3 knows of server 2
+        fixtures[3].add_peer(uuid = fixtures[2].state.local_uuid,
+            port = fixtures[2].state.local_port)
+
+        # bootstrap server contexts
+        contexts = [i.get_instance(Listener).get_context() for i in injectors]
+
+        # schedule servers to stop 150ms from now
+        for ctxt in contexts:
+            proactor.run_later(ctxt.get_tasklet_group().cancel_group, 150)
+
+        proactor.run()
+
+        # verify all servers know of all peers, tables, & partitions
+        for ctxt in contexts:
+            table_set = ctxt.get_cluster_state().get_table_set()
+
+            table = table_set.get_table(tbl0)
+            self.assertTrue(table.get_partition(UUID.from_name('s0_tbl0_p0')))
+            self.assertTrue(table.get_partition(UUID.from_name('s0_tbl0_p1')))
+            self.assertTrue(table.get_partition(UUID.from_name('s0_tbl0_p2')))
+            self.assertTrue(table.get_partition(UUID.from_name('s1_tbl0_p0')))
+            self.assertTrue(table.get_partition(UUID.from_name('s2_tbl0_p0')))
+
+            table = table_set.get_table(tbl1)
+            self.assertTrue(table.get_partition(UUID.from_name('s1_tbl1_p1')))
+            self.assertTrue(table.get_partition(UUID.from_name('s3_tbl1_p0')))
+
+            self.assertEquals(3,
+                len(ctxt.get_cluster_state().get_protobuf_description().peer))
 
         return
 

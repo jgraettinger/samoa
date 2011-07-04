@@ -49,7 +49,7 @@ class TestTasklet(unittest.TestCase):
             yield proactor.sleep(5)
             self.assertEquals(out, ['running'])
 
-            tlet_group.cancel_tasklets()
+            tlet_group.cancel_group()
 
             yield proactor.sleep(5)
             self.assertEquals(out, ['halted'])
@@ -75,7 +75,7 @@ class TestTasklet(unittest.TestCase):
             yield proactor.sleep(5)
             self.assertEquals(out, ['running'])
 
-            tlet_group.cancel_tasklets()
+            tlet_group.cancel_group()
 
             # no references should remain
             yield proactor.sleep(5)

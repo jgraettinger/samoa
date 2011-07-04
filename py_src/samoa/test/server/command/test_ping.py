@@ -34,7 +34,7 @@ class TestPing(unittest.TestCase):
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
-            context.get_tasklet_group().cancel_tasklets()
+            context.get_tasklet_group().cancel_group()
             yield
 
         proactor = Proactor.get_proactor()
