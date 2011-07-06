@@ -10,9 +10,9 @@ class heap_rolling_hash : public rolling_hash
 {
 public:
 
-    heap_rolling_hash(size_t region_size, size_t table_size)
+    heap_rolling_hash(size_t region_size, size_t index_size)
      : rolling_hash::rolling_hash(
-        new char[region_size], region_size, table_size)
+        new char[region_size], region_size, index_size)
     { }
 
     virtual ~heap_rolling_hash()

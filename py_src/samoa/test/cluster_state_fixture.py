@@ -135,7 +135,8 @@ class ClusterStateFixture(object):
         self._part_ind[(UUID(table.uuid), uuid)] = part
         return part
 
-    def add_local_partition(self, table_uuid, uuid = None, ring_pos = None):
+    def add_local_partition(self, table_uuid, uuid = None, ring_pos = None,
+        storage_size = (1<<20), index_size = 10000):
 
         uuid = self._coerce_uuid(uuid)
         ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
@@ -147,6 +148,11 @@ class ClusterStateFixture(object):
         part.set_consistent_range_begin(part.ring_position)
         part.set_consistent_range_end(part.ring_position)
         part.set_lamport_ts(lamport_ts)
+
+        ring_layer = part.add_ring_layer()
+        ring_layer.set_storage_size(storage_size)
+        ring_layer.set_index_size(index_size)
+        # no file path -> heap hash-ring
 
         self._part_ind[(UUID(table.uuid), uuid)] = part
         return part

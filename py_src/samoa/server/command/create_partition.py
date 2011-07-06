@@ -34,6 +34,10 @@ class CreatePartitionHandler(CommandHandler):
         part.set_consistent_range_end(part.ring_position)
         part.set_lamport_ts(1)
 
+        for req_rlayer in req.ring_layer:
+            ring_layer = part.add_ring_layer()
+            ring_layer.CopyFrom(req_rlayer)
+
         self.log.info('created partition %s (table %s)' % (
             part.uuid, table.uuid))
 
@@ -47,12 +51,17 @@ class CreatePartitionHandler(CommandHandler):
         req = client.get_request().create_partition
 
         if not req:
-            client.set_error('400', 'create_partition missing')
+            client.set_error(400, 'create_partition missing')
             client.finish_response()
             yield
 
         if not UUID.check_hex(req.table_uuid):
             client.set_error(400, 'malformed UUID %s' % req.table_uuid)
+            client.finish_response()
+            yield
+
+        if not len(req.ring_layer):
+            client.set_error(400, 'ring_layer missing')
             client.finish_response()
             yield
 

@@ -191,5 +191,3 @@ class TestPeerSet(unittest.TestCase):
         self.assertEquals(out.SerializeToText(),
             out2.SerializeToText())
 
-        print out.SerializeToText()
-

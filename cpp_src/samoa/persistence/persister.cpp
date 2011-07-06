@@ -4,6 +4,7 @@
 #include "samoa/persistence/heap_rolling_hash.hpp"
 #include "samoa/persistence/mapped_rolling_hash.hpp"
 #include "samoa/core/proactor.hpp"
+#include "samoa/log.hpp"
 #include <boost/bind.hpp>
 #include <algorithm>
 
@@ -17,24 +18,32 @@ persister::persister()
    _strand(*_proactor->concurrent_io_service()),
    _max_iter_records(50),
    _max_rotations(10)
-{ }
+{}
 
 persister::~persister()
 {
+    LOG_DBG("persister " << this);
+
     for(size_t i = 0; i != _layers.size(); ++i)
         delete _layers[i];
 }
 
-void persister::add_heap_hash(size_t region_size, size_t table_size)
+void persister::add_heap_hash(size_t storage_size, size_t index_size)
 {
-    _layers.push_back(new heap_rolling_hash(region_size, table_size));
+    LOG_DBG("persister " << this << " adding heap hash {"
+        << storage_size << ", " << index_size << "}");
+
+    _layers.push_back(new heap_rolling_hash(storage_size, index_size));
 }
 
 void persister::add_mapped_hash(std::string file,
-    size_t region_size, size_t table_size)
+    size_t storage_size, size_t index_size)
 {
+    LOG_DBG("persister " << this << " adding mapped hash {"
+        << file << ", " << storage_size << ", " << index_size << "}");
+
     _layers.push_back(mapped_rolling_hash::open(
-        file, region_size, table_size).release());
+        file, storage_size, index_size).release());
 }
 
 void persister::get(

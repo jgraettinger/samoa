@@ -18,7 +18,7 @@ typedef std::unique_ptr<bip::mapped_region> mapped_region_ptr_t;
 struct mapped_rolling_hash::pimpl_t
 {
     size_t region_size;
-    size_t table_size;
+    size_t index_size;
     file_lock_ptr_t     flock;
     file_mapping_ptr_t  fmapping;
     mapped_region_ptr_t mregion;
@@ -26,7 +26,7 @@ struct mapped_rolling_hash::pimpl_t
 
 mapped_rolling_hash::mapped_rolling_hash(pimpl_ptr_t pimpl)
  : rolling_hash::rolling_hash(
-    pimpl->mregion->get_address(), pimpl->region_size, pimpl->table_size),
+    pimpl->mregion->get_address(), pimpl->region_size, pimpl->index_size),
    _pimpl(std::move(pimpl))
 { }
 
@@ -42,7 +42,7 @@ mapped_rolling_hash::~mapped_rolling_hash()
 }
 
 std::unique_ptr<mapped_rolling_hash> mapped_rolling_hash::open(
-    const std::string & file, size_t region_size, size_t table_size)
+    const std::string & file, size_t region_size, size_t index_size)
 {
     if(std::ifstream(file.c_str()).fail())
     {
@@ -59,7 +59,7 @@ std::unique_ptr<mapped_rolling_hash> mapped_rolling_hash::open(
 
     pimpl_ptr_t p(new pimpl_t());
     p->region_size = region_size;
-    p->table_size = table_size;
+    p->index_size = index_size;
 
     // obtain a lock on the file
     p->flock.reset(new bip::file_lock(file.c_str()));

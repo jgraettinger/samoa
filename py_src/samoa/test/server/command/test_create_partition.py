@@ -40,8 +40,10 @@ class TestCreatePartition(unittest.TestCase):
             cp = request.get_message().mutable_create_partition()
             cp.set_table_uuid(UUID.from_name('test_table').to_hex())
             cp.set_ring_position(1234567)
-            cp.set_storage_size(1<<20)
-            cp.set_index_size(1<<12)
+
+            rl = cp.add_ring_layer()
+            rl.set_storage_size(1<<19)
+            rl.set_index_size(1234)
 
             # extract created UUID from response
             response = yield request.finish_request()
@@ -58,8 +60,10 @@ class TestCreatePartition(unittest.TestCase):
                 UUID.from_name('test_table')).get_partition(part_uuid)
 
             self.assertEquals(part.get_ring_position(), 1234567)
-            #self.assertEquals(part.get_storage_size(), 1 << 20)
-            #self.assertEquals(part.get_index_size(), 1 << 12)
+
+            ring_layer = part.get_persister().get_layer(0)
+            self.assertEquals(ring_layer.total_region_size(), (1<<19))
+            self.assertEquals(ring_layer.total_index_size(), 1234)
 
             # cleanup
             context.get_tasklet_group().cancel_group()
@@ -82,6 +86,18 @@ class TestCreatePartition(unittest.TestCase):
             server = yield Server.connect_to(
                 listener.get_address(), listener.get_port())
 
+            # missing a ring_layer
+            request = yield server.schedule_request()
+            request.get_message().set_type(CommandType.CREATE_PARTITION)
+
+            cp = request.get_message().mutable_create_partition()
+            cp.set_table_uuid(UUID.from_name('test_table').to_hex())
+            cp.set_ring_position(1234567)
+
+            response = yield request.finish_request()
+            self.assertEquals(response.get_error_code(), 400)
+            response.finish_response()
+
             # non-existent table 
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.CREATE_PARTITION)
@@ -89,8 +105,10 @@ class TestCreatePartition(unittest.TestCase):
             cp = request.get_message().mutable_create_partition()
             cp.set_table_uuid(UUID.from_name('unknown_table').to_hex())
             cp.set_ring_position(1234567)
-            cp.set_storage_size(1<<20)
-            cp.set_index_size(1<<12)
+
+            rl = cp.add_ring_layer()
+            rl.set_storage_size(1<<19)
+            rl.set_index_size(1234)
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 404)
@@ -103,8 +121,18 @@ class TestCreatePartition(unittest.TestCase):
             cp = request.get_message().mutable_create_partition()
             cp.set_table_uuid('invalid uuid')
             cp.set_ring_position(1234567)
-            cp.set_storage_size(1<<20)
-            cp.set_index_size(1<<12)
+
+            rl = cp.add_ring_layer()
+            rl.set_storage_size(1<<19)
+            rl.set_index_size(1234)
+
+            response = yield request.finish_request()
+            self.assertEquals(response.get_error_code(), 400)
+            response.finish_response()
+
+            # missing create_partition message
+            request = yield server.schedule_request()
+            request.get_message().set_type(CommandType.CREATE_PARTITION)
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 400)

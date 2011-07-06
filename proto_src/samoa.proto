@@ -82,6 +82,14 @@ message ClusterState {
             optional int64  consistent_range_begin = 8;
             optional int64  consistent_range_end = 9;
             optional int64  lamport_ts = 10;
+
+            message RingLayer {
+
+                required int64 storage_size = 1;
+                required int64 index_size = 2;
+                optional string file_path = 3;
+            };
+            repeated RingLayer ring_layer = 12;
         };
         repeated Partition partition = 7;
     };
@@ -118,8 +126,7 @@ message CreatePartitionRequest {
     required string table_uuid = 1;
     required int32  ring_position = 2;
 
-    required int64  storage_size = 3;
-    required int64  index_size = 4;
+    repeated ClusterState.Table.Partition.RingLayer ring_layer = 3;
 };
 
 message CreatePartitionResponse {

@@ -4,6 +4,7 @@
 
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/partition.hpp"
+#include "samoa/persistence/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/fwd.hpp"
 #include <boost/shared_ptr.hpp>
@@ -28,11 +29,18 @@ public:
         const spb::ClusterState::Table::Partition &,
         const ptr_t & current);
 
+    const persistence::persister_ptr_t & get_persister()
+    { return _persister; }
+
     void spawn_tasklets(const context_ptr_t &);
 
     bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,
         spb::ClusterState::Table::Partition & local) const;
+
+private:
+
+    persistence::persister_ptr_t _persister;
 };
 
 }

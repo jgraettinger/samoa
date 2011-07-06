@@ -39,9 +39,9 @@ public:
     persister();
     virtual ~persister();
 
-    void add_heap_hash(size_t region_size, size_t table_size);
+    void add_heap_hash(size_t storage_size, size_t index_size);
 
-    void add_mapped_hash(std::string file, size_t region_size, size_t table_size);
+    void add_mapped_hash(std::string file, size_t storage_size, size_t index_size);
 
     void get(get_callback_t &&, std::string && key);
 
