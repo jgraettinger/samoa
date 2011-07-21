@@ -6,9 +6,7 @@ project root
     : requirements 
         <threading>multi
         <cxxflags>-std=c++0x
-        <toolset>gcc-4.5
-        <include>/home/johng/local/include
-        <library-path>/home/johng/local/lib
+        <toolset>gcc
     : default-build debug 
     : build-dir $(BUILD) 
 ;
@@ -28,10 +26,7 @@ if $(.user_path)
     path-constant INSTALL : $(.user_path) ;
 }
 
-#using python : 2.6 : : /usr/include/python2.6_d : : <python-debugging>on ;
-#lib boost_python : /home/johng/boost_1_40_0/stage/lib/libboost_python.so.1.40.0 ;
-
-using python : 2.7 ;
+using python ;
 
 # external libraries we'll need
 lib boost_system ;

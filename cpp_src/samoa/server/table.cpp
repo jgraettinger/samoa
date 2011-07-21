@@ -132,10 +132,10 @@ void table::route_key(const std::string & key,
     out.clear();
     while(out.size() != _repl_factor && out.size() != _ring.size())
     {
-        out.push_back(*it);
-
-        if(++it == _ring.end())
+        if(it == _ring.end())
             it = _ring.begin();
+
+        out.push_back(*it);
     }
 }
 

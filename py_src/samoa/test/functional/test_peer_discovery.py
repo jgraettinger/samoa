@@ -71,9 +71,9 @@ class TestPeerDiscovery(unittest.TestCase):
         # bootstrap server contexts
         contexts = [i.get_instance(Listener).get_context() for i in injectors]
 
-        # schedule servers to stop 150ms from now
+        # schedule servers to stop 1s from now
         for ctxt in contexts:
-            proactor.run_later(ctxt.get_tasklet_group().cancel_group, 150)
+            proactor.run_later(ctxt.get_tasklet_group().cancel_group, 1000)
 
         proactor.run()
 

@@ -102,7 +102,8 @@ class ClusterStateFixture(object):
         self._peer_ind[uuid] = peer
         return peer
 
-    def add_table(self, uuid = None, name = None, is_dropped = False):
+    def add_table(self, uuid = None, name = None, is_dropped = False,
+        data_type = DataType.BLOB_TYPE):
 
         uuid = self._coerce_uuid(uuid)
         name = name or self.generate_name()
@@ -114,7 +115,7 @@ class ClusterStateFixture(object):
         if is_dropped:
             tbl.set_dropped(True)
         else:
-            tbl.set_data_type(DataType.BLOB_TYPE.name)
+            tbl.set_data_type(data_type.name)
             tbl.set_name(name)
             tbl.set_replication_factor(repl_factor)
             tbl.set_lamport_ts(lamport_ts)

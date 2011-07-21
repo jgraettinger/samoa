@@ -38,7 +38,7 @@ void py_on_get(
     callable(arg);
 
     // set the future to re-enter coroutine via post, so that
-    //  on_result is guarentted to return immediately
+    //  py_on_get is guaranteed to return immediately
     future->set_reenter_via_post();
     future->on_result(bpl::object());
 }
@@ -91,7 +91,7 @@ bool py_on_put(
     bool committed = bpl::extract<bool>(callable(*arg));
 
     // set the future to re-enter coroutine via post, so that
-    //  on_result is guarentted to return immediately
+    //  py_on_put is guaranteed to return immediately
     future->set_reenter_via_post();
     future->on_result(bpl::object());
 

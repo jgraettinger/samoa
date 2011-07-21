@@ -17,8 +17,8 @@ enum CommandType {
     CREATE_PARTITION = 8;
     DROP_PARTITION = 9;
 
-    BLOB_GET = 10;
-    BLOB_PUT = 11;
+    GET_BLOB = 10;
+    PUT_BLOB = 11;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -140,25 +140,23 @@ message DropPartitionRequest {
 
 // BLOB datatype operations
 
-message BlobGetRequest {
+message GetBlobRequest {
     required string table_uuid = 1;
     required bytes key = 2;
 };
 
-message BlobGetResponse {
+message GetBlobResponse {
     required bool found = 1;
-    repeated int32 value_length = 2;
     optional bytes version_tag = 3;
 };
 
-message BlobPutRequest {
+message PutBlobRequest {
     required string table_uuid = 1;
     required bytes key = 2;
-    required int32 value_length = 3;
     optional bytes version_tag = 4;
 };
 
-message BlobPutResponse {
+message PutBlobResponse {
     required bool success = 1;
 };
 
@@ -171,6 +169,10 @@ message SamoaRequest {
     // whether the client will be closing the connection after this request
     optional bool closing = 3 [default = false];
 
+    // the byte-lengths of any data blocks accompanying the request.
+    //  data blocks directly follow the SamoaRequest
+    repeated uint32 data_block_length = 2;
+
     optional ClusterState     cluster_state = 7;
 
     optional CreateTableRequest create_table = 8;
@@ -180,8 +182,8 @@ message SamoaRequest {
     optional CreatePartitionRequest create_partition = 11;
     optional DropPartitionRequest   drop_partition = 12;
 
-    optional BlobGetRequest blob_get = 13;
-    optional BlobPutRequest blob_put = 14;
+    optional GetBlobRequest get_blob = 13;
+    optional PutBlobRequest put_blob = 14;
 };
 
 message SamoaResponse {
@@ -189,16 +191,20 @@ message SamoaResponse {
     required CommandType type = 1;
 
     // whether the server will be closing the connection after this request
-    optional bool closing = 6 [default = false];
+    optional bool closing = 2 [default = false];
 
-    optional Error         error = 2;
-    optional ClusterState  cluster_state = 7;
+    // the byte-lengths of any data blocks accompanying the response.
+    //  data blocks directly follow the SamoaResponse
+    repeated uint32 data_block_length = 3;
 
-    optional CreateTableResponse create_table = 8;
+    optional Error         error = 4;
+    optional ClusterState  cluster_state = 5;
 
-    optional CreatePartitionResponse create_partition = 10;
+    optional CreateTableResponse create_table = 6;
 
-    optional BlobGetResponse blob_get = 12;
-    optional BlobPutResponse blob_put = 13;
+    optional CreatePartitionResponse create_partition = 7;
+
+    optional GetBlobResponse get_blob = 8;
+    optional PutBlobResponse put_blob = 9;
 };
 
