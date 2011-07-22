@@ -100,16 +100,13 @@ class GetBlobHandler(CommandHandler):
         peer_resp = yield peer_req.finish_request()
 
         client.get_response().CopyFrom(peer_resp.get_message())
-
-        block_lengths = list(peer_resp.get_message().data_block_length)
         client.start_response()
 
-        for b_len in block_lengths:
-            block = yield peer_resp.read_data(b_len)
-            client.queue_write(block)
-            yield client.write_queued()
+        for b_len in peer_resp.get_message().data_block_length:
+            block = yield peer_resp.read_interface().read_data(b_len)
+            client.write_interface().queue_write(block)
 
+        peer_resp.finish_response()
         client.finish_response()
         yield
-
 

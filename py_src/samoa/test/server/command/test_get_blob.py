@@ -14,92 +14,112 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestGetBlob(unittest.TestCase):
 
-    def setUp(self):
-
-        self.injector = TestModule().configure(getty.Injector())
-        self.fixture = self.injector.get_instance(ClusterStateFixture)
-
     def test_get_blob(self):
 
-        test_table = self.fixture.add_table(
-            data_type = DataType.BLOB_TYPE)
-        test_part = self.fixture.add_local_partition(test_table.uuid)
+        # two servers - one hosting the table partition,
+        #  and one knowing of the partition via peer-discovery
 
-        listener = self.injector.get_instance(Listener)
-        context = listener.get_context()
+        srv_injector = TestModule().configure(getty.Injector())
+        srv_fixture = srv_injector.get_instance(ClusterStateFixture)
+
+        test_table = srv_fixture.add_table(data_type = DataType.BLOB_TYPE)
+        test_part = srv_fixture.add_local_partition(test_table.uuid)
+
+        srv_listener = srv_injector.get_instance(Listener)
+        srv_context = srv_listener.get_context()
+
+        # query for runtime partition persister
+        persister = srv_context.get_cluster_state(
+            ).get_table_set(
+            ).get_table(UUID(test_table.uuid)
+            ).get_partition(UUID(test_part.uuid)
+            ).get_persister()
+
+        # set a test value
+        persister.put(
+            lambda cr, nr: nr.set_value('test-value') or 1,
+            'a-test-key', 10)
+
+        # bootstrap forwarding server, telling it of srv_listener
+        fwd_injector = TestModule().configure(getty.Injector())
+        fwd_fixture = fwd_injector.get_instance(ClusterStateFixture)
+        fwd_fixture.add_peer(uuid = srv_fixture.state.local_uuid,
+            port = srv_listener.get_port())
+
+        fwd_listener = fwd_injector.get_instance(Listener)
+        fwd_context = fwd_listener.get_context()
+
+        # test operation of GET_BLOB, when requesting directly from the
+        #  host server, and when proxying through the fowarding server
 
         def test():
 
-            # query for runtime partition persister
-            part = context.get_cluster_state().get_table_set().get_table(
-                UUID(test_table.uuid)).get_partition(UUID(test_part.uuid))
-            persister = part.get_persister()
+            for tst_listener in (srv_listener, fwd_listener):
 
-            # set a test value
-            persister.put(
-                lambda cr, nr: nr.set_value('test-value') or 1,
-                'a-test-key', 10)
+                server = yield Server.connect_to(
+                    tst_listener.get_address(), tst_listener.get_port())
 
-            # issue blob get request (missing key)
-            server = yield Server.connect_to(
-                listener.get_address(), listener.get_port())
-            request = yield server.schedule_request()
+                # issue blob get request (missing key)
+                request = yield server.schedule_request()
 
-            request.get_message().set_type(CommandType.GET_BLOB)
+                request.get_message().set_type(CommandType.GET_BLOB)
 
-            gb = request.get_message().mutable_get_blob()
-            gb.set_table_uuid(test_table.uuid)
-            gb.set_key('a-missing-key')
+                gb = request.get_message().mutable_get_blob()
+                gb.set_table_uuid(test_table.uuid)
+                gb.set_key('a-missing-key')
 
-            response = yield request.finish_request()
-            self.assertFalse(response.get_error_code())
+                response = yield request.finish_request()
+                self.assertFalse(response.get_error_code())
 
-            msg = response.get_message()
-            self.assertEquals(len(msg.data_block_length), 0)
-            self.assertFalse(msg.get_blob.found)
+                msg = response.get_message()
+                self.assertEquals(len(msg.data_block_length), 0)
+                self.assertFalse(msg.get_blob.found)
 
-            response.finish_response()
+                response.finish_response()
 
-            # issue blob get request (present key)
-            server = yield Server.connect_to(
-                listener.get_address(), listener.get_port())
-            request = yield server.schedule_request()
+                # issue blob get request (present key)
+                request = yield server.schedule_request()
 
-            request.get_message().set_type(CommandType.GET_BLOB)
+                request.get_message().set_type(CommandType.GET_BLOB)
 
-            gb = request.get_message().mutable_get_blob()
-            gb.set_table_uuid(test_table.uuid)
-            gb.set_key('a-test-key')
+                gb = request.get_message().mutable_get_blob()
+                gb.set_table_uuid(test_table.uuid)
+                gb.set_key('a-test-key')
 
-            response = yield request.finish_request()
-            self.assertFalse(response.get_error_code())
+                response = yield request.finish_request()
+                self.assertFalse(response.get_error_code())
 
-            msg = response.get_message()
-            self.assertEquals(len(msg.data_block_length), 1)
+                msg = response.get_message()
+                self.assertEquals(len(msg.data_block_length), 1)
 
-            value = yield response.read_interface().read_data(
-                msg.data_block_length[0])
-            self.assertEquals(value, 'test-value')
+                value = yield response.read_interface().read_data(
+                    msg.data_block_length[0])
+                self.assertEquals(value, 'test-value')
 
-            response.finish_response()
+                response.finish_response()
+
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            srv_context.get_tasklet_group().cancel_group()
+            fwd_context.get_tasklet_group().cancel_group()
             yield
 
         Proactor.get_proactor().run_test(test)
 
     def test_error_cases(self):
 
-        table_no_partitions = self.fixture.add_table(
+        injector = TestModule().configure(getty.Injector())
+        fixture = injector.get_instance(ClusterStateFixture)
+
+        table_no_partitions = fixture.add_table(
             data_type = DataType.BLOB_TYPE)
 
-        table_remote_not_available = self.fixture.add_table(
+        table_remote_not_available = fixture.add_table(
             data_type = DataType.BLOB_TYPE)
 
-        self.fixture.add_remote_partition(
+        fixture.add_remote_partition(
             table_remote_not_available.uuid)
 
-        listener = self.injector.get_instance(Listener)
+        listener = injector.get_instance(Listener)
         context = listener.get_context()
 
         def test():
@@ -168,7 +188,4 @@ class TestGetBlob(unittest.TestCase):
             yield
 
         Proactor.get_proactor().run_test(test)
-
-    def test_get_blob_forwarding(self):
-        self.assertFalse(True)
 
