@@ -16,22 +16,16 @@ class TestPersister(unittest.TestCase):
 
     def test_basic(self):
 
-        proactor = Proactor.get_proactor()
-
         def test():
             yield self.persister.put(
                 lambda cr, nr: nr.set_value('bar') or 1, 'foo', 3)
             yield self.persister.get(
                 lambda r: self.assertEquals(r.value, 'bar'), 'foo')
-            proactor.shutdown()
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        Proactor.get_proactor().run_test(test)
 
     def test_churn(self):
-
-        proactor = Proactor.get_proactor()
 
         keys = [str(uuid.uuid4()) for i in xrange(600)]
         values = {}
@@ -104,10 +98,7 @@ class TestPersister(unittest.TestCase):
                 pass
 
             self.assertEquals(values, {})
-
-            proactor.shutdown()
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        Proactor.get_proactor().run_test(test)
 

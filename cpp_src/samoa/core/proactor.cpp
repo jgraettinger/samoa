@@ -125,21 +125,6 @@ timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
     return timer;
 }
 
-void proactor::run(bool exit_when_idle /* = true */)
-{
-    SAMOA_ASSERT(_io_srv.get() && "serial or concurrent io-service "
-        "must be declared from this thread");
-
-//    std::unique_ptr<boost::asio::io_service::work> work;
-
-//    if(!exit_when_idle)
-//        work.reset(new boost::asio::io_service::work(*_io_srv));
-
-    _io_srv->run();
-    // clean exit => no more work
-    _io_srv->reset();
-}
-
 void proactor::shutdown()
 {
     spinlock::guard guard(_class_lock);

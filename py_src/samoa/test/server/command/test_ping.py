@@ -37,7 +37,5 @@ class TestPing(unittest.TestCase):
             context.get_tasklet_group().cancel_group()
             yield
 
-        proactor = Proactor.get_proactor()
-        proactor.spawn(test)
-        proactor.run()
+        Proactor.get_proactor().run_test(test)
 

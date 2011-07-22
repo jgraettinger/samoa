@@ -9,6 +9,7 @@
 #define LOG_ERR(what)  (std::cerr << "ERR " << LOG_HEADER << what << std::endl)
 
 // to disable debug logging at compile-time
+//#define LOG_INFO(what)
 //#define LOG_DBG(what)
 
 namespace samoa {

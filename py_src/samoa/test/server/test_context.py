@@ -11,9 +11,7 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestContext(unittest.TestCase):
 
-    def setUp(self):
-
-        proactor = Proactor.get_proactor()
+    def test_cluster_state_transaction(self):
 
         gen = ClusterStateFixture()
 
@@ -21,11 +19,7 @@ class TestContext(unittest.TestCase):
         gen.add_remote_partition(tbl.uuid)
         gen.add_local_partition(tbl.uuid)
 
-        self.context = Context(gen.state)
-
-    def test_cluster_state_transaction(self):
-
-        proactor = Proactor.get_proactor()
+        context = Context(gen.state)
 
         def callback(should_commit, state):
 
@@ -42,10 +36,10 @@ class TestContext(unittest.TestCase):
         def test():
 
             # start a transaction which rolls back
-            yield self.context.cluster_state_transaction(
+            yield context.cluster_state_transaction(
                 functools.partial(callback, False))
 
-            table_set = self.context.get_cluster_state().get_table_set()
+            table_set = context.get_cluster_state().get_table_set()
 
             # can't query table by UUID
             self.assertFalse(table_set.get_table(UUID.from_name('new_table')))
@@ -54,10 +48,10 @@ class TestContext(unittest.TestCase):
             self.assertFalse(table_set.get_table_by_name('new_table'))
 
             # start a transaction which commits
-            yield self.context.cluster_state_transaction(
+            yield context.cluster_state_transaction(
                 functools.partial(callback, True))
 
-            table_set = self.context.get_cluster_state().get_table_set()
+            table_set = context.get_cluster_state().get_table_set()
 
             # table can be queried by name or UUID
             table = table_set.get_table(UUID.from_name('new_table'))
@@ -66,9 +60,9 @@ class TestContext(unittest.TestCase):
             # partition can be queried by UUID
             part = table.get_partition(UUID.from_name('new_part'))
 
-            proactor.shutdown()
+            # cleanup
+            context.get_tasklet_group().cancel_group()
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        Proactor.get_proactor().run_test(test)
 

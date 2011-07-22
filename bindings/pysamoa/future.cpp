@@ -4,7 +4,7 @@
 #include "coroutine.hpp"
 #include "scoped_python.hpp"
 #include "samoa/client/server.hpp"
-#include <iostream>
+#include "samoa/log.hpp"
 
 namespace pysamoa {
 
@@ -14,13 +14,13 @@ using namespace samoa::core;
 future::future()
  : _called(false), _error(false), _reenter_via_post(false)
 {
-    std::cerr << "future " << (size_t)this << " created" << std::endl;
+    LOG_DBG("created " << this);
 }
 
 future::future(const bpl::object & result)
  : _called(true), _error(false), _reenter_via_post(false), _result(result)
 {
-    std::cerr << "*precalled* future " << (size_t)this << " created" << std::endl;
+    LOG_DBG("created (pre-called) " << this);
 }
 
 future::~future()
@@ -31,7 +31,7 @@ future::~future()
     _result = _exc_type = _exc_msg = bpl::object();
     _coroutine.reset();
 
-    std::cerr << "future " << (size_t)this << " destroyed" << std::endl;
+    LOG_DBG("destroyed " << this);
 }
 
 // precondition: Python GIL is held

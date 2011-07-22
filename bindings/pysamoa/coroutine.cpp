@@ -2,6 +2,8 @@
 #include "coroutine.hpp"
 #include "future.hpp"
 #include "scoped_python.hpp"
+#include "samoa/log.hpp"
+
 #include <iostream>
 
 namespace pysamoa {
@@ -13,8 +15,8 @@ coroutine::coroutine(const bpl::object & generator,
     const samoa::core::io_service_ptr_t & io_srv)
  : _stack(1, generator), _exception_set(false), _io_srv(io_srv)
 {
-    string repr = bpl::extract<string>(bpl::str(generator));
-    std::cerr << "coro " << (size_t)this << " created " << repr << std::endl;
+    LOG_DBG("created " << this << " " << \
+        bpl::extract<string>(bpl::str(generator))());
 }
 
 coroutine::~coroutine()
@@ -23,7 +25,7 @@ coroutine::~coroutine()
 
     _stack.clear();
 
-    std::cerr << "coro " << (size_t)this << " destroyed" << std::endl;
+    LOG_DBG("destroyed " << this);
 }
 
 void coroutine::next(bool post)

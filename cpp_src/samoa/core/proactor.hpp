@@ -17,6 +17,10 @@ public:
 
     typedef proactor_ptr_t ptr_t;
 
+    typedef boost::function<
+        void (const io_service_ptr_t &)
+    > run_later_callback_t;
+
     /*!
     * Reference-counted singleton
     *  Only one proactor instance exists at a time, but the instance
@@ -59,6 +63,12 @@ public:
     void declare_concurrent_io_service();
 
     /*!
+    *  Returns the io-service declared on this thread
+    */
+    boost::asio::io_service * get_declared_io_service()
+    { return _io_srv.get(); }
+
+    /*!
     *  Selects a single-threaded io_service from the pool of such
     *    io_services, in round-robin fashion.
     *
@@ -79,14 +89,18 @@ public:
     */
     io_service_ptr_t concurrent_io_service();
 
-
-    typedef boost::function<
-        void (const io_service_ptr_t &)
-    > run_later_callback_t;
-
+    /*!
+    *  Schedules a callable to be invoked at a future time on a serial
+    *   io-service.
+    *
+    *  TODO(johng): Iff delay_ms = 0, the callable will be immediately
+    *   posted to the io-service.
+    *
+    *  TODO(johng): boost::asio::deadline_timer doesn't work across shared-library
+    *   boundaries, so it's use has been encapsulated within libsamoa. according
+    *   to docs, shared-libraries shouldn't be a problem-- this needs another pass
+    */
     timer_ptr_t run_later(const run_later_callback_t &, unsigned delay_ms);
-
-    void run(bool exit_when_idle);
 
     void shutdown();
 

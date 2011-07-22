@@ -59,8 +59,7 @@ class TestTasklet(unittest.TestCase):
             self.assertEquals(out, ['halted', 'destroyed'])
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        proactor.run_test(test)
 
     def test_orphaned_looped_tasklet(self):
 
@@ -82,8 +81,7 @@ class TestTasklet(unittest.TestCase):
             self.assertEquals(out, ['halted', 'destroyed'])
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        proactor.run_test(test)
 
     def test_managed_short_tasklet(self):
 
@@ -120,8 +118,7 @@ class TestTasklet(unittest.TestCase):
             self.assertEquals(out, ['halted', 'destroyed'])
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        proactor.run_test(test)
 
     def test_managed_without_reference(self):
 
@@ -139,6 +136,5 @@ class TestTasklet(unittest.TestCase):
 
             yield
 
-        proactor.spawn(test)
-        proactor.run()
+        proactor.run_test(test)
 

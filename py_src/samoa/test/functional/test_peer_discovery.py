@@ -71,11 +71,11 @@ class TestPeerDiscovery(unittest.TestCase):
         # bootstrap server contexts
         contexts = [i.get_instance(Listener).get_context() for i in injectors]
 
-        # schedule servers to stop 1s from now
-        for ctxt in contexts:
-            proactor.run_later(ctxt.get_tasklet_group().cancel_group, 1000)
-
-        proactor.run()
+        # use proactor.run_test to run the proactor until idle, at which
+        #  point each server's tasklet_group is cancelled, such that the
+        #  proactor subsequently exits
+        proactor.run_test(
+            ctxt.get_tasklet_group().cancel_group for ctxt in contexts)
 
         # verify all servers know of all peers, tables, & partitions
         for ctxt in contexts:
