@@ -22,8 +22,7 @@ class CreateTableHandler(CommandHandler):
         # check if another table exists with this name
         cluster_state = client.get_context().get_cluster_state()
         if cluster_state.get_table_set().get_table_by_name(tbl_req.name):
-            client.set_error(409, 'table %s exists' % tbl_req.name)
-            return False
+            raise NameError('table %s exists' % tbl_req.name)
 
         table = protobuf.add_table(local_state, UUID.from_random())
         table.set_data_type(tbl_req.data_type)
@@ -43,17 +42,19 @@ class CreateTableHandler(CommandHandler):
         tbl_req = client.get_request().create_table
 
         if not tbl_req:
-            client.set_error(400, 'create_table missing')
-            client.finish_response()
+            client.send_error(400, 'create_table missing')
             yield
 
         if tbl_req.data_type not in DataType.names:
-            client.set_error(406, 'invalid data type %s' % tbl_req.data_type)
-            client.finish_response()
+            client.send_error(406, 'invalid data type %s' % tbl_req.data_type)
             yield
 
-        commit = yield client.get_context().cluster_state_transaction(
-            functools.partial(self._transaction, client))
+        try:
+            commit = yield client.get_context().cluster_state_transaction(
+                functools.partial(self._transaction, client))
+        except NameError, exc:
+            client.send_error(409, exc.message)
+            yield
 
         if commit:
             # TODO: notify peers of change

@@ -50,7 +50,7 @@ void peer_discovery::begin_iteration(const context::ptr_t & context)
 
 void peer_discovery::on_request(
     const boost::system::error_code & ec,
-    samoa::client::server_request_interface server,
+    samoa::client::server_request_interface & server,
     const context::ptr_t & context)
 {
     if(ec)
@@ -70,7 +70,7 @@ void peer_discovery::on_request(
 
 void peer_discovery::on_response(
     const boost::system::error_code & ec,
-    samoa::client::server_response_interface server,
+    samoa::client::server_response_interface & server,
     const context::ptr_t & context)
 {
     if(ec)
@@ -97,16 +97,25 @@ void peer_discovery::on_response(
 
 bool peer_discovery::on_state_transaction(
     spb::ClusterState & local_state,
-    samoa::client::server_response_interface server,
+    samoa::client::server_response_interface & server,
     const context::ptr_t & context)
 {
-    bool result = context->get_cluster_state()->merge_cluster_state(
-        server.get_message().cluster_state(),
-        local_state);
-
-    server.finish_response();
-    end_iteration();
-    return result;
+    try
+    {
+        bool result = context->get_cluster_state()->merge_cluster_state(
+            server.get_message().cluster_state(),
+            local_state);
+        
+        server.finish_response();
+        end_iteration();
+        return result;
+    }
+    catch(...)
+    {
+        server.finish_response();
+        end_iteration();
+        throw;
+    }
 }
 
 }

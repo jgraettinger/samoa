@@ -17,26 +17,25 @@ class ClusterStateHandler(CommandHandler):
         cluster_state = client.get_context().get_cluster_state()
         peer_state = client.get_request().cluster_state
 
-        try:
-            return cluster_state.merge_cluster_state(
-                peer_state, local_state)
-        except RuntimeError, e:
-            self.log.exception(client)
-            client.set_error(406, e.message)
-            return False
+        return cluster_state.merge_cluster_state(
+            peer_state, local_state)
 
     def handle(self, client):
 
         if client.get_request().has_cluster_state():
 
             # begin a transaction to merge remote state with our own
-            yield client.get_context().cluster_state_transaction(
-                functools.partial(self._transaction, client))
+            try:
+                yield client.get_context().cluster_state_transaction(
+                    functools.partial(self._transaction, client))
+            except RuntimeError, e:
+                self.log.exception(e)
+                client.send_error(406, e.message)
+                yield 
 
-        if not client.is_error_set():
-            cluster_state = client.get_context().get_cluster_state()
-            client.get_response().mutable_cluster_state().CopyFrom(
-                cluster_state.get_protobuf_description())
+        cluster_state = client.get_context().get_cluster_state()
+        client.get_response().mutable_cluster_state().CopyFrom(
+            cluster_state.get_protobuf_description())
 
         client.finish_response()
         yield

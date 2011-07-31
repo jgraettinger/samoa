@@ -56,7 +56,7 @@ future::ptr_t py_get(
 
     future::ptr_t f(boost::make_shared<future>());
 
-    p.get(boost::bind(py_on_get, f, callable, _1, _2), std::string(key));
+    p.get(boost::bind(py_on_get, f, callable, _1, _2), key);
     return f; 
 }
 
@@ -112,8 +112,7 @@ future::ptr_t py_put(
 
     future::ptr_t f(boost::make_shared<future>());
 
-    p.put(boost::bind(&py_on_put, f, callable, _1, _2, _3),
-        std::string(key), value_length );
+    p.put(boost::bind(&py_on_put, f, callable, _1, _2, _3), key, value_length);
     return f; 
 }
 
@@ -162,8 +161,7 @@ future::ptr_t py_drop(
 
     future::ptr_t f(boost::make_shared<future>());
 
-    p.drop(boost::bind(&py_on_drop, f, callable, _1, _2),
-        std::string(key));
+    p.drop(boost::bind(&py_on_drop, f, callable, _1, _2), key);
     return f; 
 }
 

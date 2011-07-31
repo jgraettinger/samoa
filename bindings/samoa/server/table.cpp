@@ -3,6 +3,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/partition.hpp"
+#include "samoa/server/peer_set.hpp"
 #include "pysamoa/iterutil.hpp"
 
 namespace samoa {
@@ -22,16 +23,21 @@ bpl::list py_get_ring(const table & t)
     return l;
 }
 
-bpl::list py_route_key(const table & t, const std::string & key)
+bpl::tuple py_route_ring_position(const table & t,
+    uint64_t ring_position,
+    const peer_set::ptr_t & peer_set)
 {
-    std::vector<partition::ptr_t> p;
-    t.route_key(key, p);
+    partition::ptr_t primary_partition;
+    table::ring_t all_partitions;
 
-    bpl::list l;
-    for(size_t i = 0; i != p.size(); ++i)
-        l.append(p[i]);
+    bool is_local = t.route_ring_position(ring_position, peer_set,
+        primary_partition, all_partitions);
 
-    return l;
+    bpl::list py_all_partitions;
+    for(auto it = all_partitions.begin(); it != all_partitions.end(); ++it)
+        py_all_partitions.append(*it);
+
+    return bpl::make_tuple(is_local, primary_partition, py_all_partitions);
 }
 
 void make_table_bindings()
@@ -48,7 +54,8 @@ void make_table_bindings()
         .def("get_replication_factor", &table::get_replication_factor)
         .def("get_ring", &py_get_ring)
         .def("get_partition", &table::get_partition)
-        .def("route_key", &py_route_key)
+        .def("ring_position", &table::ring_position)
+        .def("route_ring_position", &py_route_ring_position)
         .def("merge_table", &table::merge_table);
 }
 

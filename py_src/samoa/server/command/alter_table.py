@@ -21,9 +21,7 @@ class AlterTableHandler(CommandHandler):
         table = protobuf.find_table(local_state, UUID(req.table_uuid))
 
         if not table:
-            # race condition
-            client.set_error(404, 'table %s' % req.table_uuid)
-            return False
+            raise KeyError('table %s' % req.table_uuid)
 
         modified = False
 
@@ -56,25 +54,22 @@ class AlterTableHandler(CommandHandler):
         req = client.get_request().alter_table
 
         if not req:
-            client.set_error(400, 'alter_table missing')
-            client.finish_response()
+            client.send_error(400, 'alter_table missing')
             yield
 
         if not UUID.check_hex(req.table_uuid):
-            client.set_error(400, 'malformed UUID %s' % req.table_uuid)
-            client.finish_response()
+            client.send_error(400, 'malformed UUID %s' % req.table_uuid)
             yield
 
         cluster_state = client.get_context().get_cluster_state()
         table = cluster_state.get_table_set().get_table(UUID(req.table_uuid))
 
-        if not table:
-            client.set_error(404, 'table %s' % req.table_uuid)
-            client.finish_response()
+        try:
+            commit = yield client.get_context().cluster_state_transaction(
+                functools.partial(self._transaction, client))
+        except KeyError, exc:
+            client.send_error(404, exc.message)
             yield
-
-        commit = yield client.get_context().cluster_state_transaction(
-            functools.partial(self._transaction, client))
 
         if commit:
             # TODO: notify peers of change

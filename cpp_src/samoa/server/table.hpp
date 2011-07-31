@@ -41,23 +41,42 @@ public:
 
     const std::string & get_name() const;
 
-    size_t get_replication_factor() const;
+    unsigned get_replication_factor() const;
 
     const ring_t & get_ring() const;
 
     /// Returns nullptr if none exists
     partition_ptr_t get_partition(const core::uuid &) const;
 
-    //! Routes a key to set of partitions responsible for it
-    /*!
-        The arity of returned partitions will be the minumum of the
-        table replication-factory, and the number of live partitions
+    /// The key's position on the hash-ring continuum
+    uint64_t ring_position(const std::string & key) const;
 
-        \param key Key to be routed
-        \param out (Output) responsible partitions
+    /*! \brief Routes a position to the set of accountable partitions
+
+    \param ring_position Ring position to route
+    \param primary_partition_out The primary responsible partition
+            (returned by reference, see notes)
+    \param all_partitions_out All responsible partitions
+            (returned by reference)
+    \return Whether the primary partition is local or remote
+
+    The arity of returned partitions will be the minumum of the
+     table replication-factory, and the number of live partitions.
+    The primary partition is local iff a local partition is available;
+     otherwise it's the first remote partition from the lowest-latency peer,
+     iff a connected peer is available. Failing that, it's nullptr.
+    If the primary partition is local, then result partitions are
+     the exact set of partitions responsible for the key.
+    Otherwise, returned partitions are all remote, and are guaraneteed
+     only to be 'closer' to those actually accountable for the key.
+    (See the Chord routing protocol for further background).
     */
-    void route_key(const std::string & key, ring_t & out) const;
+    bool route_ring_position(
+        uint64_t ring_position, const peer_set_ptr_t &,
+        partition_ptr_t & primary_partition_out,
+        ring_t & all_partitions_out) const;
 
+    //! Launches all tasklets required by the runtime table
     void spawn_tasklets(const context_ptr_t &);
 
     //! Merges a peer table description into the local description
@@ -75,7 +94,7 @@ private:
     core::uuid _server_uuid;
     persistence::data_type _data_type;
     std::string _name;
-    size_t _repl_factor;
+    unsigned _repl_factor;
 
     ring_t        _ring;
     uuid_index_t  _index;

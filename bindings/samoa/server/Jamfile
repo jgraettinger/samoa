@@ -10,3 +10,5 @@ python-extension _server :
 
 install dist : _server : <location>$(INSTALL)/samoa/server ;
 
+build-project command ;
+

@@ -1,37 +1,41 @@
 
+import getty
 import unittest
 
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
+from samoa.core.proactor import Proactor
+from samoa.client.server import Server
 from samoa.server.peer_set import PeerSet
 from samoa.server.table_set import TableSet
+from samoa.server.listener import Listener
+from samoa.server.command_handler import CommandHandler
+
+from samoa.test.module import TestModule
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
 class TestPeerSet(unittest.TestCase):
 
-    def setUp(self):
-
-        self.gen = ClusterStateFixture()
-        self.table = self.gen.add_table().uuid
-
     def test_ctor_edge_cases(self):
 
-        self.gen.add_peer()
-        self.gen.add_peer()
+        fixture = ClusterStateFixture()
+
+        fixture.add_peer()
+        fixture.add_peer()
 
         # null hypothesis - should build normally
-        peer_set = PeerSet(self.gen.state, None)
+        peer_set = PeerSet(fixture.state, None)
 
         # invalid peer order
-        tst_state = pb.ClusterState(self.gen.state)
+        tst_state = pb.ClusterState(fixture.state)
         tst_state.peer.SwapElements(0, 1)
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             PeerSet(tst_state, None)
 
         # duplicate peer UUID
-        tst_state = pb.ClusterState(self.gen.state)
+        tst_state = pb.ClusterState(fixture.state)
         tst_state.peer[0].set_uuid(tst_state.peer[1].uuid)
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
@@ -39,19 +43,22 @@ class TestPeerSet(unittest.TestCase):
 
     def test_merge_edge_cases(self):
 
-        pgen = self.gen.clone_peer()
+        fixture = ClusterStateFixture()
+        table = fixture.add_table().uuid
+
+        pgen = fixture.clone_peer()
 
         p1 = pgen.add_peer().uuid
         p2 = pgen.add_peer().uuid
 
         # p1 is referenced, p2 is not
-        pgen.add_remote_partition(self.table, server_uuid = p1)
+        pgen.add_remote_partition(table, server_uuid = p1)
 
-        peer_set = PeerSet(self.gen.state, None)
+        peer_set = PeerSet(fixture.state, None)
 
         # null hypothesis - should merge normally
         peer_set.merge_peer_set(pgen.state,
-            pb.ClusterState(self.gen.state))
+            pb.ClusterState(fixture.state))
 
         # invalid peer order
         tst_state = pb.ClusterState(pgen.state)
@@ -59,7 +66,7 @@ class TestPeerSet(unittest.TestCase):
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             peer_set.merge_peer_set(tst_state,
-                pb.ClusterState(self.gen.state))
+                pb.ClusterState(fixture.state))
 
         # duplicate peer UUID
         tst_state = pb.ClusterState(pgen.state)
@@ -67,27 +74,30 @@ class TestPeerSet(unittest.TestCase):
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             peer_set.merge_peer_set(tst_state,
-                pb.ClusterState(self.gen.state))
+                pb.ClusterState(fixture.state))
 
     def test_merge_extended(self):
 
+        fixture = ClusterStateFixture()
+        table = fixture.add_table().uuid
+
         # common set of known peers
-        p1 = self.gen.add_peer().uuid
-        p2 = self.gen.add_peer().uuid
-        p3 = self.gen.add_peer().uuid
+        p1 = fixture.add_peer().uuid
+        p2 = fixture.add_peer().uuid
+        p3 = fixture.add_peer().uuid
 
         # create remote partitions referencing all peers
-        part1 = self.gen.add_remote_partition(self.table,
+        part1 = fixture.add_remote_partition(table,
             server_uuid = p1).uuid
-        part2 = self.gen.add_remote_partition(self.table,
+        part2 = fixture.add_remote_partition(table,
             server_uuid = p2).uuid
-        part3 = self.gen.add_remote_partition(self.table,
+        part3 = fixture.add_remote_partition(table,
             server_uuid = p3).uuid
 
-        pgen = self.gen.clone_peer()
+        pgen = fixture.clone_peer()
 
         # locally drop part1
-        part = self.gen.get_partition(self.table, part1)
+        part = fixture.get_partition(table, part1)
         rpos = part.ring_position
 
         part.Clear()
@@ -95,8 +105,8 @@ class TestPeerSet(unittest.TestCase):
         part.set_ring_position(rpos)
         part.set_dropped(True)
 
-        # peer drops part2
-        part = pgen.get_partition(self.table, part2)
+        # peer drops part2 & part 3
+        part = pgen.get_partition(table, part2)
         rpos = part.ring_position
 
         part.Clear()
@@ -104,21 +114,32 @@ class TestPeerSet(unittest.TestCase):
         part.set_ring_position(rpos)
         part.set_dropped(True)
 
+        part = pgen.get_partition(table, part3)
+        rpos = part.ring_position
+
+        part.Clear()
+        part.set_uuid(part3)
+        part.set_ring_position(rpos)
+        part.set_dropped(True)
+
+        # locally set p3 as a 'seed' peer
+        fixture.get_peer(p3).set_seed(True)
+
         # additional peers known locally
-        p4 = self.gen.add_peer().uuid
-        p5 = self.gen.add_peer().uuid
-        self.gen.add_remote_partition(self.table, server_uuid = p4)
+        p4 = fixture.add_peer().uuid
+        p5 = fixture.add_peer().uuid
+        fixture.add_remote_partition(table, server_uuid = p4)
 
         # additional peers known remotely
         p6 = pgen.add_peer().uuid
         p7 = pgen.add_peer().uuid
-        pgen.add_remote_partition(self.table, server_uuid = p7)
+        pgen.add_remote_partition(table, server_uuid = p7)
 
         # peer has a local partition => peer itself should be tracked
-        pgen.add_local_partition(self.table)
+        pgen.add_local_partition(table)
 
-        peer_set = PeerSet(self.gen.state, None)
-        table_set = TableSet(self.gen.state, None)
+        peer_set = PeerSet(fixture.state, None)
+        table_set = TableSet(fixture.state, None)
 
         # p1 is not referenced, but still known
         peer_set.get_server_hostname(UUID(p1))
@@ -126,7 +147,7 @@ class TestPeerSet(unittest.TestCase):
         # p2 is locally referenced & known
         peer_set.get_server_hostname(UUID(p2))
 
-        # p3 is known / referenced by both
+        # p3 is locally known / referenced
         peer_set.get_server_hostname(UUID(p3))
 
         # p4 is locally referenced & known
@@ -148,7 +169,7 @@ class TestPeerSet(unittest.TestCase):
             peer_set.get_server_hostname(UUID(pgen.state.local_uuid))
 
         # MERGE from peer, & rebuild peer_set / table_set
-        out = pb.ClusterState(self.gen.state)
+        out = pb.ClusterState(fixture.state)
         self.assertTrue(table_set.merge_table_set(pgen.state, out))
         peer_set.merge_peer_set(pgen.state, out)
 
@@ -163,7 +184,7 @@ class TestPeerSet(unittest.TestCase):
         with self.assertRaisesRegexp(RuntimeError, "<assertion_failure>"):
             peer_set.get_server_hostname(UUID(p2))
 
-        # p3 is known / referenced by both
+        # p3 is still kept as seed, despite parition being remotely dropped
         peer_set.get_server_hostname(UUID(p3))
 
         # p4 is still known / referenced
@@ -190,4 +211,87 @@ class TestPeerSet(unittest.TestCase):
 
         self.assertEquals(out.SerializeToText(),
             out2.SerializeToText())
+
+    def test_forwarding(self):
+
+        injector = TestModule().configure(getty.Injector())
+        fixture = injector.get_instance(ClusterStateFixture)
+
+        listener = injector.get_instance(Listener)
+        context = listener.get_context()
+
+        # a proxy server which will forward requests
+        proxy_injector = TestModule().configure(getty.Injector())
+        proxy_fixture = proxy_injector.get_instance(ClusterStateFixture)
+
+        proxy_fixture.add_peer(context.get_server_uuid(),
+            port = context.get_server_port(), seed = True)
+
+        proxy_listener = proxy_injector.get_instance(Listener)
+        proxy_context = proxy_listener.get_context()
+
+        # for purposes of this test, we'll repurpose the PING command
+        #  handler, replacing it with handlers testing the functional
+        #  aspects of request forwarding
+
+        class ProxyHandler(CommandHandler):
+            def handle(self_inner, client):
+                cluster_state = client.get_context().get_cluster_state()
+
+                cluster_state.get_peer_set().forward_request(
+                    client, context.get_server_uuid())
+
+        class MainHandler(CommandHandler):
+            def handle(self_inner, client):
+
+                # request payload should have been properly forwarded
+                self.assertEquals(['request payload'],
+                    client.get_request_data_blocks())
+
+                # send two response payloads back
+                payload1 = 'response payload'
+                payload2 = 'extended response payload'
+
+                client.get_response().add_data_block_length(len(payload1))
+                client.get_response().add_data_block_length(len(payload2))
+
+                client.start_response()
+                client.write_interface().queue_write(payload1)
+                client.write_interface().queue_write(payload2)
+                client.finish_response()
+
+        # set these handlers up on an unused protocol type
+        proxy_listener.get_protocol().set_command_handler(pb.CommandType.PING,
+            ProxyHandler())
+
+        listener.get_protocol().set_command_handler(pb.CommandType.PING,
+            MainHandler())
+
+        def test():
+
+            proxy_server = yield Server.connect_to(
+                proxy_listener.get_address(), proxy_listener.get_port())
+
+            request = yield proxy_server.schedule_request()
+
+            # send a request to forward, with expected payload
+            request.get_message().set_type(pb.CommandType.PING)
+            payload = 'request payload'
+            request.get_message().add_data_block_length(len(payload))
+            request.start_request()
+            request.write_interface().queue_write(payload)
+
+            response = yield request.finish_request()
+
+            self.assertEquals(response.get_response_data_blocks(),
+                ['response payload', 'extended response payload'])
+
+            response.finish_response()
+
+            # cleanup
+            context.get_tasklet_group().cancel_group()
+            proxy_context.get_tasklet_group().cancel_group()
+            yield
+
+        Proactor.get_proactor().run_test(test)
 

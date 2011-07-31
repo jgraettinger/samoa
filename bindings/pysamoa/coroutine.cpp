@@ -43,11 +43,15 @@ void coroutine::send(const bpl::object & arg, bool post)
             shared_from_this(), arg)); 
 }
 
-void coroutine::error(const bpl::object & exc_type,
-    const bpl::object & exc_msg, bool post)
+void coroutine::error(
+    const bpl::object & exc_type,
+    const bpl::object & exc_msg,
+    const bpl::object & exc_trace,
+    bool post)
 {
     _exc_type = exc_type;
     _exc_val = exc_msg;
+    _exc_traceback = exc_trace;
     _exception_set = true;
 
     if(post)

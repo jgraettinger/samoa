@@ -34,8 +34,11 @@ public:
     void send(const bpl::object & arg, bool as_post = false);
 
     // Precondition: Python GIL is held
-    void error(const bpl::object & exc_type,
-        const bpl::object & exc_msg, bool as_post = false);
+    void error(
+        const bpl::object & exc_type,
+        const bpl::object & exc_msg,
+        const bpl::object & exc_trace,
+        bool as_post = false);
 
 private:
 

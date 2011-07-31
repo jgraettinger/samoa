@@ -104,6 +104,7 @@ public:
     //  write operation is in progress.
     void queue_write(const const_buffer_region &);
     void queue_write(const const_buffer_regions_t &);
+    void queue_write(const buffer_regions_t &);
 
     template<typename Iterator>
     void queue_write(const Iterator & begin, const Iterator & end);

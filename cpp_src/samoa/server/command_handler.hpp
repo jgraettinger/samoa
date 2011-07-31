@@ -13,9 +13,11 @@ public:
 
     typedef command_handler_ptr_t ptr_t;
 
-    command_handler() {}
+    command_handler()
+    { }
 
-    virtual ~command_handler() {}
+    virtual ~command_handler()
+    { }
 
     virtual void handle(const client_ptr_t &) = 0;
 };

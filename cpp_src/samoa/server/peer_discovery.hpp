@@ -3,7 +3,7 @@
 
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/periodic_task.hpp"
-#include "samoa/client/server.hpp"
+#include "samoa/client/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/tasklet.hpp"
 #include "samoa/core/uuid.hpp"
@@ -27,15 +27,15 @@ public:
 protected:
 
     void on_request(const boost::system::error_code &,
-        samoa::client::server_request_interface,
+        samoa::client::server_request_interface &,
         const context_ptr_t &);
 
     void on_response(const boost::system::error_code &,
-        samoa::client::server_response_interface,
+        samoa::client::server_response_interface &,
         const context_ptr_t &);
 
     bool on_state_transaction(core::protobuf::ClusterState &,
-        samoa::client::server_response_interface,
+        samoa::client::server_response_interface &,
         const context_ptr_t &);
 
     const core::uuid _peer_uuid;

@@ -43,12 +43,11 @@ public:
 
     void add_mapped_hash(std::string file, size_t storage_size, size_t index_size);
 
-    void get(get_callback_t &&, std::string && key);
+    void get(get_callback_t &&, const std::string & key);
 
-    void put(put_callback_t && put_callback,
-        std::string && key, size_t value_length);
+    void put(put_callback_t &&, const std::string & key, size_t value_length);
 
-    void drop(drop_callback_t && drop_callback, std::string && key);
+    void drop(drop_callback_t &&, const std::string & key);
 
     /*
     * No preconditions

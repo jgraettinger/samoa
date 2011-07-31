@@ -18,7 +18,7 @@ enum CommandType {
     DROP_PARTITION = 9;
 
     GET_BLOB = 10;
-    PUT_BLOB = 11;
+    SET_BLOB = 11;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -48,6 +48,9 @@ message ClusterState {
         required string hostname = 2;
         required uint32 port = 3;
 
+        // a seed peer will not be removed, even if not required
+        optional bool   seed = 4 [default = false];
+
         // local server statistics
         optional bool   connected = 6;
         optional uint32 queue_size = 7;
@@ -66,7 +69,7 @@ message ClusterState {
 
         // mutable fields
         optional string name = 3;
-        optional uint64 replication_factor = 4;
+        optional uint32 replication_factor = 4;
         optional uint64 lamport_ts = 9;
 
         message Partition {
@@ -78,15 +81,15 @@ message ClusterState {
 
             // fields captured by all partitions
             optional string server_uuid = 3;
-            optional int64  ring_position = 4;
-            optional int64  consistent_range_begin = 8;
-            optional int64  consistent_range_end = 9;
-            optional int64  lamport_ts = 10;
+            optional uint64 ring_position = 4;
+            optional uint64 consistent_range_begin = 8;
+            optional uint64 consistent_range_end = 9;
+            optional uint64 lamport_ts = 10;
 
             message RingLayer {
 
-                required int64 storage_size = 1;
-                required int64 index_size = 2;
+                required uint64 storage_size = 1;
+                required uint64 index_size = 2;
                 optional string file_path = 3;
             };
             repeated RingLayer ring_layer = 12;
@@ -103,7 +106,7 @@ message ClusterState {
 message CreateTableRequest {
     required string name = 1;
     required string data_type = 2;
-    required int32  replication_factor = 3;
+    required uint32 replication_factor = 3;
 };
 
 message CreateTableResponse {
@@ -124,7 +127,7 @@ message DropTableRequest {
 
 message CreatePartitionRequest {
     required string table_uuid = 1;
-    required int32  ring_position = 2;
+    required uint64 ring_position = 2;
 
     repeated ClusterState.Table.Partition.RingLayer ring_layer = 3;
 };
@@ -141,23 +144,26 @@ message DropPartitionRequest {
 // BLOB datatype operations
 
 message GetBlobRequest {
-    required string table_uuid = 1;
-    required bytes key = 2;
+    required string table_name = 1;
+    required bytes  key = 2;
+    optional uint64 ring_position = 3;
 };
 
 message GetBlobResponse {
-    required bool found = 1;
-    optional bytes version_tag = 3;
+    required bool  found = 1;
+    required bytes version_tag = 2;
 };
 
-message PutBlobRequest {
-    required string table_uuid = 1;
-    required bytes key = 2;
-    optional bytes version_tag = 4;
+message SetBlobRequest {
+    required string table_name = 1;
+    required bytes  key = 2;
+    optional uint64 ring_position = 3;
+    optional bytes  version_tag = 4;
 };
 
-message PutBlobResponse {
-    required bool success = 1;
+message SetBlobResponse {
+    required bool  success = 1;
+    optional bytes version_tag = 2;
 };
 
 // Union container type
@@ -183,7 +189,7 @@ message SamoaRequest {
     optional DropPartitionRequest   drop_partition = 12;
 
     optional GetBlobRequest get_blob = 13;
-    optional PutBlobRequest put_blob = 14;
+    optional SetBlobRequest set_blob = 14;
 };
 
 message SamoaResponse {
@@ -205,6 +211,6 @@ message SamoaResponse {
     optional CreatePartitionResponse create_partition = 7;
 
     optional GetBlobResponse get_blob = 8;
-    optional PutBlobResponse put_blob = 9;
+    optional SetBlobResponse set_blob = 9;
 };
 

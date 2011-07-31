@@ -2,6 +2,7 @@
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/peer_discovery.hpp"
 #include "samoa/server/context.hpp"
+#include "samoa/server/client.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -78,6 +79,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
     auto p_it = peer.peer().begin();
     auto l_it = local.peer().begin();
 
+    // closure to remove a local peer at the current iterator position
     auto remove_record = [&]() -> void
     {
         int ind = std::distance(local.peer().begin(), l_it);
@@ -93,6 +95,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         l_it = local.peer().begin() + ind; 
     };
 
+    // closure to insert a local peer at the current iterator position
     auto add_record = [&]() -> spb::ClusterState::Peer *
     {
         int ind = std::distance(local.peer().begin(), l_it);
@@ -111,6 +114,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
 
     auto last_p_it = p_it;
 
+    // linear merge of the local & remote peer lists
     while(p_it != peer.peer().end())
     {
         // check peer-record order invariant
@@ -150,8 +154,9 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         else
         {
             // l_it & p_it reference the same peer-record
-            if(required_peers.find(core::uuid_from_hex(
-                l_it->uuid())) == required_peers.end())
+            if(!l_it->seed() && 
+                required_peers.find(core::uuid_from_hex(
+                    l_it->uuid())) == required_peers.end())
             {
                 LOG_INFO("dropped peer " << l_it->uuid());
                 remove_record();
@@ -199,6 +204,63 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
             LOG_INFO("discovered (local) peer " << peer.local_uuid());
         }
     }
+}
+
+void peer_set::forward_request(const client::ptr_t & client,
+    const core::uuid & peer_uuid)
+{
+    
+
+    schedule_request(boost::bind(&peer_set::on_forwarded_request,
+        boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+        _1, client, _2), peer_uuid);
+}
+
+void peer_set::on_forwarded_request(const boost::system::error_code & ec,
+    const client::ptr_t & client,
+    samoa::client::server_request_interface & server)
+{
+    if(ec)
+    {
+        client->send_error(500, ec);
+        return;
+    }
+
+    server.get_message().CopyFrom(client->get_request());
+    server.start_request();
+
+    for(auto it = client->get_request_data_blocks().begin();
+        it != client->get_request_data_blocks().end(); ++it)
+    {
+        server.write_interface().queue_write(*it);
+    }
+
+    server.finish_request(boost::bind(&peer_set::on_forwarded_response,
+        boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+        _1, client, _2));
+}
+
+void peer_set::on_forwarded_response(const boost::system::error_code & ec,
+    const client::ptr_t & client,
+    samoa::client::server_response_interface & server)
+{
+    if(ec)
+    {
+        client->send_error(500, ec);
+        return;
+    }
+
+    client->get_response().CopyFrom(server.get_message());
+    client->start_response();
+
+    for(auto it = server.get_response_data_blocks().begin();
+        it != server.get_response_data_blocks().end(); ++it)
+    {
+        client->write_interface().queue_write(*it);
+    }
+
+    client->finish_response();
+    server.finish_response();
 }
 
 }

@@ -87,6 +87,35 @@ future::ptr_t py_finish_request(server::request_interface & s)
     return f;
 }
 
+//////////// get_response_data_blocks support
+
+bpl::list py_get_response_data_blocks(const server::response_interface & s)
+{
+    bpl::list out;
+
+    for(auto it = s.get_response_data_blocks().begin();
+        it != s.get_response_data_blocks().end(); ++it)
+    {
+        unsigned len = 0;
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2)
+        {
+            len += it2->size();
+        }
+
+        bpl::str buffer(bpl::handle<>(
+            PyString_FromStringAndSize(0, len)));
+
+        char * out_it = PyString_AS_STRING(buffer.ptr());
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2)
+        {
+            out_it = std::copy(it2->begin(), it2->end(), out_it);
+        }
+        out.append(buffer);
+    }
+
+    return out;
+}
+
 ////////////
 
 void make_server_bindings()
@@ -107,6 +136,7 @@ void make_server_bindings()
         .def("read_interface", &server::response_interface::read_interface,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("get_error_code", &server::response_interface::get_error_code)
+        .def("get_response_data_blocks", &py_get_response_data_blocks)
         .def("finish_response", &server::response_interface::finish_response);
 
     bpl::class_<server, server::ptr_t, boost::noncopyable,

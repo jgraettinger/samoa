@@ -25,13 +25,13 @@ public:
     void set_reenter_via_post();
 
     // precondition: Python GIL is held
-    void on_error(
-        const boost::system::error_code &);
+    void on_error(const boost::system::error_code &);
 
     // precondition: Python GIL is held
     void on_error(
         const bpl::object & exception_type,
-        const bpl::object & exception);
+        const bpl::object & exception,
+        const bpl::object & exception_trace);
 
     // precondition: Python GIL is held
     void on_result(const bpl::object & result);
@@ -80,6 +80,7 @@ private:
     bpl::object _result;
     bpl::object _exc_type;
     bpl::object _exc_msg;
+    bpl::object _exc_trace;
 
     coroutine_ptr_t _coroutine;
 };

@@ -28,13 +28,37 @@ bool py_on_cluster_state_transaction(
         spb::ClusterState &>::type convert;
     bpl::object arg(bpl::handle<>(convert(state)));
 
-    bpl::object result = callable(arg);
-    bool committed = bpl::extract<bool>(result);
+    try
+    {
+        bpl::object result = callable(arg);
+        bool committed = bpl::extract<bool>(result);
 
-    future->set_reenter_via_post();
-    future->on_result(result);
+        future->set_reenter_via_post();
+        future->on_result(result);
 
-    return committed;
+        return committed;
+    }
+    catch(bpl::error_already_set)
+    {
+        PyObject * ptype, * pval, * ptrace;
+        PyErr_Fetch(&ptype, &pval, &ptrace);
+
+        // Instantiate exception instance (if it isn't already)
+        PyErr_NormalizeException(&ptype, &pval, &ptrace);
+
+        // PyErr_Fetch returned new references. Pass reference
+        //   ownership to holding boost::python::objects
+        bpl::object exc_type = bpl::object(bpl::handle<>(ptype));
+        bpl::object exc_val = pval ? \
+            bpl::object(bpl::handle<>(pval)) : bpl::object();
+        bpl::object exc_tb = ptrace ? \
+            bpl::object(bpl::handle<>(ptrace)) : bpl::object();
+
+        future->set_reenter_via_post();
+        future->on_error(exc_type, exc_val, exc_tb);
+
+        return false;
+    }
 }
 
 future::ptr_t py_cluster_state_transaction(

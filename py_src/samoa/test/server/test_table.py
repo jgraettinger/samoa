@@ -4,6 +4,7 @@ import unittest
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.table import Table
+from samoa.server.peer_set import PeerSet
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
@@ -224,6 +225,51 @@ class TestTable(unittest.TestCase):
             self.assertTrue(last_key is None or last_key < key)
             last_key = key
 
-    def test_routing(self):
-        pass
+    def test_route_ring_position(self):
+
+        self.state.set_replication_factor(3)
+
+        tbl_uuid = UUID.from_name('table')
+        self.gen.add_remote_partition(tbl_uuid, ring_position = 1000)
+        self.gen.add_remote_partition(tbl_uuid, ring_position = 2000)
+        self.gen.add_remote_partition(tbl_uuid, ring_position = 3000)
+        self.gen.add_local_partition( tbl_uuid, ring_position = 4000)
+        self.gen.add_remote_partition(tbl_uuid, ring_position = 5000)
+
+        table = Table(self.state, self.gen.server_uuid, None)
+        peer_set = PeerSet(self.gen.state, None)
+
+        is_local, primary_partition, all_partitions = \
+            table.route_ring_position(1500, peer_set)
+
+        # replication factor of 3 - three partitions returned
+        self.assertEquals(len(all_partitions), 3)
+
+        # position 1500 is mapped onto ring starting at 2000
+        self.assertEquals([p.get_ring_position() for p in all_partitions],
+            [2000, 3000, 4000])
+
+        # the primary partition is the local one
+        self.assertTrue(is_local)
+        self.assertEquals(primary_partition.get_ring_position(), 4000)
+
+        is_local, primary_partition, all_partitions = \
+            table.route_ring_position(4500, peer_set)
+
+        # position 4500 is mapped onto ring starting at 5000, and wrapping
+        self.assertEquals([p.get_ring_position() for p in all_partitions],
+            [5000, 1000, 2000])
+
+        # there is no primary partition (no connected servers available)
+        self.assertFalse(is_local)
+        self.assertFalse(primary_partition)
+
+        is_local, primary_partition, all_partitions = \
+            table.route_ring_position(5500, peer_set)
+
+        # position 5500 is mapped onto the ring starting at 1000
+        self.assertEquals([p.get_ring_position() for p in all_partitions],
+            [1000, 2000, 3000])
+
+        self.assertFalse(is_local)
 

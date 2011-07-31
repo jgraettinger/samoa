@@ -1,0 +1,10 @@
+
+python-extension _datamodel :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _datamodel : <location>$(INSTALL)/samoa/datamodel ;
+

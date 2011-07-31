@@ -7,7 +7,6 @@ project root
         <threading>multi
         <cxxflags>-std=c++0x
         #<define>BOOST_ASIO_ENABLE_HANDLER_TRACKING
-        <toolset>gcc
     : default-build debug 
     : build-dir $(BUILD) 
 ;
@@ -30,10 +29,10 @@ if $(.user_path)
 using python ;
 
 # external libraries we'll need
-lib boost_system ;
-lib boost_python ;
-lib boost_regex ;
-lib boost_thread ;
+lib boost_system : : <name>:libboost_system.so.1.47.0 ;
+lib boost_python : : <name>:libboost_python.so.1.47.0 ;
+lib boost_regex : : <name>:libboost_regex.so.1.47.0 ;
+lib boost_thread : : <name>:libboost_thread.so.1.47.0 ;
 lib protobuf ;
 
 build-project proto_src ;

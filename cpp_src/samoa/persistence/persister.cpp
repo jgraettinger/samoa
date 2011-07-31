@@ -46,29 +46,25 @@ void persister::add_mapped_hash(std::string file,
         file, storage_size, index_size).release());
 }
 
-void persister::get(
-    persister::get_callback_t && callback,
-    std::string && key)
+void persister::get(persister::get_callback_t && callback,
+    const std::string & key)
 {
     _strand.post(boost::bind(&persister::on_get, shared_from_this(),
-        std::move(key), std::move(callback)));
+        key, std::move(callback)));
 }
 
-void persister::put(
-    persister::put_callback_t && callback,
-    std::string && key,
-    size_t value_length)
+void persister::put(persister::put_callback_t && callback,
+    const std::string & key, size_t value_length)
 {
     _strand.post(boost::bind(&persister::on_put, shared_from_this(),
-        std::move(key), value_length, std::move(callback)));
+        key, value_length, std::move(callback)));
 }
 
-void persister::drop(
-    persister::drop_callback_t && callback,
-    std::string && key)
+void persister::drop(persister::drop_callback_t && callback,
+    const std::string & key)
 {
     _strand.post(boost::bind(&persister::on_drop, shared_from_this(),
-        std::move(key), std::move(callback)));
+        key, std::move(callback)));
 }
 
 size_t persister::begin_iteration()
@@ -100,12 +96,7 @@ bool persister::iterate(
 {
     spinlock::guard guard(_iterators_lock);
 
-    if(_iterators.at(ticket).state == iterator::DEAD)
-    {
-        throw std::invalid_argument(
-            "persister::iterate(iterate_callback_t, size_t ticket): "\
-            "invalid ticket");
-    }
+    SAMOA_ASSERT(_iterators.at(ticket).state != iterator::DEAD);
 
     if(_iterators.at(ticket).state == iterator::END)
     {

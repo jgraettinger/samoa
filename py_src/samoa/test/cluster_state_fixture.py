@@ -76,6 +76,10 @@ class ClusterStateFixture(object):
         return ''.join(self.rnd.choice('abcdefghijklmnopqrstuvwxyz') \
             for i in xrange(0, self.rnd.randint(4, 10)))
 
+    def generate_bytes(self):
+        return ''.join(chr(self.rnd.choice(xrange(0, 256))) \
+            for i in xrange(0, self.rnd.randint(4, 50)))
+
     def generate_uuid(self):
         return UUID.from_name(self.generate_name())
 
@@ -90,7 +94,8 @@ class ClusterStateFixture(object):
             except:
                 continue
 
-    def add_peer(self, uuid = None, hostname = 'localhost', port = None):
+    def add_peer(self, uuid = None, hostname = 'localhost',
+        port = None, seed = False):
 
         uuid = self._coerce_uuid(uuid)
         port = port or self.generate_port()
@@ -98,6 +103,9 @@ class ClusterStateFixture(object):
         peer = pb.add_peer(self.state, uuid)
         peer.set_hostname(hostname)
         peer.set_port(port)
+
+        if seed:
+            peer.set_seed(seed)
 
         self._peer_ind[uuid] = peer
         return peer
@@ -124,27 +132,29 @@ class ClusterStateFixture(object):
         self._table_name_ind[tbl.name] = tbl
         return tbl
 
-    def add_dropped_partition(self, table_uuid, uuid = None, ring_pos = None):
+    def add_dropped_partition(self, table_uuid,
+        uuid = None, ring_position = None):
 
         uuid = self._coerce_uuid(uuid)
-        ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
+        ring_position = ring_position or self.rnd.randint(0, 1<<32)
         table = self.get_table(table_uuid)
 
-        part = pb.add_partition(table, uuid, ring_pos)
+        part = pb.add_partition(table, uuid, ring_position)
         part.set_dropped(True)
 
         self._part_ind[(UUID(table.uuid), uuid)] = part
         return part
 
-    def add_local_partition(self, table_uuid, uuid = None, ring_pos = None,
+    def add_local_partition(self, table_uuid,
+        uuid = None, ring_position = None,
         storage_size = (1<<20), index_size = 10000):
 
         uuid = self._coerce_uuid(uuid)
-        ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
+        ring_position = ring_position or self.rnd.randint(0, 1<<32)
         lamport_ts = self.rnd.randint(1, 256)
         table = self.get_table(table_uuid)
 
-        part = pb.add_partition(table, uuid, ring_pos)
+        part = pb.add_partition(table, uuid, ring_position)
         part.set_server_uuid(self.server_uuid.to_hex())
         part.set_consistent_range_begin(part.ring_position)
         part.set_consistent_range_end(part.ring_position)
@@ -158,8 +168,8 @@ class ClusterStateFixture(object):
         self._part_ind[(UUID(table.uuid), uuid)] = part
         return part
 
-    def add_remote_partition(self, table_uuid, uuid = None, ring_pos = None,
-        server_uuid = None):
+    def add_remote_partition(self, table_uuid,
+        uuid = None, ring_position = None, server_uuid = None):
 
         if not server_uuid:
             # select a remote peer to 'own' the partition
@@ -171,12 +181,12 @@ class ClusterStateFixture(object):
                 server_uuid = UUID(self.rnd.choice(self.state.peer).uuid)
 
         uuid = self._coerce_uuid(uuid)
-        ring_pos = ring_pos or self.rnd.randint(0, 1<<32)
+        ring_position = ring_position or self.rnd.randint(0, 1<<32)
         server_uuid = self._coerce_uuid(server_uuid)
         lamport_ts = self.rnd.randint(1, 256)
         table = self.get_table(table_uuid)
 
-        part = pb.add_partition(table, uuid, ring_pos)
+        part = pb.add_partition(table, uuid, ring_position)
         part.set_server_uuid(server_uuid.to_hex())
         part.set_consistent_range_begin(part.ring_position)
         part.set_consistent_range_end(part.ring_position)

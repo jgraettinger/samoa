@@ -25,16 +25,16 @@ public:
     const core::uuid & get_server_uuid()
     { return _server_uuid; }
 
-    unsigned get_ring_position()
+    uint64_t get_ring_position()
     { return _ring_position; }
 
-    unsigned get_consistent_range_begin()
+    uint64_t get_consistent_range_begin()
     { return _consistent_range_begin; }
 
-    unsigned get_consistent_range_end()
+    uint64_t get_consistent_range_end()
     { return _consistent_range_end; }
 
-    unsigned get_lamport_ts()
+    uint64_t get_lamport_ts()
     { return _lamport_ts; }
 
     //! Merges a peer partition description into the local description
@@ -51,10 +51,10 @@ protected:
 
     core::uuid _uuid;
     core::uuid _server_uuid;
-    unsigned   _ring_position;
-    unsigned   _consistent_range_begin;
-    unsigned   _consistent_range_end;
-    unsigned   _lamport_ts;
+    uint64_t   _ring_position;
+    uint64_t   _consistent_range_begin;
+    uint64_t   _consistent_range_end;
+    uint64_t   _lamport_ts;
 };
 
 }

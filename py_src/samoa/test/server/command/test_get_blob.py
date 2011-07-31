@@ -8,6 +8,8 @@ from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
 from samoa.client.server import Server
 from samoa.persistence.data_type import DataType
+from samoa.datamodel.blob import Blob
+from samoa.datamodel.cluster_clock import ClusterClock, ClockAncestry
 
 from samoa.test.module import TestModule
 from samoa.test.cluster_state_fixture import ClusterStateFixture
@@ -28,17 +30,25 @@ class TestGetBlob(unittest.TestCase):
         srv_listener = srv_injector.get_instance(Listener)
         srv_context = srv_listener.get_context()
 
-        # query for runtime partition persister
-        persister = srv_context.get_cluster_state(
+        # query for runtime partition rolling_hash
+        rolling_hash = srv_context.get_cluster_state(
             ).get_table_set(
             ).get_table(UUID(test_table.uuid)
             ).get_partition(UUID(test_part.uuid)
-            ).get_persister()
+            ).get_persister(
+            ).get_layer(0)
 
-        # set a test value
-        persister.put(
-            lambda cr, nr: nr.set_value('test-value') or 1,
-            'a-test-key', 10)
+        # set a test record
+        expected_clock = ClusterClock()
+        expected_clock.tick(UUID(test_part.uuid))
+
+        record = rolling_hash.prepare_record(
+            'a-test-key',
+             Blob.serialized_length(len('a-test-value')))
+
+        Blob.write_blob_value(expected_clock, 'a-test-value', record)
+
+        rolling_hash.commit_record()
 
         # bootstrap forwarding server, telling it of srv_listener
         fwd_injector = TestModule().configure(getty.Injector())
@@ -65,7 +75,7 @@ class TestGetBlob(unittest.TestCase):
                 request.get_message().set_type(CommandType.GET_BLOB)
 
                 gb = request.get_message().mutable_get_blob()
-                gb.set_table_uuid(test_table.uuid)
+                gb.set_table_name(test_table.name)
                 gb.set_key('a-missing-key')
 
                 response = yield request.finish_request()
@@ -83,7 +93,7 @@ class TestGetBlob(unittest.TestCase):
                 request.get_message().set_type(CommandType.GET_BLOB)
 
                 gb = request.get_message().mutable_get_blob()
-                gb.set_table_uuid(test_table.uuid)
+                gb.set_table_name(test_table.name)
                 gb.set_key('a-test-key')
 
                 response = yield request.finish_request()
@@ -92,9 +102,15 @@ class TestGetBlob(unittest.TestCase):
                 msg = response.get_message()
                 self.assertEquals(len(msg.data_block_length), 1)
 
-                value = yield response.read_interface().read_data(
-                    msg.data_block_length[0])
-                self.assertEquals(value, 'test-value')
+                self.assertEquals(response.get_response_data_blocks(),
+                    ['a-test-value'])
+
+                # ensure the expected clock is encoded in the version tag
+                response_clock = ClusterClock.from_string(
+                    msg.get_blob.version_tag)
+
+                self.assertEquals(ClockAncestry.EQUAL,
+                    ClusterClock.compare(expected_clock, response_clock))
 
                 response.finish_response()
 
@@ -135,24 +151,12 @@ class TestGetBlob(unittest.TestCase):
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
-            # malformed table UUID 
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.GET_BLOB)
-
-            dp = request.get_message().mutable_get_blob()
-            dp.set_table_uuid('invalid uuid')
-            dp.set_key('test-key')
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
-
             # non-existent table 
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.GET_BLOB)
 
             dp = request.get_message().mutable_get_blob()
-            dp.set_table_uuid(UUID.from_random().to_hex())
+            dp.set_table_name('invalid table')
             dp.set_key('test-key')
 
             response = yield request.finish_request()
@@ -164,7 +168,7 @@ class TestGetBlob(unittest.TestCase):
             request.get_message().set_type(CommandType.GET_BLOB)
 
             dp = request.get_message().mutable_get_blob()
-            dp.set_table_uuid(table_no_partitions.uuid)
+            dp.set_table_name(table_no_partitions.name)
             dp.set_key('test-key')
 
             response = yield request.finish_request()
@@ -176,7 +180,7 @@ class TestGetBlob(unittest.TestCase):
             request.get_message().set_type(CommandType.GET_BLOB)
 
             dp = request.get_message().mutable_get_blob()
-            dp.set_table_uuid(table_remote_not_available.uuid)
+            dp.set_table_name(table_remote_not_available.name)
             dp.set_key('test-key')
 
             response = yield request.finish_request()

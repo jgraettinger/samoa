@@ -56,6 +56,7 @@ void future::on_error(const boost::system::error_code & ec)
     _exc_type = bpl::object(
         bpl::handle<>(bpl::borrowed(PyExc_RuntimeError)));
     _exc_msg = bpl::str(ec.message());
+    _exc_trace = bpl::object();
     _error = true;
 
     _called = true;
@@ -63,10 +64,13 @@ void future::on_error(const boost::system::error_code & ec)
 }
 
 void future::on_error(
-    const bpl::object & exc_type, const bpl::object & exc)
+    const bpl::object & exc_type,
+    const bpl::object & exc,
+    const bpl::object & exc_trace)
 {
     _exc_type = exc_type;
     _exc_msg = exc;
+    _exc_trace = exc_trace;
     _error = true;
 
     _called = true;
@@ -90,7 +94,7 @@ void future::send_result()
         return;
 
     if(_error)
-        _coroutine->error(_exc_type, _exc_msg, _reenter_via_post);
+        _coroutine->error(_exc_type, _exc_msg, _exc_trace, _reenter_via_post);
     else
         _coroutine->send(_result, _reenter_via_post);
 

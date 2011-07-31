@@ -254,6 +254,10 @@ void stream_protocol_write_interface::queue_write(
     const const_buffer_regions_t & bs)
 { _w_regions.insert(_w_regions.end(), bs.begin(), bs.end()); }
 
+void stream_protocol_write_interface::queue_write(
+    const buffer_regions_t & bs)
+{ _w_regions.insert(_w_regions.end(), bs.begin(), bs.end()); }
+
 void stream_protocol_write_interface::write_queued(
     const stream_protocol_write_interface::write_queued_callback_t & callback)
 {

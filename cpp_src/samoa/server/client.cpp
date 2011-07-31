@@ -9,6 +9,9 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
+#include <sstream>
+
+#define MAX_DATA_BLOCK_LENGTH 4194304
 
 namespace samoa {
 namespace server {
@@ -59,7 +62,7 @@ void client::halt_tasklet()
     _timeout_timer.cancel();
 }
 
-void client::set_error(unsigned int err_code,
+void client::send_error(unsigned err_code,
     const std::string & err_msg, bool closing /* = false */)
 {
     _response.Clear();
@@ -68,10 +71,19 @@ void client::set_error(unsigned int err_code,
     _response.set_closing(closing);
     _response.mutable_error()->set_code(err_code);
     _response.mutable_error()->set_message(err_msg);
+
+    finish_response();
 }
 
-bool client::is_error_set() const
-{ return _response.type() == core::protobuf::ERROR; }
+void client::send_error(unsigned err_code,
+    const boost::system::error_code & ec,
+    bool closing /* = false */)
+{
+    std::stringstream tmp;
+    tmp << ec;
+
+    send_error(err_code, tmp.str(), closing);
+}
 
 void client::start_response()
 {
@@ -166,10 +178,53 @@ void client::on_request_body(const boost::system::error_code & ec,
     _proto_in_adapter.reset(read_body);
     if(!_request.ParseFromZeroCopyStream(&_proto_in_adapter))
     {
-        set_error(400, "protobuf parse error", true);
-        finish_response();
+        send_error(400, "protobuf parse error", true);
         return;
     }
+
+    _request_data_blocks.clear();
+    on_request_data_block(boost::system::error_code(),
+        0, core::buffer_regions_t());
+}
+
+void client::on_request_data_block(const boost::system::error_code & ec,
+    unsigned ind, const core::buffer_regions_t & data)
+{
+    if(ec)
+    {
+        close();
+        LOG_WARN("connection error: " << ec.message());
+        return;
+    }
+
+    if(ind < _request_data_blocks.size())
+    {
+        _request_data_blocks[ind] = data;
+        ++ind;
+    }
+    else
+    {
+        // first entrance into on_request_data_block; size _request_data_blocks
+        _request_data_blocks.resize(_request.data_block_length_size());
+    }
+
+    if(ind != _request_data_blocks.size())
+    {
+        // still more data blocks to read
+        unsigned block_len = _request.data_block_length(ind);
+
+        if(block_len > MAX_DATA_BLOCK_LENGTH)
+        {
+            send_error(400, "data block too large", true);
+            return;
+        }
+
+        read_data(boost::bind(&client::on_request_data_block,
+            shared_from_this(), _1, ind, _3), block_len);
+        return;
+    }
+
+    // we're done reading data blocks
 
     // we've recieved a complete request in the timeout period
     _ignore_timeout = true;
@@ -179,8 +234,7 @@ void client::on_request_body(const boost::system::error_code & ec,
 
     if(!handler)
     {
-        set_error(501, "unknown operation type", false);
-        finish_response();
+        send_error(501, "unknown operation type");
         return;
     }
 

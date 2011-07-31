@@ -22,9 +22,7 @@ class CreatePartitionHandler(CommandHandler):
             UUID(req.table_uuid))
 
         if not table:
-            # race condition
-            client.set_error(404, 'table %s' % req.table_uuid)
-            return False
+            raise KeyError('table %s' % req.table_uuid)
 
         part = protobuf.add_partition(table,
             UUID.from_random(), req.ring_position)
@@ -51,22 +49,23 @@ class CreatePartitionHandler(CommandHandler):
         req = client.get_request().create_partition
 
         if not req:
-            client.set_error(400, 'create_partition missing')
-            client.finish_response()
+            client.send_error(400, 'create_partition missing')
             yield
 
         if not UUID.check_hex(req.table_uuid):
-            client.set_error(400, 'malformed UUID %s' % req.table_uuid)
-            client.finish_response()
+            client.send_error(400, 'malformed UUID %s' % req.table_uuid)
             yield
 
         if not len(req.ring_layer):
-            client.set_error(400, 'ring_layer missing')
-            client.finish_response()
+            client.send_error(400, 'ring_layer missing')
             yield
 
-        commit = yield client.get_context().cluster_state_transaction(
-            functools.partial(self._transaction, client))
+        try:
+            commit = yield client.get_context().cluster_state_transaction(
+                functools.partial(self._transaction, client))
+        except KeyError, exc:
+            client.send_error(404, exc.message)
+            yield
 
         if commit:
             # TODO: notify peers of change

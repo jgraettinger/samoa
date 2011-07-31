@@ -26,9 +26,6 @@ public:
 
     ~client();
 
-    void run_tasklet();
-    void halt_tasklet();
-
     // both bases define equivalent methods; pick one
     using core::stream_protocol::get_io_service;
 
@@ -42,9 +39,6 @@ public:
     const core::protobuf::SamoaRequest & get_request() const
     { return _request; }
 
-    // Expose the reading interface of the underlying stream_protocol
-    using core::stream_protocol::read_interface;
-
     // Response currently being written for return to client
     //   Note: the command handler invoked to managed this client request
     //   has sole rights to mutation of the response object until
@@ -52,19 +46,31 @@ public:
     core::protobuf::SamoaResponse & get_response()
     { return _response; }
 
-    // Helper which clears any set state in the response, and
-    //  instead generates an error of the given type & value.
-    // finish_response() must still be called to start the write
-    void set_error(unsigned int err_code,
-        const std::string & err_msg, bool closing = false);
+    const std::vector<core::buffer_regions_t> &
+    get_request_data_blocks() const
+    { return _request_data_blocks; }
 
-    /// Returns whether an error response has already 
-    ///  been set for the current request
-    bool is_error_set() const;
+    /*! \brief Helper for sending an error response to the client
+
+    Precondition: start_response() cannot have been called yet
+    send_error() does the following:
+     - clears any set state in the SamoaResponse
+     - sets the error type and field in the SamoaResponse,
+        to the given code & value
+     - calls finish_response()
+    */
+    void send_error(unsigned err_code, const std::string & err_msg,
+        bool closing = false);
+
+    void send_error(unsigned err_code, const boost::system::error_code &,
+        bool closing = false);
 
     // Serializes & writes the current core::protobuf::SamoaResponse
     //   Postcondition: the core::protobuf::SamoaResponse is no longer mutable
     void start_response();
+
+    // Expose the reading interface of the underlying stream_protocol
+    using core::stream_protocol::read_interface;
 
     // Exposes the writing interface of the underlying stream_protocol
     //   Precondition: start_response() must have been called
@@ -85,6 +91,9 @@ public:
 
     void close();
 
+    void run_tasklet();
+    void halt_tasklet();
+
 private:
 
     context_ptr_t _context;
@@ -98,6 +107,8 @@ private:
     core::zero_copy_output_adapter _proto_out_adapter;
     core::zero_copy_input_adapter  _proto_in_adapter;
 
+    std::vector<core::buffer_regions_t> _request_data_blocks;
+
     bool _ignore_timeout;
     unsigned _timeout_ms;
     boost::asio::deadline_timer _timeout_timer;
@@ -109,6 +120,9 @@ private:
 
     void on_request_body(
         const boost::system::error_code &, const core::buffer_regions_t &);
+
+    void on_request_data_block(
+        const boost::system::error_code &, unsigned, const core::buffer_regions_t &);
 
     void on_response_finish(
         const boost::system::error_code &);

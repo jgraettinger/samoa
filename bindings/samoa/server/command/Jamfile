@@ -1,0 +1,10 @@
+
+python-extension _command :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _command : <location>$(INSTALL)/samoa/server/command ;

@@ -1,4 +1,7 @@
 
+from _command import GetBlobHandler
+
+"""
 import logging
 import functools
 import getty
@@ -109,4 +112,4 @@ class GetBlobHandler(CommandHandler):
         peer_resp.finish_response()
         client.finish_response()
         yield
-
+"""

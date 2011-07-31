@@ -4,6 +4,7 @@
 #include "samoa/server/remote_partition.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/context.hpp"
+#include "samoa/server/peer_set.hpp"
 #include "samoa/persistence/data_type.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
@@ -102,7 +103,7 @@ persistence::data_type table::get_data_type() const
 const std::string & table::get_name() const
 { return _name; }
 
-size_t table::get_replication_factor() const
+unsigned table::get_replication_factor() const
 { return _repl_factor; }
 
 const table::ring_t & table::get_ring() const
@@ -121,22 +122,59 @@ partition::ptr_t table::get_partition(const core::uuid & uuid) const
     return result;
 }
 
-void table::route_key(const std::string & key,
-    table::ring_t & out) const
+uint64_t table::ring_position(const std::string & key) const
 {
-    unsigned key_pos = boost::hash<std::string>()(key);
+    return boost::hash<std::string>()(key);
+}
+
+bool table::route_ring_position(
+    uint64_t ring_position, const peer_set::ptr_t & peer_set,
+    partition::ptr_t & primary_partition, table::ring_t & all_partitions) const
+{
+    bool is_local = false;
+    unsigned latency = (unsigned)-1;
+
+    primary_partition = partition::ptr_t();
+    all_partitions.clear();
+
+    // As per the Chord protocol, a ring position is mapped onto the R
+    //  partitions which immediately succeed it, where R is the
+    //  minimum of the table replication factor and table partition count
 
     ring_t::const_iterator it = std::lower_bound(
-        _ring.begin(), _ring.end(), key_pos, partition_order_cmp());
+        _ring.begin(), _ring.end(), ring_position, partition_order_cmp());
 
-    out.clear();
-    while(out.size() != _repl_factor && out.size() != _ring.size())
+    while(all_partitions.size() != _repl_factor && \
+          all_partitions.size() != _ring.size())
     {
         if(it == _ring.end())
             it = _ring.begin();
 
-        out.push_back(*it);
+        all_partitions.push_back(*it);
+
+        if(!is_local && dynamic_cast<local_partition*>(it->get()))
+        {
+            // keep the first local partition
+            is_local = true;
+            primary_partition = *it;
+        }
+        else if(!is_local)
+        {
+            samoa::client::server::ptr_t srv = peer_set->get_server(
+                (*it)->get_server_uuid()); 
+
+            // keep the first remote partition from the
+            //  lowest-latency, connected peer
+            if(srv && srv->get_latency_ms() < latency)
+            {
+                latency = srv->get_latency_ms();
+                primary_partition = *it;
+            }
+        }
+
+        ++it;
     }
+    return is_local;
 }
 
 void table::spawn_tasklets(const context::ptr_t & context)

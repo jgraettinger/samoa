@@ -15,11 +15,11 @@ namespace samoa {
 namespace client {
 
 typedef boost::function<
-    void(const boost::system::error_code &, server_request_interface)
+    void(const boost::system::error_code &, server_request_interface &)
 > server_request_callback_t;
 
 typedef boost::function<
-    void(const boost::system::error_code &, server_response_interface)
+    void(const boost::system::error_code &, server_response_interface &)
 > server_response_callback_t;
 
 typedef boost::function<
@@ -59,7 +59,7 @@ private:
     friend class server;
     explicit server_request_interface(const server_ptr_t & p);
 
-    server_ptr_t _srv;
+    const server_ptr_t _srv;
 };
 
 class server_response_interface
@@ -76,6 +76,9 @@ public:
     //   error code. Otherwise 0 is returned, indicating a non-error.
     unsigned get_error_code();
 
+    const std::vector<core::buffer_regions_t> &
+    get_response_data_blocks() const;
+
     /// Called when reading of the response is complete.
     ///  Releases ownership of the server::response_interface
     void finish_response();
@@ -86,7 +89,7 @@ private:
     friend class server;
     explicit server_response_interface(const server_ptr_t & p);
 
-    server_ptr_t _srv;
+    const server_ptr_t _srv;
 };
 
 class server :
@@ -152,6 +155,9 @@ private:
     void on_response_body(
         const boost::system::error_code &, const core::buffer_regions_t &);
 
+    void on_response_data_block(
+        const boost::system::error_code &, unsigned, const core::buffer_regions_t &);
+
     void on_next_response();
 
     void on_timeout(const boost::system::error_code &);
@@ -167,6 +173,8 @@ private:
 
     core::zero_copy_output_adapter _proto_out_adapter;
     core::zero_copy_input_adapter  _proto_in_adapter;
+
+    std::vector<core::buffer_regions_t> _response_data_blocks;
 
     std::list<request_callback_t> _request_queue;
     std::list<response_callback_t> _response_queue;

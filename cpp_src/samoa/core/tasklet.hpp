@@ -21,7 +21,7 @@ that the original python instance can be recovered if the shared_ptr
 is passed back to python.
 
 In order to instrument this, when boost::python needs a shared_ptr
-rvalue, it incrementes the /python/ reference-count, builds an entirely
+rvalue, it increments the /python/ reference-count, builds an entirely
 new shared_ptr (including reference-count block), and sets the shared_ptr
 deleter to simply decrement the /python/ reference-count.
 

@@ -7,6 +7,8 @@
 #include <boost/bind/protect.hpp>
 #include <boost/bind.hpp>
 
+#define MAX_DATA_BLOCK_LENGTH 4194304
+
 namespace samoa {
 namespace client {
 
@@ -184,6 +186,12 @@ unsigned server_response_interface::get_error_code()
     return 0;
 }
 
+const std::vector<core::buffer_regions_t> &
+server_response_interface::get_response_data_blocks() const
+{
+    return _srv->_response_data_blocks;
+}
+
 void server_response_interface::finish_response()
 {
     if(!_srv->_response.closing())
@@ -240,7 +248,7 @@ void server::on_schedule_request(const server::request_callback_t & callback)
     {
         _in_request = true;
 
-        // no requests are currently being written-- start one
+        // no requests are currently being written; start one
         get_io_service()->post(boost::bind(callback,
             boost::system::error_code(),
             request_interface(shared_from_this())));
@@ -336,6 +344,49 @@ void server::on_response_body(const boost::system::error_code & ec,
         return;
     }
 
+    _response_data_blocks.clear();
+    on_response_data_block(boost::system::error_code(),
+        0, core::buffer_regions_t());
+}
+
+void server::on_response_data_block(const boost::system::error_code & ec,
+    unsigned ind, const core::buffer_regions_t & data)
+{
+    if(ind < _response_data_blocks.size())
+    {
+        _response_data_blocks[ind] = data;
+        ++ind;
+    }
+    else
+    {
+        // first entrance into on_response_data_block; size _response_data_blocks
+        _response_data_blocks.resize(_response.data_block_length_size());
+    }
+
+    if(ind != _response_data_blocks.size())
+    {
+        // still more data blocks to read
+        unsigned block_len = _response.data_block_length(ind);
+
+        if(block_len > MAX_DATA_BLOCK_LENGTH)
+        {
+            LOG_ERR("block length larger than " << MAX_DATA_BLOCK_LENGTH);
+
+            on_error(boost::system::errc::make_error_code(
+                boost::system::errc::bad_message));
+            return;
+        }
+
+        read_data(boost::bind(&server::on_response_data_block,
+            shared_from_this(), _1, ind, _3), block_len);
+        return;
+    }
+
+    // we're done reading data blocks
+
+    // we've recieved a complete response in the timeout period
+    _ignore_timeout = true;
+
     SAMOA_ASSERT(!_response_queue.empty());
 
     // invoke callback
@@ -345,10 +396,6 @@ void server::on_response_body(const boost::system::error_code & ec,
     // remove callback from queue
     _response_queue.pop_front();
     _queue_size -= 1;
-
-    // ignore a timeout, as we've recieved a
-    //   response during the timeout period
-    _ignore_timeout = true;
 }
 
 void server::on_timeout(const boost::system::error_code & ec)
