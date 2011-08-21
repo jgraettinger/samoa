@@ -3,6 +3,7 @@ import unittest
 import random
 import uuid
 
+from samoa.core.protobuf import PersistedRecord
 from samoa.core.proactor import Proactor
 from samoa.persistence.persister import Persister
 
@@ -17,11 +18,33 @@ class TestPersister(unittest.TestCase):
     def test_basic(self):
 
         def test():
-            yield self.persister.put(
-                lambda cr, nr: nr.set_value('bar') or 1, 'foo', 3)
-            yield self.persister.get(
-                lambda r: self.assertEquals(r.value, 'bar'), 'foo')
-            yield
+
+            expected = PersistedRecord()
+            expected.add_blob_value('bar')
+
+            def merge1(cur_rec, new_rec):
+                # should not be called
+                self.assertFalse(True)
+
+            self.assertTrue(
+                (yield self.persister.put(merge1, 'foo', expected)))
+
+            self.assertEquals('bar',
+                (yield self.persister.get('foo')).blob_value[0])
+
+            def merge2(cur_rec, new_rec):
+                self.assertEquals(cur_rec.blob_value[0], 'bar')
+                self.assertEquals(new_rec.blob_value[0], 'baz')
+                return new_rec
+
+            expected.blob_value[0] = 'baz'
+            self.assertTrue(
+                (yield self.persister.put(merge2, 'foo', expected)))
+
+            self.assertEquals('baz',
+                (yield self.persister.get('foo')).blob_value[0])
+
+            yield        
 
         Proactor.get_proactor().run_test(test)
 

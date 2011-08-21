@@ -3,6 +3,7 @@
 
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/persistence/record.hpp"
+#include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
@@ -13,6 +14,8 @@
 namespace samoa {
 namespace persistence {
 
+namespace spb = samoa::core::protobuf;
+
 class persister :
     public boost::enable_shared_from_this<persister>
 {
@@ -20,72 +23,36 @@ public:
 
     typedef persister_ptr_t ptr_t;
 
-    /*
-    Put:
-        * Call persister::put(put_callback, merge_callback, key, Record_ptr_t record)
+    typedef boost::function<void(
+        const boost::system::error_code &,
+        const spb::PersistedRecord_ptr_t &)
+    > callback_t;
 
-        * If record exists:
-          - merge_callback(Record_ptr_t current_record, Record_ptr_t new_record);
-          - put_callback(ec, Record_ptr_t new_record);
-             - new_record is null iff put fails
-       
-    Get:
-        * Call persister::get(get_callback, key);
+    typedef boost::function<void(
+        const boost::system::error_code &,
+        const std::vector<spb::PersistedRecord_ptr_t> &)
+    > iterate_callback_t;
 
-        get_callback(ec, Record_ptr_t current_record)
-          - current_record is null if record doesn't exist
-    * /
-
-    / * \brief Signature for get_callback
-    *
-    *  Argument record is null if a record under the key doesn't exist.
-    * /
-    typedef boost::function<
-        void (const boost::system::error_code &, const Record_ptr_t &)
-    > get_callback_t;
-
-    / * \brief Signature for merge_callback
-    *
-    *  Precondition: A put operation is in progress, but an existing record exists under the key
-    *  An existing  
-    * /
-    typedef boost::function<
-        bool (const samoa::core::protobuf::Record &, samoa::core::protobuf::Record &)
+    typedef boost::function<spb::PersistedRecord_ptr_t(
+        const spb::PersistedRecord_ptr_t &, // current record
+        const spb::PersistedRecord_ptr_t &) // new record
     > merge_callback_t;
 
-    / * \brief Signature for put_callback
-    *
-    * Argument 
-    */
-
-    typedef boost::function<
-        void (const boost::system::error_code &, const record *)
-    > get_callback_t;
-
-    typedef boost::function<
-        bool (const boost::system::error_code &, const record *, record *)
-    > put_callback_t;
-
-    typedef boost::function<
-        bool (const boost::system::error_code &, const record *)
-    > drop_callback_t;
-
-    typedef boost::function<
-        void (const boost::system::error_code &, const std::vector<const record*> &)
-    > iterate_callback_t;
 
     persister();
     virtual ~persister();
 
     void add_heap_hash(size_t storage_size, size_t index_size);
 
-    void add_mapped_hash(std::string file, size_t storage_size, size_t index_size);
+    void add_mapped_hash(const std::string & file,
+        size_t storage_size, size_t index_size);
 
-    void get(get_callback_t &&, const std::string & key);
+    void get(callback_t &&, const std::string & key);
 
-    void put(put_callback_t &&, const std::string & key, size_t value_length);
+    void put(callback_t &&, merge_callback_t &&, const std::string & key,
+        const spb::PersistedRecord_ptr_t &);
 
-    void drop(drop_callback_t &&, const std::string & key);
+    void drop(callback_t &&, const std::string & key);
 
     /*
     * No preconditions
@@ -117,13 +84,14 @@ public:
 
 private:
     
-    void on_get(const std::string &, const get_callback_t &);
+    void on_get(const callback_t &, const std::string &);
 
-    void on_put(const std::string &, size_t, const put_callback_t &);
+    void on_put(const callback_t &, const merge_callback_t &,
+        const std::string &, spb::PersistedRecord_ptr_t);
 
-    void on_drop(const std::string &, const drop_callback_t &);
+    void on_drop(const callback_t &, const std::string &);
 
-    void on_iterate(size_t, const iterate_callback_t &);
+    void on_iterate(const iterate_callback_t &, size_t);
 
     bool make_room(size_t, size_t, record::offset_t, record::offset_t, size_t);
 
@@ -143,7 +111,7 @@ private:
 
     spinlock _iterators_lock;
 
-    std::vector<const record *> _tmp_record_vec;
+    std::vector<spb::PersistedRecord_ptr_t> _tmp_record_vec;
 
     core::proactor_ptr_t _proactor;
     boost::asio::strand _strand;

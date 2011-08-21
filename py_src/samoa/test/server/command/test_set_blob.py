@@ -2,7 +2,7 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType, ClusterClock, Value
+from samoa.core.protobuf import CommandType, PersistedRecord, ClusterClock
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
@@ -63,17 +63,17 @@ class TestSetBlob(unittest.TestCase):
         Proactor.get_proactor().run_test(test)
 
         # directly parse stored record
-        persisted_value = Value()
-        persisted_value.ParseFromBytes(self.rolling_hash.get(self.key).value)
+        test_record = PersistedRecord()
+        test_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
 
         expected_clock = ClusterClock()
         ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClockUtil.compare(expected_clock, persisted_value.cluster_clock))
+            ClockUtil.compare(expected_clock, test_record.cluster_clock))
 
-        self.assertEquals(len(persisted_value.blob_value), 1)
-        self.assertEquals(persisted_value.blob_value[0], self.value)
+        self.assertEquals(len(test_record.blob_value), 1)
+        self.assertEquals(test_record.blob_value[0], self.value)
 
     def test_forwarding(self):
 
@@ -109,10 +109,10 @@ class TestSetBlob(unittest.TestCase):
         Proactor.get_proactor().run_test(test)
 
         # directly validate against record stored in _main_ context
-        persisted_value = Value()
-        persisted_value.ParseFromBytes(self.rolling_hash.get(self.key).value)
+        persisted_record = PersistedRecord()
+        persisted_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
 
-        self.assertEquals(persisted_value.blob_value[0], self.value)
+        self.assertEquals(persisted_record.blob_value[0], self.value)
 
     def test_cluster_clock_semantics(self):
 
@@ -122,13 +122,13 @@ class TestSetBlob(unittest.TestCase):
         expected_clock = ClusterClock()
         ClockUtil.tick(expected_clock, UUID.from_random())
 
-        test_value = Value()
-        test_value.mutable_cluster_clock().CopyFrom(expected_clock)
-        test_value.add_blob_value("previous-value")
+        persisted_record = PersistedRecord()
+        persisted_record.mutable_cluster_clock().CopyFrom(expected_clock)
+        persisted_record.add_blob_value("previous-value")
 
         record = self.rolling_hash.prepare_record(
-            self.key, test_value.ByteSize())
-        record.set_value(test_value.SerializeToBytes())
+            self.key, persisted_record.ByteSize())
+        record.set_value(persisted_record.SerializeToBytes())
 
         self.rolling_hash.commit_record()
 
@@ -179,15 +179,15 @@ class TestSetBlob(unittest.TestCase):
         Proactor.get_proactor().run_test(test)
 
         # query for runtime record
-        persisted_value = Value()
-        persisted_value.ParseFromBytes(self.rolling_hash.get(self.key).value)
+        persisted_record = PersistedRecord()
+        persisted_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
 
         # two writes from test_partition occurred during the test
         ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
         ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClockUtil.compare(expected_clock, persisted_value.cluster_clock))
+            ClockUtil.compare(expected_clock, persisted_record.cluster_clock))
 
     def test_error_cases(self):
 
@@ -254,6 +254,32 @@ class TestSetBlob(unittest.TestCase):
             request.get_message().add_data_block_length(len(value))
             request.start_request()
             request.write_interface().queue_write(value)
+            request.write_interface().queue_write(value)
+
+            response = yield request.finish_request()
+            self.assertEquals(response.get_error_code(), 400)
+            response.finish_response()
+
+            # invalid cluster clock
+            request = yield server.schedule_request()
+            request.get_message().set_type(CommandType.SET_BLOB)
+
+            blob_request = request.get_message().mutable_blob()
+            blob_request.set_table_name(test_table.name)
+            blob_request.set_key(key)
+
+            p_clock = blob_request.mutable_cluster_clock().add_partition_clock()
+            p_clock.set_partition_uuid('b' * 16)
+            p_clock.set_unix_timestamp(0)
+            p_clock.set_lamport_tick(0)
+
+            p_clock = blob_request.mutable_cluster_clock().add_partition_clock()
+            p_clock.set_partition_uuid('a' * 16)
+            p_clock.set_unix_timestamp(0)
+            p_clock.set_lamport_tick(0)
+
+            request.get_message().add_data_block_length(len(value))
+            request.start_request()
             request.write_interface().queue_write(value)
 
             response = yield request.finish_request()

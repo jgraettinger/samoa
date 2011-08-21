@@ -14,23 +14,23 @@ namespace spb = samoa::core::protobuf;
 
 void blob::send_blob_value(
     const server::client::ptr_t & client,
-    const spb::Value & value)
+    const spb::PersistedRecord & record)
 {
     spb::SamoaResponse & samoa_response = client->get_response();
 
     samoa_response.mutable_blob()->mutable_cluster_clock()->CopyFrom(
-        value.cluster_clock());
+        record.cluster_clock());
 
-    for(auto val_it = value.blob_value().begin();
-        val_it != value.blob_value().end(); ++val_it)
+    for(auto val_it = record.blob_value().begin();
+        val_it != record.blob_value().end(); ++val_it)
     {
         samoa_response.add_data_block_length(val_it->size());
     }
 
     client->start_response();
 
-    for(auto val_it = value.blob_value().begin();
-        val_it != value.blob_value().end(); ++val_it)
+    for(auto val_it = record.blob_value().begin();
+        val_it != record.blob_value().end(); ++val_it)
     {
         client->write_interface().queue_write(
             val_it->begin(), val_it->end());

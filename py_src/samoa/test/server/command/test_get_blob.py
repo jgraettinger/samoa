@@ -2,7 +2,7 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType, Value, ClusterClock
+from samoa.core.protobuf import CommandType, PersistedRecord, ClusterClock
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
@@ -42,13 +42,13 @@ class TestGetBlob(unittest.TestCase):
         expected_clock = ClusterClock()
         ClockUtil.tick(expected_clock, UUID(test_part.uuid))
 
-        test_value = Value()
-        test_value.mutable_cluster_clock().CopyFrom(expected_clock)
-        test_value.add_blob_value("a-test-value")
+        test_record = PersistedRecord()
+        test_record.mutable_cluster_clock().CopyFrom(expected_clock)
+        test_record.add_blob_value("a-test-value")
 
         record = rolling_hash.prepare_record(
-            'a-test-key', test_value.ByteSize())
-        record.set_value(test_value.SerializeToBytes())
+            'a-test-key', test_record.ByteSize())
+        record.set_value(test_record.SerializeToBytes())
 
         rolling_hash.commit_record()
 

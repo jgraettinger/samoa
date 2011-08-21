@@ -7,8 +7,8 @@ namespace samoa {
 namespace core {
 namespace protobuf {
 
-class Value;
-typedef boost::shared_ptr<Value> Value_ptr_t;
+class PersistedRecord;
+typedef boost::shared_ptr<PersistedRecord> PersistedRecord_ptr_t;
 
 }
 }

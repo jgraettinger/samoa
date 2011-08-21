@@ -152,10 +152,10 @@ message PartitionClock
 
 message ClusterClock
 {
-    repeated PartitionClock clocks = 1;
+    repeated PartitionClock partition_clock = 1;
 };
 
-message Value
+message PersistedRecord
 {
     optional ClusterClock cluster_clock = 1;
 

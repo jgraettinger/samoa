@@ -40,6 +40,13 @@ void set_blob_handler::handle(const client::ptr_t & client)
         return;
     }
 
+    if(blob_request.has_cluster_clock() &&
+       !datamodel::clock_util::validate(blob_request.cluster_clock()))
+    {
+        client->send_error(400, "malformed cluster clock");
+        return;
+    }
+
     cluster_state::ptr_t cluster_state = \
         client->get_context()->get_cluster_state();
 
@@ -85,96 +92,85 @@ void set_blob_handler::handle(const client::ptr_t & client)
     local_partition & local_primary = \
         dynamic_cast<local_partition &>(*primary_partition);
 
-    spb::Value_ptr_t new_value = boost::make_shared<spb::Value>();
+    spb::PersistedRecord_ptr_t new_rec = \
+        boost::make_shared<spb::PersistedRecord>();
 
-    // tick clock to reflect this operation
-    datamodel::clock_util::tick(*new_value->mutable_cluster_clock(),
+    // assume the key doesn't exist; initial clock tick for first write
+    datamodel::clock_util::tick(*new_rec->mutable_cluster_clock(),
         primary_partition->get_uuid());
 
     // assign client's value
-    new_value->add_blob_value()->assign(
+    new_rec->add_blob_value()->assign(
         boost::asio::buffers_begin(client->get_request_data_blocks()[0]),
         boost::asio::buffers_end(client->get_request_data_blocks()[0]));
 
-    int expected_length = new_value->ByteSize();
-
     local_primary.get_persister()->put(
         boost::bind(&set_blob_handler::on_put_record, shared_from_this(),
-            _1, client, primary_partition, all_partitions, new_value, _2, _3),
-        blob_request.key(), expected_length);
+            _1, client, primary_partition, all_partitions, _2),
+        boost::bind(&set_blob_handler::on_merge_record, shared_from_this(),
+            client, primary_partition, _1, _2),
+        blob_request.key(), new_rec);
 }
 
-bool set_blob_handler::on_put_record(
-    const boost::system::error_code & ec,
+spb::PersistedRecord_ptr_t set_blob_handler::on_merge_record(
     const client::ptr_t & client,
     const partition::ptr_t & primary_partition,
-    const table::ring_t & all_partitions,
-    const spb::Value_ptr_t & new_value,
-    const persistence::record * cur_record,
-    persistence::record * new_record)
+    const spb::PersistedRecord_ptr_t & cur_rec,
+    const spb::PersistedRecord_ptr_t & new_rec)
 {
-    if(ec)
-    {
-        client->send_error(500, ec);
-        return false;
-    }
-
     const spb::SamoaRequest & samoa_request = client->get_request();
     const spb::BlobRequest & blob_request = samoa_request.blob();
 
     spb::SamoaResponse & samoa_response = client->get_response();
     spb::BlobResponse & blob_response = *samoa_response.mutable_blob();
 
-    spb::Value cur_value;
-
-    if(cur_record)
-    {
-        cur_value.ParseFromArray(
-            cur_record->value_begin(), cur_record->value_length());
-    }
-
-    // if the client specified a version clock, check
-    //  equality against the record's clock.
+    // if request included a cluster clock, validate
+    //  equality against the stored cluster clock
     if(blob_request.has_cluster_clock())
     {
         if(datamodel::clock_util::compare(
-                cur_value.cluster_clock(),
-                blob_request.cluster_clock()
+                cur_rec->cluster_clock(),
+                blob_request.cluster_clock() 
             ) != datamodel::clock_util::EQUAL)
         {
-            // return the current blob value, and abort the put
+            // clock doesn't match: abort
             blob_response.set_success(false);
-            datamodel::blob::send_blob_value(client, cur_value);
-            return false;
+            datamodel::blob::send_blob_value(client, *cur_rec);
+            return spb::PersistedRecord_ptr_t();
         }
     }
 
-    // if the client didn't give a cluster clock, it's implicitly
-    //  'equal' to the current clock; existing values are clobbered
-
-    new_value->mutable_cluster_clock()->CopyFrom(cur_value.cluster_clock());
-
-    // tick clock to reflect this operation
-    datamodel::clock_util::tick(*new_value->mutable_cluster_clock(),
+    // clocks match, or the request doesn't have a clock (implicit match)
+    //   copy the current clock, and tick to reflect this operation 
+    new_rec->mutable_cluster_clock()->CopyFrom(cur_rec->cluster_clock());
+    datamodel::clock_util::tick(*new_rec->mutable_cluster_clock(),
         primary_partition->get_uuid());
 
-    // TODO: Prune clock?
+    return new_rec;
+}
 
-    unsigned serialized_length = new_value->ByteSize();
-    SAMOA_ASSERT(serialized_length <= new_record->value_length());
+void set_blob_handler::on_put_record(
+    const boost::system::error_code & ec,
+    const client::ptr_t & client,
+    const partition::ptr_t & primary_partition,
+    const table::ring_t & all_partitions,
+    const spb::PersistedRecord_ptr_t & new_rec)
+{
+    if(ec)
+    {
+        client->send_error(500, ec);
+        return;
+    }
 
-    new_value->SerializeWithCachedSizesToArray(
-        reinterpret_cast<google::protobuf::uint8*>(new_record->value_begin()));
-
-    new_record->trim_value_length(serialized_length);
+    spb::SamoaResponse & samoa_response = client->get_response();
+    spb::BlobResponse & blob_response = *samoa_response.mutable_blob();
 
     blob_response.set_success(true);
     client->finish_response();
 
     // TODO: post replication operations to remaining partitions 
 
-    // commit the new record
-    return true;
+    return;
 }
 
 }

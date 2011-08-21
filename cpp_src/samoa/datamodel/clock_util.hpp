@@ -17,7 +17,7 @@ public:
 
     static void tick(spb::ClusterClock &, const core::uuid & partition_uuid);
 
-    static void validate(const spb::ClusterClock &);
+    static bool validate(const spb::ClusterClock &);
 
     enum clock_ancestry
     {

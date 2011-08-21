@@ -14,6 +14,8 @@ namespace samoa {
 namespace server {
 namespace command {
 
+namespace spb = samoa::core::protobuf;
+
 class set_blob_handler :
     public command_handler,
     public boost::enable_shared_from_this<set_blob_handler>
@@ -29,14 +31,18 @@ public:
 
 private:
 
-    bool on_put_record(
+    spb::PersistedRecord_ptr_t on_merge_record(
+        const client_ptr_t &,
+        const partition_ptr_t &,
+        const spb::PersistedRecord_ptr_t &,
+        const spb::PersistedRecord_ptr_t &);
+
+    void on_put_record(
         const boost::system::error_code &,
         const client_ptr_t &,
-        const partition_ptr_t & primary_partition,
+        const partition_ptr_t &,
         const std::vector<partition_ptr_t> &,
-        const samoa::core::protobuf::Value_ptr_t &,
-        const persistence::record *,
-        persistence::record *);
+        const spb::PersistedRecord_ptr_t &);
 };
 
 }

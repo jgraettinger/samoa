@@ -84,7 +84,7 @@ void get_blob_handler::handle(const client::ptr_t & client)
 void get_blob_handler::on_get_record(
     const boost::system::error_code & ec,
     const client::ptr_t & client,
-    const persistence::record * record)
+    const spb::PersistedRecord_ptr_t & record)
 {
     if(ec)
     {
@@ -104,11 +104,7 @@ void get_blob_handler::on_get_record(
     }
 
     blob_response.set_success(true);
-
-    spb::Value value;
-    value.ParseFromArray(record->value_begin(), record->value_length());
-
-    datamodel::blob::send_blob_value(client, value);
+    datamodel::blob::send_blob_value(client, *record);
 }
 
 }

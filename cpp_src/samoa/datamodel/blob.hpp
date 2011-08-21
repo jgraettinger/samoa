@@ -28,7 +28,7 @@ public:
 
     static void send_blob_value(
         const server::client_ptr_t &,
-        const samoa::core::protobuf::Value &);
+        const samoa::core::protobuf::PersistedRecord &);
 };
 
 }

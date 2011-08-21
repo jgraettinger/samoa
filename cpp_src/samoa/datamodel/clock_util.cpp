@@ -37,7 +37,7 @@ void clock_util::tick(spb::ClusterClock & cluster_clock,
     const core::uuid & partition_uuid)
 {
     typedef google::protobuf::RepeatedPtrField<spb::PartitionClock> clocks_t;
-    clocks_t & clocks = *cluster_clock.mutable_clocks();
+    clocks_t & clocks = *cluster_clock.mutable_partition_clock();
 
     std::string p_uuid_bytes(partition_uuid.begin(), partition_uuid.end());
 
@@ -67,21 +67,23 @@ void clock_util::tick(spb::ClusterClock & cluster_clock,
     it->set_lamport_tick(it->lamport_tick() + 1);
 }
 
-void clock_util::validate(const spb::ClusterClock & cluster_clock)
+bool clock_util::validate(const spb::ClusterClock & cluster_clock)
 {
     typedef google::protobuf::RepeatedPtrField<spb::PartitionClock> clocks_t;
-    const clocks_t & clocks = cluster_clock.clocks();
+    const clocks_t & clocks = cluster_clock.partition_clock();
 
-    clocks_t::const_iterator it, last_it;
-    last_it = it = clocks.begin();
+    clocks_t::const_iterator it = clocks.begin();
+    clocks_t::const_iterator last_it = it++;
 
-    while(it != clocks.end())
+    while(last_it != clocks.end() && it != clocks.end())
     {
-        SAMOA_ASSERT(last_it == it ||
-            uuid_comparator()(*last_it, *it));
-        last_it = it;
-        ++it;
+        if(!uuid_comparator()(*last_it, *it))
+        {
+            return false;
+        }
+        last_it = it++;
     }
+    return true;
 }
 
 clock_util::clock_ancestry clock_util::compare(
@@ -90,13 +92,13 @@ clock_util::clock_ancestry clock_util::compare(
 {
     typedef google::protobuf::RepeatedPtrField<spb::PartitionClock> clocks_t;
     
-    const clocks_t & lhs = lhs_clock.clocks();
-    const clocks_t & rhs = rhs_clock.clocks();
+    const clocks_t & lhs = lhs_clock.partition_clock();
+    const clocks_t & rhs = rhs_clock.partition_clock();
     
     clocks_t * merged = 0;
     if(merged_clock_out)
     {
-        merged = merged_clock_out->mutable_clocks();
+        merged = merged_clock_out->mutable_partition_clock();
         merged->Clear();
     }
 

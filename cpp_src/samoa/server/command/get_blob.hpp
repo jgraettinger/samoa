@@ -4,6 +4,7 @@
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
+#include "samoa/core/protobuf/fwd.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
@@ -11,6 +12,8 @@
 namespace samoa {
 namespace server {
 namespace command {
+
+namespace spb = samoa::core::protobuf;
 
 class get_blob_handler :
     public command_handler,
@@ -30,7 +33,7 @@ private:
     void on_get_record(
         const boost::system::error_code &,
         const client_ptr_t &,
-        const persistence::record *);
+        const spb::PersistedRecord_ptr_t &);
 };
 
 }
