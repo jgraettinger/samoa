@@ -278,6 +278,7 @@ void make_%(msg_name)s_bindings()
     binder.def("SerializeToBytes", &py_SerializeToBytes);
     binder.def("ParseFromText", &py_ParseFromText);
     binder.def("SerializeToText", &py_SerializeToText);
+    binder.def("ByteSize", &%(msg_name)s::ByteSize);
 
 """[1:-1]
 

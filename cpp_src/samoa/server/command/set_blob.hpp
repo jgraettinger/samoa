@@ -5,6 +5,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/persistence/fwd.hpp"
+#include "samoa/core/protobuf/fwd.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <vector>
@@ -33,6 +34,7 @@ private:
         const client_ptr_t &,
         const partition_ptr_t & primary_partition,
         const std::vector<partition_ptr_t> &,
+        const samoa::core::protobuf::Value_ptr_t &,
         const persistence::record *,
         persistence::record *);
 };

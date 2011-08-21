@@ -3,7 +3,8 @@ import random
 import unittest
 
 from samoa.core.uuid import UUID
-from samoa.datamodel.cluster_clock import ClusterClock, ClockAncestry
+from samoa.core.protobuf import ClusterClock
+from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 
 class TestClusterClock(unittest.TestCase):
 
@@ -16,55 +17,55 @@ class TestClusterClock(unittest.TestCase):
         clock1 = ClusterClock()
         clock2 = ClusterClock()
 
-        clock1.tick(A)
-        clock2.tick(A)
+        ClockUtil.tick(clock1, A)
+        ClockUtil.tick(clock2, A)
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
-        clock2.tick(A)
+        ClockUtil.tick(clock2, A)
 
         # tick of known partitition
         self.assertEquals(ClockAncestry.LESS_RECENT,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
-        clock1.tick(A)
-        clock2.tick(B)
+        ClockUtil.tick(clock1, A)
+        ClockUtil.tick(clock2, B)
 
         # tick of new partition
         self.assertEquals(ClockAncestry.LESS_RECENT,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
-        clock1.tick(B)
+        ClockUtil.tick(clock1, B)
 
         # should be equal again
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
-        clock1.tick(A)
+        ClockUtil.tick(clock1, A)
 
         # tick of known partition
         self.assertEquals(ClockAncestry.MORE_RECENT,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
-        clock2.tick(A)
-        clock1.tick(B)
+        ClockUtil.tick(clock2, A)
+        ClockUtil.tick(clock1, B)
 
         # tick of new partition
         self.assertEquals(ClockAncestry.MORE_RECENT,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
-        clock2.tick(B)
+        ClockUtil.tick(clock2, B)
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
         # clocks diverge
-        clock1.tick(A)
-        clock2.tick(C)
+        ClockUtil.tick(clock1, A)
+        ClockUtil.tick(clock2, C)
 
         self.assertEquals(ClockAncestry.DIVERGE,
-            ClusterClock.compare(clock1, clock2))
+            ClockUtil.compare(clock1, clock2))
 
     def test_merge(self):
 
@@ -78,33 +79,33 @@ class TestClusterClock(unittest.TestCase):
         expect = ClusterClock()
 
         # a common set of ticks
-        clock1.tick(A)
-        clock1.tick(B)
-        clock2.tick(A)
-        clock2.tick(B)
-        expect.tick(A)
-        expect.tick(B)
+        ClockUtil.tick(clock1, A)
+        ClockUtil.tick(clock1, B)
+        ClockUtil.tick(clock2, A)
+        ClockUtil.tick(clock2, B)
+        ClockUtil.tick(expect, A)
+        ClockUtil.tick(expect, B)
 
         # updates to clock1
-        clock1.tick(A)
-        clock1.tick(C)
-        expect.tick(A)
-        expect.tick(C)
+        ClockUtil.tick(clock1, A)
+        ClockUtil.tick(clock1, C)
+        ClockUtil.tick(expect, A)
+        ClockUtil.tick(expect, C)
 
         # updates to clock2
-        clock2.tick(D)
-        clock2.tick(B)
-        expect.tick(D)
-        expect.tick(B)
+        ClockUtil.tick(clock2, D)
+        ClockUtil.tick(clock2, B)
+        ClockUtil.tick(expect, D)
+        ClockUtil.tick(expect, B)
 
         # clock1 & clock2 should diverge; build the merged clock
         merged = ClusterClock()
         self.assertEquals(ClockAncestry.DIVERGE,
-            ClusterClock.compare(clock1, clock2, merged))
+            ClockUtil.compare(clock1, clock2, merged))
 
         # the merged clock is equal to the expected clock
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(merged, expect))
+            ClockUtil.compare(merged, expect))
 
     def test_serialization(self):
 
@@ -114,17 +115,18 @@ class TestClusterClock(unittest.TestCase):
 
         clock = ClusterClock()
 
-        clock.tick(A)
-        clock.tick(A)
-        clock.tick(A)
-        clock.tick(B)
-        clock.tick(B)
-        clock.tick(C)
+        ClockUtil.tick(clock, A)
+        ClockUtil.tick(clock, A)
+        ClockUtil.tick(clock, A)
+        ClockUtil.tick(clock, B)
+        ClockUtil.tick(clock, B)
+        ClockUtil.tick(clock, C)
 
-        serialized_clock = str(clock)
+        serialized_clock = clock.SerializeToBytes()
 
-        recovered = ClusterClock.from_string(serialized_clock)
+        recovered = ClusterClock()
+        recovered.ParseFromBytes(serialized_clock)
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(clock, recovered))
+            ClockUtil.compare(clock, recovered))
 

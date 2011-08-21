@@ -2,14 +2,13 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType
+from samoa.core.protobuf import CommandType, ClusterClock, Value
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
 from samoa.client.server import Server
 from samoa.persistence.data_type import DataType
-from samoa.datamodel.blob import Blob
-from samoa.datamodel.cluster_clock import ClusterClock, ClockAncestry
+from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 
 from samoa.test.module import TestModule
 from samoa.test.cluster_state_fixture import ClusterStateFixture
@@ -53,7 +52,7 @@ class TestSetBlob(unittest.TestCase):
 
             # request succeeded
             self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().set_blob.success)
+            self.assertTrue(response.get_message().blob.success)
             self.assertEquals(response.get_response_data_blocks(), [])
             response.finish_response()
 
@@ -64,16 +63,17 @@ class TestSetBlob(unittest.TestCase):
         Proactor.get_proactor().run_test(test)
 
         # directly parse stored record
-        stored_clock, stored_values = Blob.read_blob_value(
-            self.rolling_hash.get(self.key))
+        persisted_value = Value()
+        persisted_value.ParseFromBytes(self.rolling_hash.get(self.key).value)
 
         expected_clock = ClusterClock()
-        expected_clock.tick(UUID(self.test_partition.uuid))
+        ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(expected_clock, stored_clock))
+            ClockUtil.compare(expected_clock, persisted_value.cluster_clock))
 
-        self.assertEquals(stored_values, [self.value])
+        self.assertEquals(len(persisted_value.blob_value), 1)
+        self.assertEquals(persisted_value.blob_value[0], self.value)
 
     def test_forwarding(self):
 
@@ -98,7 +98,7 @@ class TestSetBlob(unittest.TestCase):
 
             # request succeeded
             self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().set_blob.success)
+            self.assertTrue(response.get_message().blob.success)
             response.finish_response()
 
             # cleanup
@@ -108,24 +108,28 @@ class TestSetBlob(unittest.TestCase):
 
         Proactor.get_proactor().run_test(test)
 
-        # directly parse record stored in _main_ context
-        stored_clock, stored_values = Blob.read_blob_value(
-            self.rolling_hash.get(self.key))
+        # directly validate against record stored in _main_ context
+        persisted_value = Value()
+        persisted_value.ParseFromBytes(self.rolling_hash.get(self.key).value)
 
-        self.assertEquals(stored_values, [self.value])
+        self.assertEquals(persisted_value.blob_value[0], self.value)
 
-    def test_version_tag_semantics(self):
+    def test_cluster_clock_semantics(self):
 
         self._common_bootstrap()
 
         # set an existing record, with non-empty cluster-clock
         expected_clock = ClusterClock()
-        expected_clock.tick(UUID.from_random())
+        ClockUtil.tick(expected_clock, UUID.from_random())
 
-        record = self.rolling_hash.prepare_record(self.key,
-             Blob.serialized_length(len(self.value)))
+        test_value = Value()
+        test_value.mutable_cluster_clock().CopyFrom(expected_clock)
+        test_value.add_blob_value("previous-value")
 
-        Blob.write_blob_value(expected_clock, self.value, record)
+        record = self.rolling_hash.prepare_record(
+            self.key, test_value.ByteSize())
+        record.set_value(test_value.SerializeToBytes())
+
         self.rolling_hash.commit_record()
 
         def test():
@@ -133,37 +137,37 @@ class TestSetBlob(unittest.TestCase):
             server = yield Server.connect_to(
                 self.listener.get_address(), self.listener.get_port())
 
-            # first request: pass empty tag (won't succeed)
-            response = yield self._make_request(server, version_tag = '')
-            self.assertFalse(response.get_error_code())
-            self.assertFalse(response.get_message().set_blob.success)
+            # first request: pass empty clock (won't succeed)
+            response = yield self._make_request(server,
+                cluster_clock = ClusterClock())
 
-            version_tag = response.get_message().set_blob.version_tag
+            self.assertFalse(response.get_error_code())
+            self.assertFalse(response.get_message().blob.success)
 
             self.assertEquals(response.get_response_data_blocks(),
-                [self.value])
+                ['previous-value'])
 
+            response_clock = response.get_message().blob.cluster_clock
             self.assertEquals(ClockAncestry.EQUAL,
-                ClusterClock.compare(expected_clock,
-                    ClusterClock.from_string(version_tag)))
+                ClockUtil.compare(expected_clock, response_clock))
 
             response.finish_response()
 
             # second request: pass previously returned tag (succeeds)
             response = yield self._make_request(server,
-                version_tag = version_tag)
+                cluster_clock = response_clock)
 
             self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().set_blob.success)
+            self.assertTrue(response.get_message().blob.success)
             self.assertEquals(response.get_response_data_blocks(), [])
 
             response.finish_response()
 
             # third request: don't pass a tag at all (succeeds)
-            response = yield self._make_request(server, version_tag = None)
+            response = yield self._make_request(server, cluster_clock = None)
 
             self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().set_blob.success)
+            self.assertTrue(response.get_message().blob.success)
             self.assertEquals(response.get_response_data_blocks(), [])
 
             response.finish_response()
@@ -175,15 +179,15 @@ class TestSetBlob(unittest.TestCase):
         Proactor.get_proactor().run_test(test)
 
         # query for runtime record
-        stored_clock, stored_values = Blob.read_blob_value(
-            self.rolling_hash.get(self.key))
+        persisted_value = Value()
+        persisted_value.ParseFromBytes(self.rolling_hash.get(self.key).value)
 
         # two writes from test_partition occurred during the test
-        expected_clock.tick(UUID(self.test_partition.uuid))
-        expected_clock.tick(UUID(self.test_partition.uuid))
+        ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
+        ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
 
         self.assertEquals(ClockAncestry.EQUAL,
-            ClusterClock.compare(expected_clock, stored_clock))
+            ClockUtil.compare(expected_clock, persisted_value.cluster_clock))
 
     def test_error_cases(self):
 
@@ -230,7 +234,7 @@ class TestSetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.SET_BLOB)
 
-            sb = request.get_message().mutable_set_blob()
+            sb = request.get_message().mutable_blob()
             sb.set_table_name(test_table.name)
             sb.set_key(key)
 
@@ -242,7 +246,7 @@ class TestSetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.SET_BLOB)
 
-            sb = request.get_message().mutable_set_blob()
+            sb = request.get_message().mutable_blob()
             sb.set_table_name(test_table.name)
             sb.set_key(key)
 
@@ -260,7 +264,7 @@ class TestSetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.SET_BLOB)
 
-            sb = request.get_message().mutable_set_blob()
+            sb = request.get_message().mutable_blob()
             sb.set_table_name('invalid table')
             sb.set_key(key)
 
@@ -276,7 +280,7 @@ class TestSetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.SET_BLOB)
 
-            sb = request.get_message().mutable_set_blob()
+            sb = request.get_message().mutable_blob()
             sb.set_table_name(table_no_partitions.name)
             sb.set_key(key)
 
@@ -292,7 +296,7 @@ class TestSetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.SET_BLOB)
 
-            sb = request.get_message().mutable_set_blob()
+            sb = request.get_message().mutable_blob()
             sb.set_table_name(table_remote_not_available.name)
             sb.set_key(key)
 
@@ -313,17 +317,17 @@ class TestSetBlob(unittest.TestCase):
     def test_replication(self):
         pass
 
-    def _make_request(self, server, version_tag = None):
+    def _make_request(self, server, cluster_clock = None):
 
         request = yield server.schedule_request()
         request.get_message().set_type(CommandType.SET_BLOB)
 
-        sb = request.get_message().mutable_set_blob()
-        sb.set_table_name(self.test_table.name)
-        sb.set_key(self.key)
+        blob_request = request.get_message().mutable_blob()
+        blob_request.set_table_name(self.test_table.name)
+        blob_request.set_key(self.key)
 
-        if version_tag is not None:
-            sb.set_version_tag(version_tag)
+        if cluster_clock is not None:
+            blob_request.mutable_cluster_clock().CopyFrom(cluster_clock)
 
         request.get_message().add_data_block_length(len(self.value))
         request.start_request()

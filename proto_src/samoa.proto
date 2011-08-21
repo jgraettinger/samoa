@@ -141,29 +141,40 @@ message DropPartitionRequest {
     required string partition_uuid = 2;
 };
 
+// *INTERNAL* Datamodel serialization
+
+message PartitionClock
+{
+    required bytes  partition_uuid = 1;
+    required uint64 unix_timestamp = 2;
+    required uint32 lamport_tick = 3;
+};
+
+message ClusterClock
+{
+    repeated PartitionClock clocks = 1;
+};
+
+message Value
+{
+    optional ClusterClock cluster_clock = 1;
+
+    repeated bytes blob_value = 2;
+};
+
 // BLOB datatype operations
 
-message GetBlobRequest {
+message BlobRequest
+{
     required string table_name = 1;
-    required bytes  key = 2;
-    optional uint64 ring_position = 3;
+    optional bytes  key = 2;
+    optional ClusterClock cluster_clock = 4;
 };
 
-message GetBlobResponse {
-    required bool  found = 1;
-    required bytes version_tag = 2;
-};
-
-message SetBlobRequest {
-    required string table_name = 1;
-    required bytes  key = 2;
-    optional uint64 ring_position = 3;
-    optional bytes  version_tag = 4;
-};
-
-message SetBlobResponse {
-    required bool  success = 1;
-    optional bytes version_tag = 2;
+message BlobResponse
+{
+    required bool success = 1;
+    optional ClusterClock cluster_clock = 2;
 };
 
 // Union container type
@@ -188,8 +199,7 @@ message SamoaRequest {
     optional CreatePartitionRequest create_partition = 11;
     optional DropPartitionRequest   drop_partition = 12;
 
-    optional GetBlobRequest get_blob = 13;
-    optional SetBlobRequest set_blob = 14;
+    optional BlobRequest blob = 13;
 };
 
 message SamoaResponse {
@@ -210,7 +220,6 @@ message SamoaResponse {
 
     optional CreatePartitionResponse create_partition = 7;
 
-    optional GetBlobResponse get_blob = 8;
-    optional SetBlobResponse set_blob = 9;
+    optional BlobResponse blob = 8;
 };
 

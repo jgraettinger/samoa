@@ -20,6 +20,44 @@ public:
 
     typedef persister_ptr_t ptr_t;
 
+    /*
+    Put:
+        * Call persister::put(put_callback, merge_callback, key, Record_ptr_t record)
+
+        * If record exists:
+          - merge_callback(Record_ptr_t current_record, Record_ptr_t new_record);
+          - put_callback(ec, Record_ptr_t new_record);
+             - new_record is null iff put fails
+       
+    Get:
+        * Call persister::get(get_callback, key);
+
+        get_callback(ec, Record_ptr_t current_record)
+          - current_record is null if record doesn't exist
+    * /
+
+    / * \brief Signature for get_callback
+    *
+    *  Argument record is null if a record under the key doesn't exist.
+    * /
+    typedef boost::function<
+        void (const boost::system::error_code &, const Record_ptr_t &)
+    > get_callback_t;
+
+    / * \brief Signature for merge_callback
+    *
+    *  Precondition: A put operation is in progress, but an existing record exists under the key
+    *  An existing  
+    * /
+    typedef boost::function<
+        bool (const samoa::core::protobuf::Record &, samoa::core::protobuf::Record &)
+    > merge_callback_t;
+
+    / * \brief Signature for put_callback
+    *
+    * Argument 
+    */
+
     typedef boost::function<
         void (const boost::system::error_code &, const record *)
     > get_callback_t;

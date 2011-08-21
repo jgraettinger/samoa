@@ -1,6 +1,7 @@
 
 #include <boost/python.hpp>
 #include "samoa/core/uuid.hpp"
+#include "samoa/error.hpp"
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 
@@ -44,6 +45,22 @@ uuid py_from_hex(const bpl::str & s)
 
     boost::uuids::string_generator gen;
     return gen(buf, buf + len);
+}
+
+uuid py_from_bytes(const bpl::str & s)
+{
+    char * buf;
+    Py_ssize_t len;
+
+    if(PyString_AsStringAndSize(s.ptr(), &buf, &len) == -1)
+        bpl::throw_error_already_set();
+
+    uuid result;
+
+    SAMOA_ASSERT(len == sizeof(result.data));
+    std::copy(buf, buf + len, result.data);
+
+    return result;
 }
 
 uuid * py_hex_ctor(const bpl::str & s)
@@ -111,6 +128,8 @@ void make_uuid_bindings()
         .staticmethod("check_hex")
         .def("from_hex", &py_from_hex)
         .staticmethod("from_hex")
+        .def("from_bytes", &py_from_bytes)
+        .staticmethod("from_bytes")
         .def("from_name", &py_from_name)
         .staticmethod("from_name")
         .def("from_random", &py_from_random)

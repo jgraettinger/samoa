@@ -9,6 +9,7 @@
 namespace samoa {
 namespace datamodel {
 
+/*
 namespace bio = boost::iostreams;
 namespace bpl = boost::python;
 
@@ -75,9 +76,11 @@ bpl::tuple py_read_blob_value(
 
     return bpl::make_tuple(py_clock, py_values);
 }
+*/
 
 void make_blob_bindings()
 {
+    /*
     bpl::class_<blob>("Blob", bpl::no_init)
         .def("serialized_length", &blob::serialized_length)
         .staticmethod("serialized_length")
@@ -86,6 +89,7 @@ void make_blob_bindings()
         .def("read_blob_value", &py_read_blob_value)
         .staticmethod("read_blob_value")
         ;
+    */
 }
 
 }

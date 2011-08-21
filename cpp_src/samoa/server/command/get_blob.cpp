@@ -9,6 +9,7 @@
 #include "samoa/server/partition.hpp"
 #include "samoa/server/local_partition.hpp"
 #include "samoa/persistence/persister.hpp"
+#include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/datamodel/blob.hpp"
 #include <boost/bind.hpp>
@@ -21,12 +22,12 @@ namespace spb = samoa::core::protobuf;
 
 void get_blob_handler::handle(const client::ptr_t & client)
 {
-    const spb::SamoaRequest & samoa_req = client->get_request();
-    const spb::GetBlobRequest & get_blob = samoa_req.get_blob();
+    const spb::SamoaRequest & samoa_request = client->get_request();
+    const spb::BlobRequest & blob_request = samoa_request.blob();
 
-    if(!samoa_req.has_get_blob())
+    if(!samoa_request.has_blob())
     {
-        client->send_error(400, "expected get_blob");
+        client->send_error(400, "expected blob field");
         return;
     }
 
@@ -34,17 +35,16 @@ void get_blob_handler::handle(const client::ptr_t & client)
         client->get_context()->get_cluster_state();
 
     table::ptr_t table = cluster_state->get_table_set()->get_table_by_name(
-        get_blob.table_name());
+        blob_request.table_name());
 
     if(!table)
     {
-        client->send_error(404, "table " + get_blob.table_name());
+        client->send_error(404, "table " + blob_request.table_name());
         return;
     }
 
-    // extract or hash key ring position
-    uint64_t ring_position = get_blob.has_ring_position() ?
-        get_blob.ring_position() : table->ring_position(get_blob.key());
+    // hash key ring position
+    uint64_t ring_position = table->ring_position(blob_request.key());
 
     // route the position to responsible partitions & primary partition
     partition::ptr_t primary_partition;
@@ -78,7 +78,7 @@ void get_blob_handler::handle(const client::ptr_t & client)
 
     local_primary.get_persister()->get(boost::bind(
         &get_blob_handler::on_get_record, shared_from_this(),
-        _1, client, _2), get_blob.key());
+        _1, client, _2), blob_request.key());
 }
 
 void get_blob_handler::on_get_record(
@@ -93,20 +93,22 @@ void get_blob_handler::on_get_record(
     }
 
     spb::SamoaResponse & samoa_response = client->get_response();
-    spb::GetBlobResponse & get_blob = *samoa_response.mutable_get_blob();
+    spb::BlobResponse & blob_response = *samoa_response.mutable_blob();
 
     if(!record)
     {
-        get_blob.set_found(false);
-        get_blob.set_version_tag("");
+        blob_response.set_success(false);
+        blob_response.mutable_cluster_clock();
         client->finish_response();
         return;
     }
 
-    get_blob.set_found(true);
+    blob_response.set_success(true);
 
-    datamodel::blob::send_blob_value(client, *record,
-        *get_blob.mutable_version_tag());
+    spb::Value value;
+    value.ParseFromArray(record->value_begin(), record->value_length());
+
+    datamodel::blob::send_blob_value(client, value);
 }
 
 }

@@ -2,14 +2,13 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType
+from samoa.core.protobuf import CommandType, Value, ClusterClock
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
 from samoa.client.server import Server
 from samoa.persistence.data_type import DataType
-from samoa.datamodel.blob import Blob
-from samoa.datamodel.cluster_clock import ClusterClock, ClockAncestry
+from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 
 from samoa.test.module import TestModule
 from samoa.test.cluster_state_fixture import ClusterStateFixture
@@ -39,14 +38,17 @@ class TestGetBlob(unittest.TestCase):
             ).get_layer(0)
 
         # set a test record
+
         expected_clock = ClusterClock()
-        expected_clock.tick(UUID(test_part.uuid))
+        ClockUtil.tick(expected_clock, UUID(test_part.uuid))
+
+        test_value = Value()
+        test_value.mutable_cluster_clock().CopyFrom(expected_clock)
+        test_value.add_blob_value("a-test-value")
 
         record = rolling_hash.prepare_record(
-            'a-test-key',
-             Blob.serialized_length(len('a-test-value')))
-
-        Blob.write_blob_value(expected_clock, 'a-test-value', record)
+            'a-test-key', test_value.ByteSize())
+        record.set_value(test_value.SerializeToBytes())
 
         rolling_hash.commit_record()
 
@@ -74,16 +76,16 @@ class TestGetBlob(unittest.TestCase):
 
                 request.get_message().set_type(CommandType.GET_BLOB)
 
-                gb = request.get_message().mutable_get_blob()
-                gb.set_table_name(test_table.name)
-                gb.set_key('a-missing-key')
+                blob_request = request.get_message().mutable_blob()
+                blob_request.set_table_name(test_table.name)
+                blob_request.set_key('a-missing-key')
 
                 response = yield request.finish_request()
                 self.assertFalse(response.get_error_code())
 
                 msg = response.get_message()
                 self.assertEquals(len(msg.data_block_length), 0)
-                self.assertFalse(msg.get_blob.found)
+                self.assertFalse(msg.blob.success)
 
                 response.finish_response()
 
@@ -92,9 +94,9 @@ class TestGetBlob(unittest.TestCase):
 
                 request.get_message().set_type(CommandType.GET_BLOB)
 
-                gb = request.get_message().mutable_get_blob()
-                gb.set_table_name(test_table.name)
-                gb.set_key('a-test-key')
+                blob_request = request.get_message().mutable_blob()
+                blob_request.set_table_name(test_table.name)
+                blob_request.set_key('a-test-key')
 
                 response = yield request.finish_request()
                 self.assertFalse(response.get_error_code())
@@ -105,12 +107,9 @@ class TestGetBlob(unittest.TestCase):
                 self.assertEquals(response.get_response_data_blocks(),
                     ['a-test-value'])
 
-                # ensure the expected clock is encoded in the version tag
-                response_clock = ClusterClock.from_string(
-                    msg.get_blob.version_tag)
-
+                # ensure the expected clock is present in the response
                 self.assertEquals(ClockAncestry.EQUAL,
-                    ClusterClock.compare(expected_clock, response_clock))
+                    ClockUtil.compare(expected_clock, msg.blob.cluster_clock))
 
                 response.finish_response()
 
@@ -155,7 +154,7 @@ class TestGetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.GET_BLOB)
 
-            dp = request.get_message().mutable_get_blob()
+            dp = request.get_message().mutable_blob()
             dp.set_table_name('invalid table')
             dp.set_key('test-key')
 
@@ -167,7 +166,7 @@ class TestGetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.GET_BLOB)
 
-            dp = request.get_message().mutable_get_blob()
+            dp = request.get_message().mutable_blob()
             dp.set_table_name(table_no_partitions.name)
             dp.set_key('test-key')
 
@@ -179,7 +178,7 @@ class TestGetBlob(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.GET_BLOB)
 
-            dp = request.get_message().mutable_get_blob()
+            dp = request.get_message().mutable_blob()
             dp.set_table_name(table_remote_not_available.name)
             dp.set_key('test-key')
 

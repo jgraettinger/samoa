@@ -2,9 +2,10 @@
 #ifndef SAMOA_PERSISTENCE_FWD_HPP
 #define SAMOA_PERSISTENCE_FWD_HPP
 
-#include <boost/shared_ptr.hpp>
+#include "samoa/core/protobuf/samoa.pb.h"
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/smart_ptr/make_shared.hpp>
+#include <boost/shared_ptr.hpp>
 
 namespace samoa {
 namespace persistence {
