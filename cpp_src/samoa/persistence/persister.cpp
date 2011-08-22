@@ -17,6 +17,7 @@ persister::persister()
  : _proactor(core::proactor::get_proactor()),
    _strand(*_proactor->concurrent_io_service()),
    _max_iter_records(50),
+   _min_rotations(2),
    _max_rotations(10)
 {}
 
@@ -257,6 +258,7 @@ void persister::on_drop(
             rec->value_begin(), rec->value_length()));
 
         layer.mark_for_deletion(key.begin(), key.end(), hint);
+        make_room(0, 0, 0, 0, 0);
 
         callback(boost::system::error_code(), prec);
         return;
@@ -295,12 +297,7 @@ void persister::on_iterate(
         }
 
         if(!iter.rec->is_dead())
-        {
-            _tmp_record_vec.push_back(
-                boost::make_shared<spb::PersistedRecord>());
-            _tmp_record_vec.back()->ParseFromArray(
-                iter.rec->value_begin(), iter.rec->value_length());
-        }
+            _tmp_record_vec.push_back(iter.rec);
 
         iter.rec = _layers[iter.layer]->step(iter.rec);
     }
@@ -436,6 +433,29 @@ bool persister::make_room(size_t key_length, size_t val_length,
     };
 
     prep(0, key_length, val_length);
+
+    if(cur_rotation < _min_rotations)
+    {
+        // require that at least _min_rotations were performed;
+        //  if we're not there yet, apply additional maintenance
+        //  rotations of the bottom layer
+        rolling_hash & hash = *_layers.back();
+
+        for(const record * head = hash.head(); head; head = hash.head())
+        {
+            if(cur_rotation++ == _min_rotations)
+                break;
+
+            invalidates_check(_layers.size() - 1);
+            iterator_step(hash, head);
+
+            if(head->is_dead())
+                hash.reclaim_head();
+            else
+                hash.rotate_head();
+        }
+    }
+
     return invalid;
 }
 

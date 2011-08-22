@@ -170,16 +170,17 @@ void rolling_hash::rotate_head()
     _tbl.begin += rec_len;
     assert(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
 
-    if(_tbl.begin == _tbl.wrap)
-    {
-        _tbl.wrap = 0;
-        _tbl.begin = records_offset();
-    }
-    else if(_tbl.end + rec_len > _tbl.region_size)
+    if(_tbl.end + rec_len > _tbl.region_size)
     {
         // need to wrap
         _tbl.wrap = _tbl.end;
         _tbl.end = records_offset();
+    }
+
+    if(_tbl.begin == _tbl.wrap)
+    {
+        _tbl.wrap = 0;
+        _tbl.begin = records_offset();
     }
 
     // re-allocate it at ring tail

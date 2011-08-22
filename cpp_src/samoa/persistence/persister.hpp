@@ -30,7 +30,7 @@ public:
 
     typedef boost::function<void(
         const boost::system::error_code &,
-        const std::vector<spb::PersistedRecord_ptr_t> &)
+        const std::vector<const record*> &)
     > iterate_callback_t;
 
     typedef boost::function<spb::PersistedRecord_ptr_t(
@@ -111,12 +111,13 @@ private:
 
     spinlock _iterators_lock;
 
-    std::vector<spb::PersistedRecord_ptr_t> _tmp_record_vec;
+    std::vector<const record *> _tmp_record_vec;
 
     core::proactor_ptr_t _proactor;
     boost::asio::strand _strand;
 
     size_t _max_iter_records;
+    size_t _min_rotations;
     size_t _max_rotations;
 };
 

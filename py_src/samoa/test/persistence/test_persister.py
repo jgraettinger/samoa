@@ -50,75 +50,70 @@ class TestPersister(unittest.TestCase):
 
     def test_churn(self):
 
-        keys = [str(uuid.uuid4()) for i in xrange(600)]
+        keys = [str(uuid.uuid4()) for i in xrange(300)]
         values = {}
 
         def test():
 
             # Randomly churn, dropping & setting keys
-            for i in xrange(10 * len(keys)):
+            for i in xrange(50 * len(keys)):
 
                 # sample key on exponential distribution
                 ind = min(int(random.expovariate(
-                    2.0 / len(keys))), len(keys) - 1)
+                    3.0 / len(keys))), len(keys) - 1)
 
                 key = keys[ind]
                 value = values.get(key)
 
-                choice = random.randint(0, 2)
+                choice = random.choice(('put', 'get', 'drop'))
 
-                if choice == 0:
+                def merge(cur_rec, new_rec):
+                    self.assertEquals(cur_rec.blob_value[0], value)
+                    return new_rec
 
-                    new_val = '=' * min(350,
-                        int(random.expovariate(1.0 / 135)))
+                if choice == 'put':
 
-                    def on_put(cur_rec, new_rec):
+                    new_rec = PersistedRecord()
+                    new_rec.add_blob_value('=' * min(350,
+                        int(random.expovariate(1.0 / 135))))
 
-                        self.assertTrue((not cur_rec and not value) \
-                            or (cur_rec and cur_rec.value == value))
+                    yield self.persister.put(merge, key, new_rec)
+                    values[key] = new_rec.blob_value[0]
 
-                        new_rec.set_value(new_val)
-                        values[new_rec.key] = new_val
-                        return 1
+                elif choice == 'drop':
 
-                    try:
-                        yield self.persister.put(on_put, key, len(new_val))
-                    except Exception, e:
-                        print e
+                    dropped_rec = yield self.persister.drop(key)
 
-                elif choice == 1:
+                    if value is None:
+                        self.assertEquals(dropped_rec, None)
+                    else:
+                        self.assertEquals(dropped_rec.blob_value[0], value)
+                        del values[key]
 
-                    def on_drop(cur_rec):
+                elif choice == 'get':
 
-                        self.assertTrue((not cur_rec and not value) \
-                            or (cur_rec and cur_rec.value == value))
+                    rec = yield self.persister.get(key)
 
-                        if cur_rec:
-                            del values[cur_rec.key]
-
-                        return 1
-
-                    yield self.persister.drop(on_drop, key)
-
-                elif choice == 2:
-
-                    def on_get(cur_rec):
-
-                        self.assertTrue((not cur_rec and not value) \
-                            or (cur_rec and cur_rec.value == value))
-
-                    yield self.persister.get(on_get, key)
+                    if value is None:
+                        self.assertEquals(rec, None)
+                    else:
+                        self.assertEquals(rec.blob_value[0], value)
 
             # iterate through persister, asserting we see each expected value 
-            def on_iterate(records):
-
-                for rec in records:
-                    self.assertEquals(rec.value, values[rec.key])
-                    del values[rec.key]
-
             ticket = self.persister.begin_iteration()
-            while (yield self.persister.iterate(on_iterate, ticket)):
-                pass
+
+            while True:
+
+                records = yield self.persister.iterate(ticket)
+                if not records:
+                    break
+
+                for raw_rec in records:
+                    rec = PersistedRecord()
+                    rec.ParseFromBytes(raw_rec.value)
+
+                    self.assertEquals(rec.blob_value[0], values[raw_rec.key])
+                    del values[raw_rec.key]
 
             self.assertEquals(values, {})
             yield

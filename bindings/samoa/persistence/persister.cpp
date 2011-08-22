@@ -130,7 +130,7 @@ future::ptr_t py_drop(
 void py_on_iterate(
     const future::ptr_t & future, 
     const boost::system::error_code & ec,
-    const std::vector<spb::PersistedRecord_ptr_t> & records)
+    const std::vector<const record *> & records)
 {
     pysamoa::python_scoped_lock block;
 
@@ -140,8 +140,8 @@ void py_on_iterate(
         return;
     }
 
-    bpl::copy_const_reference::apply<
-        const spb::PersistedRecord_ptr_t &>::type convert;
+    bpl::reference_existing_object::apply<
+        const samoa::persistence::record *>::type convert;
 
     // allocate a tuple of containing python wrappers for each record
     bpl::tuple tuple(bpl::handle<>(PyTuple_New(records.size())));
@@ -163,10 +163,9 @@ future::ptr_t py_iterate(
 
     if(!p.iterate(boost::bind(&py_on_iterate, f, _1, _2), ticket))
     {
-        // iteration is complete; py_on_iterate won't be
-        //   called, so return false via future
+        // iteration is complete; return an empty tuple
 
-        f->on_result(bpl::object(bpl::handle<>(bpl::borrowed(Py_False))));
+        f->on_result(bpl::tuple());
     }
     return f; 
 }
