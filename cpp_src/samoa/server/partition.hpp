@@ -28,6 +28,12 @@ public:
     uint64_t get_ring_position()
     { return _ring_position; }
 
+    uint64_t get_range_begin()
+    { return _range_begin; }
+
+    uint64_t get_range_end()
+    { return _range_end; }
+
     uint64_t get_consistent_range_begin()
     { return _consistent_range_begin; }
 
@@ -52,6 +58,8 @@ protected:
     core::uuid _uuid;
     core::uuid _server_uuid;
     uint64_t   _ring_position;
+    uint64_t   _range_begin;
+    uint64_t   _range_end;
     uint64_t   _consistent_range_begin;
     uint64_t   _consistent_range_end;
     uint64_t   _lamport_ts;

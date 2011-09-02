@@ -19,6 +19,8 @@ enum CommandType {
 
     GET_BLOB = 10;
     SET_BLOB = 11;
+
+    REPLICATE_BLOB = 12;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -175,6 +177,15 @@ message BlobResponse
 {
     required bool success = 1;
     optional ClusterClock cluster_clock = 2;
+};
+
+// Replication operation
+
+message ReplicateionRequest
+{
+    required bytes table_uuid = 1;
+    required bytes partition_uuid = 2;
+    required bytes key = 3;
 };
 
 // Union container type
