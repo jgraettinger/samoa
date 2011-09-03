@@ -41,7 +41,8 @@ table::table(const spb::ClusterState::Table & ptable,
    _server_uuid(server_uuid),
    _data_type(persistence::data_type_from_string(ptable.data_type())),
    _name(ptable.name()),
-   _repl_factor(ptable.replication_factor())
+   _repl_factor(ptable.replication_factor()),
+   _consistency_horizon(ptable.consistency_horizon())
 {
     auto it = ptable.partition().begin();
     auto last_it = it;
@@ -105,6 +106,9 @@ const std::string & table::get_name() const
 
 unsigned table::get_replication_factor() const
 { return _repl_factor; }
+
+unsigned table::get_consistency_horizon() const
+{ return _consistency_horizon; }
 
 const table::ring_t & table::get_ring() const
 { return _ring; }
@@ -193,6 +197,7 @@ bool table::merge_table(
     {
         local.set_name(peer.name());
         local.set_replication_factor(peer.replication_factor());
+        local.set_consistency_horizon(peer.consistency_horizon());
         local.set_lamport_ts(peer.lamport_ts());
         dirty = true;
     }

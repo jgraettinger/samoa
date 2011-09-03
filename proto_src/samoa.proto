@@ -73,6 +73,7 @@ message ClusterState {
         optional string name = 3;
         optional uint32 replication_factor = 4;
         optional uint64 lamport_ts = 9;
+        optional uint32 consistency_horizon = 11;
 
         message Partition {
 
@@ -108,7 +109,11 @@ message ClusterState {
 message CreateTableRequest {
     required string name = 1;
     required string data_type = 2;
-    required uint32 replication_factor = 3;
+
+    optional uint32 replication_factor = 3 [default = 3];
+
+    // default horizon is 3 days
+    optional uint32 consistency_horizon = 4 [default = 259200];
 };
 
 message CreateTableResponse {
@@ -119,6 +124,7 @@ message AlterTableRequest {
     required string table_uuid = 1;
     optional string name = 2;
     optional uint32 replication_factor = 3;
+    optional uint32 consistency_horizon = 4;
 };
 
 message DropTableRequest {
@@ -181,7 +187,7 @@ message BlobResponse
 
 // Replication operation
 
-message ReplicateionRequest
+message ReplicationRequest
 {
     required bytes table_uuid = 1;
     required bytes partition_uuid = 2;
@@ -210,7 +216,9 @@ message SamoaRequest {
     optional CreatePartitionRequest create_partition = 11;
     optional DropPartitionRequest   drop_partition = 12;
 
-    optional BlobRequest blob = 13;
+    optional ReplicationRequest replication = 13;
+
+    optional BlobRequest blob = 14;
 };
 
 message SamoaResponse {

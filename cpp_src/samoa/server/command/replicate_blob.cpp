@@ -11,10 +11,10 @@
 #include "samoa/persistence/persister.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
+#include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/datamodel/clock_util.hpp"
-#include <boost/iostreams/device/array.hpp>
-#include <boost/iostreams/stream.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/bind.hpp>
 
 namespace samoa {
@@ -26,7 +26,7 @@ namespace spb = samoa::core::protobuf;
 void replicate_blob_handler::handle(const client::ptr_t & client)
 {
     const spb::SamoaRequest & samoa_request = client->get_request();
-    const spb::BlobRequest & repl_request = samoa_request.replication();
+    const spb::ReplicationRequest & repl_request = samoa_request.replication();
 
     if(!samoa_request.has_blob())
     {
@@ -43,16 +43,25 @@ void replicate_blob_handler::handle(const client::ptr_t & client)
     cluster_state::ptr_t cluster_state = \
         client->get_context()->get_cluster_state();
 
-    core::uuid table_uuid(repl_request.table_uuid().begin(),
-        repl_request.table_uuid().end());
-    core::uuid partition_uuid(repl_request.partition_uuid().begin(),
-        repl_request.partition_uuid().end());
+    // extract table & partition UUID's from raw bytes
+    core::uuid table_uuid, partition_uuid;
+    {
+        const std::string & t_s = repl_request.table_uuid();
+        const std::string & p_s = repl_request.partition_uuid();
+
+        SAMOA_ASSERT(t_s.size() == table_uuid.size());
+        std::copy(t_s.begin(), t_s.end(), table_uuid.begin());
+
+        SAMOA_ASSERT(p_s.size() == partition_uuid.size());
+        std::copy(p_s.begin(), p_s.end(), partition_uuid.begin());
+    }
 
     table::ptr_t table = cluster_state->get_table_set()->get_table(table_uuid);
 
     if(!table)
     {
-        client->send_error(404, "table " + table_uuid);
+        client->send_error(404, "table "
+            + boost::lexical_cast<std::string>(table_uuid));
         return;
     }
 
@@ -62,105 +71,104 @@ void replicate_blob_handler::handle(const client::ptr_t & client)
 
     if(!partition)
     {
-        client->send_error(404, "local partition " + partition_uuid);
+        client->send_error(404, "local partition "
+            + boost::lexical_cast<std::string>(partition_uuid));
         return;
     }
 
-    uint64_t ring_position = table->ring_position(blob_request.key());
+    uint64_t ring_position = table->ring_position(repl_request.key());
 
-    // route the position to responsible partitions & primary partition
-    partition::ptr_t primary_partition;
-    table::ring_t all_partitions;
-
-    bool primary_is_local = table->route_ring_position(ring_position,
-        cluster_state->get_peer_set(), primary_partition, all_partitions);
-
-    if(all_partitions.empty())
+    if(ring_position < partition->get_range_begin() ||
+       ring_position > partition->get_range_end())
     {
-        client->send_error(404, "no table partitions");
+        client->send_error(409, "wrong ring position");
         return;
     }
 
-    if(!primary_partition)
-    {
-        client->send_error(503, "no available peer for request forwarding");
-        return;
-    }
-
-    // if the primary partition isn't local, forward to it's peer server
-    if(!primary_is_local)
-    {
-        cluster_state->get_peer_set()->forward_request(
-            client, primary_partition->get_server_uuid());
-        return;
-    }
-
-    local_partition & local_primary = \
-        dynamic_cast<local_partition &>(*primary_partition);
-
-    spb::PersistedRecord_ptr_t new_rec = \
+    // parse the replicated record
+    spb::PersistedRecord_ptr_t repl_record = \
         boost::make_shared<spb::PersistedRecord>();
 
-    // assume the key doesn't exist; initial clock tick for first write
-    datamodel::clock_util::tick(*new_rec->mutable_cluster_clock(),
-        primary_partition->get_uuid());
+    core::zero_copy_input_adapter zc_adapter;
+    zc_adapter.reset(client->get_request_data_blocks()[0]);
 
-    // assign client's value
-    new_rec->add_blob_value()->assign(
-        boost::asio::buffers_begin(client->get_request_data_blocks()[0]),
-        boost::asio::buffers_end(client->get_request_data_blocks()[0]));
+    if(!repl_record->ParseFromZeroCopyStream(&zc_adapter))
+    {
+        client->send_error(400, "failed to parse PersistedRecord message");
+        return;
+    }
 
-    local_primary.get_persister()->put(
-        boost::bind(&replicate_blob_handler::on_put_record, shared_from_this(),
-            _1, client, primary_partition, all_partitions, _2),
-        boost::bind(&replicate_blob_handler::on_merge_record, shared_from_this(),
-            client, primary_partition, _1, _2),
-        blob_request.key(), new_rec);
+    // BLOB SPECIFIC HERE
+
+    SAMOA_ASSERT(repl_record->blob_value_size());
+
+    datamodel::clock_util::prune_record(repl_record,
+        table->get_consistency_horizon());
+
+    partition->get_persister()->put(
+        boost::bind(&replicate_blob_handler::on_put_record,
+            shared_from_this(), _1, client, repl_record, _2),
+        boost::bind(&replicate_blob_handler::on_merge_record,
+            shared_from_this(), client,
+            table->get_consistency_horizon(), _1, _2),
+        repl_request.key(), repl_record);
 }
 
 spb::PersistedRecord_ptr_t replicate_blob_handler::on_merge_record(
     const client::ptr_t & client,
-    const partition::ptr_t & primary_partition,
-    const spb::PersistedRecord_ptr_t & cur_rec,
-    const spb::PersistedRecord_ptr_t & new_rec)
+    unsigned consistency_horizon,
+    const spb::PersistedRecord_ptr_t & local_record,
+    const spb::PersistedRecord_ptr_t & repl_record)
 {
-    const spb::SamoaRequest & samoa_request = client->get_request();
-    const spb::BlobRequest & blob_request = samoa_request.blob();
+    // either record may not actually have a cluster_clock,
+    //  in which case it uses the default (empty) instance
+    datamodel::clock_util::clock_ancestry ancestry = \
+        datamodel::clock_util::compare(
+            local_record->cluster_clock(), repl_record->cluster_clock(),
+            consistency_horizon);
 
-    spb::SamoaResponse & samoa_response = client->get_response();
-    spb::BlobResponse & blob_response = *samoa_response.mutable_blob();
-
-    // if request included a cluster clock, validate
-    //  equality against the stored cluster clock
-    if(blob_request.has_cluster_clock())
+    if(ancestry == datamodel::clock_util::EQUAL)
     {
-        if(datamodel::clock_util::compare(
-                cur_rec->cluster_clock(),
-                blob_request.cluster_clock() 
-            ) != datamodel::clock_util::EQUAL)
-        {
-            // clock doesn't match: abort
-            blob_response.set_success(false);
-            datamodel::blob::send_blob_value(client, *cur_rec);
-            return spb::PersistedRecord_ptr_t();
-        }
+        // send empty response & abort the write
+        client->finish_response();
+        return spb::PersistedRecord_ptr_t();
+    }
+    else if(ancestry == datamodel::clock_util::MORE_RECENT)
+    {
+        // send local_record & abort the write
+        send_record_response(client, local_record);
+        return spb::PersistedRecord_ptr_t();
+    }
+    else if(ancestry == datamodel::clock_util::LESS_RECENT)
+    {
+        // remote is more recent; replace local
+        return repl_record;
     }
 
-    // clocks match, or the request doesn't have a clock (implicit match)
-    //   copy the current clock, and tick to reflect this operation 
-    new_rec->mutable_cluster_clock()->CopyFrom(cur_rec->cluster_clock());
-    datamodel::clock_util::tick(*new_rec->mutable_cluster_clock(),
-        primary_partition->get_uuid());
+    SAMOA_ASSERT(ancestry == datamodel::clock_util::DIVERGE);
 
-    return new_rec;
+    // merge local & repl clocks into local_record
+    std::unique_ptr<spb::ClusterClock> local_clock(
+        local_record->release_cluster_clock());
+
+    datamodel::clock_util::compare(
+        *local_clock.get(), repl_record->cluster_clock(),
+        consistency_horizon, local_record->mutable_cluster_clock());
+
+    // merge repl_record's blob_value into local_record
+    for(int i = 0; i != repl_record->blob_value_size(); ++i)
+    {
+        local_record->add_blob_value(repl_record->blob_value(i));
+    }
+
+    return local_record;
 }
 
 void replicate_blob_handler::on_put_record(
     const boost::system::error_code & ec,
     const client::ptr_t & client,
-    const partition::ptr_t & primary_partition,
-    const table::ring_t & all_partitions,
-    const spb::PersistedRecord_ptr_t & new_rec)
+    const spb::PersistedRecord_ptr_t & repl_record,
+    const spb::PersistedRecord_ptr_t & put_record)
 {
     if(ec)
     {
@@ -168,15 +176,31 @@ void replicate_blob_handler::on_put_record(
         return;
     }
 
-    spb::SamoaResponse & samoa_response = client->get_response();
-    spb::BlobResponse & blob_response = *samoa_response.mutable_blob();
+    if(put_record != repl_record)
+    {
+        // we performed a merge; send put_record
+        send_record_response(client, put_record);
+    }
+    else
+    {
+        // remote is up-to-date; send empty response
+        client->finish_response();
+    }
+}
 
-    blob_response.set_success(true);
+void replicate_blob_handler::send_record_response(
+    const client::ptr_t & client,
+    const spb::PersistedRecord_ptr_t & record)
+{
+    core::zero_copy_output_adapter zc_adapter;
+
+    record->SerializeToZeroCopyStream(&zc_adapter);
+
+    client->get_response().add_data_block_length(zc_adapter.ByteCount());
+    client->start_response();
+
+    client->write_interface().queue_write(zc_adapter.output_regions());
     client->finish_response();
-
-    // TODO: post replication operations to remaining partitions 
-
-    return;
 }
 
 }

@@ -43,6 +43,8 @@ public:
 
     unsigned get_replication_factor() const;
 
+    unsigned get_consistency_horizon() const;
+
     const ring_t & get_ring() const;
 
     /// Returns nullptr if none exists
@@ -95,6 +97,7 @@ private:
     persistence::data_type _data_type;
     std::string _name;
     unsigned _repl_factor;
+    unsigned _consistency_horizon;
 
     ring_t        _ring;
     uuid_index_t  _index;

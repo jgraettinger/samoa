@@ -28,6 +28,7 @@ class CreateTableHandler(CommandHandler):
         table.set_data_type(tbl_req.data_type)
         table.set_name(tbl_req.name)
         table.set_replication_factor(tbl_req.replication_factor)
+        table.set_consistency_horizon(tbl_req.consistency_horizon)
         table.set_lamport_ts(1)
 
         self.log.info('created table %s' % table.uuid)

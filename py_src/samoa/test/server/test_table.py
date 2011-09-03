@@ -70,6 +70,7 @@ class TestTable(unittest.TestCase):
 
         self.state.set_name('test')
         self.state.set_replication_factor(2)
+        self.state.set_consistency_horizon(300)
         self.state.set_lamport_ts(10)
 
         table = Table(self.state, self.gen.server_uuid, None)
@@ -79,6 +80,7 @@ class TestTable(unittest.TestCase):
         # peer has smaller timestamp
         peer_state.set_name('new_name')
         peer_state.set_replication_factor(1)
+        peer_state.set_consistency_horizon(200)
         peer_state.set_lamport_ts(1)
 
         # merge keeps local state
@@ -87,6 +89,7 @@ class TestTable(unittest.TestCase):
 
         self.assertEquals(out.name, 'test')
         self.assertEquals(out.replication_factor, 2)
+        self.assertEquals(out.consistency_horizon, 300)
         self.assertEquals(out.lamport_ts, 10)
 
         # peer has larger timestamp
@@ -98,6 +101,7 @@ class TestTable(unittest.TestCase):
 
         self.assertEquals(out.name, 'new_name')
         self.assertEquals(out.replication_factor, 1)
+        self.assertEquals(out.consistency_horizon, 200)
         self.assertEquals(out.lamport_ts, 12)
 
     def test_merge_extended(self):

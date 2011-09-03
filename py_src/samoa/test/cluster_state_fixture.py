@@ -126,6 +126,7 @@ class ClusterStateFixture(object):
             tbl.set_data_type(data_type.name)
             tbl.set_name(name)
             tbl.set_replication_factor(repl_factor)
+            tbl.set_consistency_horizon(3600)
             tbl.set_lamport_ts(lamport_ts)
 
         self._table_ind[UUID(tbl.uuid)] = tbl

@@ -16,11 +16,15 @@ void make_clock_util_bindings()
         .staticmethod("tick")
         .def("validate", &clock_util::validate)
         .staticmethod("validate")
+        .def("prune_record", &clock_util::prune_record)
+        .staticmethod("prune_record")
         .def("compare", &clock_util::compare,
             (bpl::arg("lhs"),
              bpl::arg("rhs"),
+             bpl::arg("consistency_horizon") = 0,
              bpl::arg("merged_clock_out") = bpl::object()))
         .staticmethod("compare")
+        .def_readwrite("clock_jitter_bound", &clock_util::clock_jitter_bound)
         ;
 
     bpl::enum_<clock_util::clock_ancestry>("ClockAncestry")

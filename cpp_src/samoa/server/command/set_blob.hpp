@@ -6,6 +6,7 @@
 #include "samoa/server/command_handler.hpp"
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
+#include "samoa/core/uuid.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <vector>
@@ -33,7 +34,8 @@ private:
 
     spb::PersistedRecord_ptr_t on_merge_record(
         const client_ptr_t &,
-        const partition_ptr_t &,
+        const core::uuid &,
+        unsigned,
         const spb::PersistedRecord_ptr_t &,
         const spb::PersistedRecord_ptr_t &);
 

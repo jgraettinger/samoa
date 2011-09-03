@@ -14,6 +14,8 @@ public:
     static uint64_t get_time()
     { return _time; }
 
+    // TODO(johng): guard against clock jitter from eg NTP
+    //  time is only allowed to flow forward!
     static void set_time(uint64_t);
 
 private:

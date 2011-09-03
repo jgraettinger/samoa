@@ -39,6 +39,7 @@ class TestAlterTable(unittest.TestCase):
             t.set_table_uuid(test_table.uuid)
             t.set_name('new_name')
             t.set_replication_factor(10)
+            t.set_consistency_horizon(1234)
 
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
@@ -54,8 +55,9 @@ class TestAlterTable(unittest.TestCase):
 
             self.assertEquals(table.get_uuid(), UUID(test_table.uuid))
 
-            # replication factor has been updated
+            # replication factor / consistency horizon have been updated
             self.assertEquals(table.get_replication_factor(), 10)
+            self.assertEquals(table.get_consistency_horizon(), 1234)
 
             context.get_tasklet_group().cancel_group()
             yield

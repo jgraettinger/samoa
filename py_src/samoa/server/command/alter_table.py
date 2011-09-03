@@ -44,6 +44,17 @@ class AlterTableHandler(CommandHandler):
             table.set_replication_factor(req.replication_factor)
             modified = True
 
+        # check for consistency_horizon change
+        if req.has_consistency_horizon() and \
+            req.consistency_horizon != table.consistency_horizon:
+
+            self.log.info('altered table %s (consistency horizon %r => %r)' % (
+                table.uuid, table.consistency_horizon,
+                req.consistency_horizon))
+
+            table.set_consistency_horizon(req.consistency_horizon)
+            modified = True
+
         if modified:
             table.set_lamport_ts(table.lamport_ts + 1)
 

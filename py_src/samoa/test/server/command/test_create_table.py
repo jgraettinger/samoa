@@ -36,6 +36,7 @@ class TestCreateTable(unittest.TestCase):
             ct.set_name('test_table')
             ct.set_data_type(DataType.BLOB_TYPE.name)
             ct.set_replication_factor(3)
+            ct.set_consistency_horizon(300)
 
             # extract created UUID from response
             response = yield request.finish_request()
@@ -56,6 +57,7 @@ class TestCreateTable(unittest.TestCase):
             self.assertEquals(table.get_name(), 'test_table')
             self.assertEquals(table.get_data_type(), DataType.BLOB_TYPE)
             self.assertEquals(table.get_replication_factor(), 3)
+            self.assertEquals(table.get_consistency_horizon(), 300)
 
             # cleanup
             context.get_tasklet_group().cancel_group()
@@ -82,7 +84,6 @@ class TestCreateTable(unittest.TestCase):
             ct = request.get_message().mutable_create_table()
             ct.set_name('existing_table')
             ct.set_data_type(DataType.BLOB_TYPE.name)
-            ct.set_replication_factor(3)
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 409)
@@ -95,7 +96,6 @@ class TestCreateTable(unittest.TestCase):
             ct = request.get_message().mutable_create_table()
             ct.set_name('test_table')
             ct.set_data_type('INVALID')
-            ct.set_replication_factor(1)
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 406)
