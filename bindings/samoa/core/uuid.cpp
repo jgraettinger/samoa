@@ -13,6 +13,9 @@ namespace bpl = boost::python;
 std::string py_to_hex(const uuid & u)
 { return boost::lexical_cast<std::string>(u); }
 
+std::string py_to_bytes(const uuid & u)
+{ return std::string(u.begin(), u.end()); }
+
 std::string py_repr(const uuid & u)
 { return "UUID('" + py_to_hex(u) + "')"; }
 
@@ -124,6 +127,7 @@ void make_uuid_bindings()
         .def("__init__", bpl::make_constructor(py_hex_ctor))
         .def("__repr__", &py_repr)
         .def("to_hex", &py_to_hex)
+        .def("to_bytes", &py_to_bytes)
         .def("check_hex", &py_check_hex)
         .staticmethod("check_hex")
         .def("from_hex", &py_from_hex)

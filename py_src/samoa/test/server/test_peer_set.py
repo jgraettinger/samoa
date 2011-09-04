@@ -2,7 +2,7 @@
 import getty
 import unittest
 
-from samoa.core import protobuf as pb
+from samoa.core.protobuf import ClusterState, CommandType
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.client.server import Server
@@ -28,14 +28,14 @@ class TestPeerSet(unittest.TestCase):
         peer_set = PeerSet(fixture.state, None)
 
         # invalid peer order
-        tst_state = pb.ClusterState(fixture.state)
+        tst_state = ClusterState(fixture.state)
         tst_state.peer.SwapElements(0, 1)
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             PeerSet(tst_state, None)
 
         # duplicate peer UUID
-        tst_state = pb.ClusterState(fixture.state)
+        tst_state = ClusterState(fixture.state)
         tst_state.peer[0].set_uuid(tst_state.peer[1].uuid)
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
@@ -58,23 +58,23 @@ class TestPeerSet(unittest.TestCase):
 
         # null hypothesis - should merge normally
         peer_set.merge_peer_set(pgen.state,
-            pb.ClusterState(fixture.state))
+            ClusterState(fixture.state))
 
         # invalid peer order
-        tst_state = pb.ClusterState(pgen.state)
+        tst_state = ClusterState(pgen.state)
         tst_state.peer.SwapElements(0, 1)
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             peer_set.merge_peer_set(tst_state,
-                pb.ClusterState(fixture.state))
+                ClusterState(fixture.state))
 
         # duplicate peer UUID
-        tst_state = pb.ClusterState(pgen.state)
+        tst_state = ClusterState(pgen.state)
         tst_state.peer[1].set_uuid(tst_state.peer[0].uuid)
 
         with self.assertRaisesRegexp(RuntimeError, 'assertion_failure'):
             peer_set.merge_peer_set(tst_state,
-                pb.ClusterState(fixture.state))
+                ClusterState(fixture.state))
 
     def test_merge_extended(self):
 
@@ -169,7 +169,7 @@ class TestPeerSet(unittest.TestCase):
             peer_set.get_server_hostname(UUID(pgen.state.local_uuid))
 
         # MERGE from peer, & rebuild peer_set / table_set
-        out = pb.ClusterState(fixture.state)
+        out = ClusterState(fixture.state)
         self.assertTrue(table_set.merge_table_set(pgen.state, out))
         peer_set.merge_peer_set(pgen.state, out)
 
@@ -205,7 +205,7 @@ class TestPeerSet(unittest.TestCase):
         peer_set.get_server_hostname(UUID(pgen.state.local_uuid))
 
         # no further changes detected from peer
-        out2 = pb.ClusterState(out)
+        out2 = ClusterState(out)
         self.assertFalse(table_set.merge_table_set(pgen.state, out2))
         peer_set.merge_peer_set(pgen.state, out2)
 
@@ -229,10 +229,6 @@ class TestPeerSet(unittest.TestCase):
 
         proxy_listener = proxy_injector.get_instance(Listener)
         proxy_context = proxy_listener.get_context()
-
-        # for purposes of this test, we'll repurpose the PING command
-        #  handler, replacing it with handlers testing the functional
-        #  aspects of request forwarding
 
         class ProxyHandler(CommandHandler):
             def handle(self_inner, client):
@@ -261,10 +257,10 @@ class TestPeerSet(unittest.TestCase):
                 client.finish_response()
 
         # set these handlers up on an unused protocol type
-        proxy_listener.get_protocol().set_command_handler(pb.CommandType.PING,
+        proxy_listener.get_protocol().set_command_handler(CommandType.TEST,
             ProxyHandler())
 
-        listener.get_protocol().set_command_handler(pb.CommandType.PING,
+        listener.get_protocol().set_command_handler(CommandType.TEST,
             MainHandler())
 
         def test():
@@ -275,7 +271,7 @@ class TestPeerSet(unittest.TestCase):
             request = yield proxy_server.schedule_request()
 
             # send a request to forward, with expected payload
-            request.get_message().set_type(pb.CommandType.PING)
+            request.get_message().set_type(CommandType.TEST)
             payload = 'request payload'
             request.get_message().add_data_block_length(len(payload))
             request.start_request()

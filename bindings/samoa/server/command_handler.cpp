@@ -5,7 +5,6 @@
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
-#include <memory>
 
 namespace samoa {
 namespace server {

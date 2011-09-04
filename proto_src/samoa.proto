@@ -20,7 +20,9 @@ enum CommandType {
     GET_BLOB = 10;
     SET_BLOB = 11;
 
-    REPLICATE_BLOB = 12;
+    TEST = 12;
+
+    REPLICATE_BLOB = 13;
 };
 
 // Returned by Samoa to indicate an error in the operation
