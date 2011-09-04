@@ -10,6 +10,7 @@ import samoa.server.command.drop_partition
 import samoa.server.command.cluster_state
 import samoa.server.command.get_blob
 import samoa.server.command.set_blob
+import samoa.server.command.replicate_blob
 
 import samoa.server.command as cmd
 from samoa.core.protobuf import CommandType
@@ -28,6 +29,7 @@ class Protocol(_server.Protocol):
         cluster_state = cmd.cluster_state.ClusterStateHandler,
         get_blob = cmd.get_blob.GetBlobHandler,
         set_blob = cmd.set_blob.SetBlobHandler,
+        replicate_blob = cmd.replicate_blob.ReplicateBlobHandler,
     )
     def __init__(self,
            ping,
@@ -38,7 +40,8 @@ class Protocol(_server.Protocol):
            drop_partition,
            cluster_state,
            get_blob,
-           set_blob):
+           set_blob,
+           replicate_blob):
 
         _server.Protocol.__init__(self)
 
@@ -60,4 +63,6 @@ class Protocol(_server.Protocol):
             CommandType.GET_BLOB, get_blob)
         self.set_command_handler(
             CommandType.SET_BLOB, set_blob)
+        self.set_command_handler(
+            CommandType.REPLICATE_BLOB, replicate_blob)
 
