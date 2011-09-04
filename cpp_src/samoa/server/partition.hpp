@@ -28,20 +28,26 @@ public:
     uint64_t get_ring_position()
     { return _ring_position; }
 
+    //! Inclusive
     uint64_t get_range_begin()
     { return _range_begin; }
 
+    //! Inclusive
     uint64_t get_range_end()
     { return _range_end; }
 
+    //! Inclusive
     uint64_t get_consistent_range_begin()
     { return _consistent_range_begin; }
 
+    //! Inclusive
     uint64_t get_consistent_range_end()
     { return _consistent_range_end; }
 
     uint64_t get_lamport_ts()
     { return _lamport_ts; }
+
+    bool position_in_responsible_range(uint64_t ring_position);
 
     //! Merges a peer partition description into the local description
     /*!
@@ -53,7 +59,8 @@ public:
 
 protected:
 
-    partition(const spb::ClusterState::Table::Partition &);
+    partition(const spb::ClusterState::Table::Partition &,
+        uint64_t range_begin, uint64_t range_end);
 
     core::uuid _uuid;
     core::uuid _server_uuid;

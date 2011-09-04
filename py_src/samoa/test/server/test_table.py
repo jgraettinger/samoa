@@ -234,46 +234,61 @@ class TestTable(unittest.TestCase):
         self.state.set_replication_factor(3)
 
         tbl_uuid = UUID.from_name('table')
+        self.gen.add_remote_partition(tbl_uuid, ring_position = 0)
         self.gen.add_remote_partition(tbl_uuid, ring_position = 1000)
         self.gen.add_remote_partition(tbl_uuid, ring_position = 2000)
-        self.gen.add_remote_partition(tbl_uuid, ring_position = 3000)
-        self.gen.add_local_partition( tbl_uuid, ring_position = 4000)
-        self.gen.add_remote_partition(tbl_uuid, ring_position = 5000)
+        self.gen.add_local_partition( tbl_uuid, ring_position = 3000)
+        self.gen.add_remote_partition(tbl_uuid, ring_position = 4000)
 
         table = Table(self.state, self.gen.server_uuid, None)
+        ring = table.get_ring()
+
+        # validate ranges of each runtime partition
+        self.assertEquals(ring[0].get_range_begin(), 4000)
+        self.assertEquals(ring[0].get_range_end(), 1999)
+        self.assertEquals(ring[1].get_range_begin(), 0)
+        self.assertEquals(ring[1].get_range_end(), 2999)
+        self.assertEquals(ring[2].get_range_begin(), 1000)
+        self.assertEquals(ring[2].get_range_end(), 3999)
+        self.assertEquals(ring[3].get_range_begin(), 2000)
+        self.assertEquals(ring[3].get_range_end(), (1<<64) - 1)
+        self.assertEquals(ring[4].get_range_begin(), 3000)
+        self.assertEquals(ring[4].get_range_end(), 999)
+
+        # route several ring position fixtures, and validate results
         peer_set = PeerSet(self.gen.state, None)
 
         is_local, primary_partition, all_partitions = \
-            table.route_ring_position(1500, peer_set)
+            table.route_ring_position(500, peer_set)
 
         # replication factor of 3 - three partitions returned
         self.assertEquals(len(all_partitions), 3)
 
-        # position 1500 is mapped onto ring starting at 2000
+        # position 500 is mapped onto ring starting at 1000
         self.assertEquals([p.get_ring_position() for p in all_partitions],
-            [2000, 3000, 4000])
+            [1000, 2000, 3000])
 
         # the primary partition is the local one
         self.assertTrue(is_local)
-        self.assertEquals(primary_partition.get_ring_position(), 4000)
+        self.assertEquals(primary_partition.get_ring_position(), 3000)
 
         is_local, primary_partition, all_partitions = \
-            table.route_ring_position(4500, peer_set)
+            table.route_ring_position(3500, peer_set)
 
-        # position 4500 is mapped onto ring starting at 5000, and wrapping
+        # position 3500 is mapped onto ring starting at 4000, and wrapping
         self.assertEquals([p.get_ring_position() for p in all_partitions],
-            [5000, 1000, 2000])
+            [4000, 0, 1000])
 
         # there is no primary partition (no connected servers available)
         self.assertFalse(is_local)
         self.assertFalse(primary_partition)
 
         is_local, primary_partition, all_partitions = \
-            table.route_ring_position(5500, peer_set)
+            table.route_ring_position(4500, peer_set)
 
-        # position 5500 is mapped onto the ring starting at 1000
+        # position 4500 is mapped onto the ring starting at 0
         self.assertEquals([p.get_ring_position() for p in all_partitions],
-            [1000, 2000, 3000])
+            [0, 1000, 2000])
 
         self.assertFalse(is_local)
 

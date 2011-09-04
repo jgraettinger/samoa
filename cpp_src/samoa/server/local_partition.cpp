@@ -8,8 +8,9 @@ namespace server {
 
 local_partition::local_partition(
     const spb::ClusterState::Table::Partition & part,
+    uint64_t range_begin, uint64_t range_end,
     const ptr_t & current)
- :  partition(part)
+ :  partition(part, range_begin, range_end)
 {
     SAMOA_ASSERT(part.ring_layer_size());
 

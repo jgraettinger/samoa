@@ -45,9 +45,17 @@ class TestCreateTable(unittest.TestCase):
             tbl_uuid = UUID(response.get_message().create_table.table_uuid)
             response.finish_response()
 
-            table_set = context.get_cluster_state().get_table_set()
+            # inspect server state's protobuf description
+            server_state = context.get_cluster_state(
+                ).get_protobuf_description()
+
+            self.assertEquals(len(server_state.table), 1)
+            self.assertEquals(server_state.table[0].name, 'test_table')
+            self.assertEquals(server_state.table[0].replication_factor, 3)
 
             # runtime table can be queried by uuid and name
+            table_set = context.get_cluster_state().get_table_set()
+
             table = table_set.get_table(tbl_uuid)
 
             self.assertEquals(table.get_uuid(),
@@ -56,7 +64,7 @@ class TestCreateTable(unittest.TestCase):
             # runtime table has proper properties
             self.assertEquals(table.get_name(), 'test_table')
             self.assertEquals(table.get_data_type(), DataType.BLOB_TYPE)
-            self.assertEquals(table.get_replication_factor(), 3)
+            self.assertEquals(table.get_replication_factor(), 0)
             self.assertEquals(table.get_consistency_horizon(), 300)
 
             # cleanup

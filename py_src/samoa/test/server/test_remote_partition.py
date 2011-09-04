@@ -32,7 +32,7 @@ class TestRemotePartition(unittest.TestCase):
         lstate.set_consistent_range_begin(2)
         lstate.set_consistent_range_end(2)
 
-        part = RemotePartition(lstate, None)
+        part = RemotePartition(lstate, 0, 0, None)
 
         # MERGE peer state - no changes
         out = pb.ClusterState_Table_Partition(lstate)
@@ -47,7 +47,7 @@ class TestRemotePartition(unittest.TestCase):
         out = pb.ClusterState_Table_Partition(lstate)
         self.assertTrue(part.merge_partition(pstate, out))
 
-        part = RemotePartition(out, part)
+        part = RemotePartition(out, 0, 0, part)
 
         # local state is now updated
         self.assertEquals(part.get_lamport_ts(), 3)

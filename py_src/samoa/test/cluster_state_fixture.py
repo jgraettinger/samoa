@@ -137,8 +137,10 @@ class ClusterStateFixture(object):
         uuid = None, ring_position = None):
 
         uuid = self._coerce_uuid(uuid)
-        ring_position = ring_position or self.rnd.randint(0, 1<<32)
         table = self.get_table(table_uuid)
+
+        if ring_position is None:
+            ring_position = self.rnd.randint(0, 1<<64)
 
         part = pb.add_partition(table, uuid, ring_position)
         part.set_dropped(True)
@@ -151,9 +153,11 @@ class ClusterStateFixture(object):
         storage_size = (1<<20), index_size = 10000):
 
         uuid = self._coerce_uuid(uuid)
-        ring_position = ring_position or self.rnd.randint(0, 1<<32)
         lamport_ts = self.rnd.randint(1, 256)
         table = self.get_table(table_uuid)
+
+        if ring_position is None:
+            ring_position = self.rnd.randint(0, 1<<64)
 
         part = pb.add_partition(table, uuid, ring_position)
         part.set_server_uuid(self.server_uuid.to_hex())
@@ -182,10 +186,12 @@ class ClusterStateFixture(object):
                 server_uuid = UUID(self.rnd.choice(self.state.peer).uuid)
 
         uuid = self._coerce_uuid(uuid)
-        ring_position = ring_position or self.rnd.randint(0, 1<<32)
         server_uuid = self._coerce_uuid(server_uuid)
         lamport_ts = self.rnd.randint(1, 256)
         table = self.get_table(table_uuid)
+
+        if ring_position is None:
+            ring_position = self.rnd.randint(0, 1<<64)
 
         part = pb.add_partition(table, uuid, ring_position)
         part.set_server_uuid(server_uuid.to_hex())

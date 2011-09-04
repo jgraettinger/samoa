@@ -41,48 +41,71 @@ table::table(const spb::ClusterState::Table & ptable,
    _server_uuid(server_uuid),
    _data_type(persistence::data_type_from_string(ptable.data_type())),
    _name(ptable.name()),
-   _repl_factor(ptable.replication_factor()),
    _consistency_horizon(ptable.consistency_horizon())
 {
     auto it = ptable.partition().begin();
     auto last_it = it;
 
+    std::vector<const spb::ClusterState::Table::Partition *> tmp_ring;
+    tmp_ring.reserve(ptable.partition_size());
+
     for(; it != ptable.partition().end(); ++it)
     {
-        // check partitions ring-order invariant
+        // check partition ring-order invariant
         SAMOA_ASSERT(last_it == it || partition_order_cmp()(*last_it, *it));
         last_it = it;
-
-        core::uuid p_uuid = core::uuid_from_hex(it->uuid());
 
         if(it->dropped())
         {
             // index w/ nullptr, to enforce uuid uniqueness
-            SAMOA_ASSERT(_index.insert(
-                std::make_pair(p_uuid, partition::ptr_t())).second);
-            continue;
+            SAMOA_ASSERT(_index.insert(std::make_pair(
+                core::uuid_from_hex(it->uuid()), partition::ptr_t())).second);
         }
+        else
+            tmp_ring.push_back(&(*it));
+    }
+
+    // effective factor is bounded by the number of live partitions
+    _replication_factor = std::min<unsigned>(
+        ptable.replication_factor(), tmp_ring.size());
+
+    for(unsigned i = 0; i != tmp_ring.size(); ++i)
+    {
+        const spb::ClusterState::Table::Partition & ppart = *tmp_ring[i];
+
+        core::uuid p_uuid = core::uuid_from_hex(ppart.uuid());
+        core::uuid p_server_uuid = core::uuid_from_hex(ppart.server_uuid());
 
         partition::ptr_t part, old_part;
 
         if(current)
         {
+            // look for a runtime instance of the partition
             uuid_index_t::const_iterator p_it = current->_index.find(p_uuid);
 
             if(p_it != current->_index.end())
                 old_part = p_it->second;
         }
 
-        core::uuid p_server_uuid = core::uuid_from_hex(it->server_uuid());
+        // first, map to indices of the partition which bound the current
+        //  partition's range of responsible ring positions
+        uint64_t range_begin = (i + tmp_ring.size() - 1) % tmp_ring.size();
+        uint64_t range_end = (i + _replication_factor - 1) % tmp_ring.size();
+
+        // lookup to map to positions on the ring (inclusive)
+        range_begin = tmp_ring[range_begin]->ring_position();
+        range_end = tmp_ring[range_end]->ring_position() - 1;
 
         if(p_server_uuid == _server_uuid)
         {
-            part = boost::make_shared<local_partition>(*it,
+            part = boost::make_shared<local_partition>(ppart,
+                range_begin, range_end,
                 boost::dynamic_pointer_cast<local_partition>(old_part));
         }
         else
         {
-            part = boost::make_shared<remote_partition>(*it,
+            part = boost::make_shared<remote_partition>(ppart,
+                range_begin, range_end,
                 boost::dynamic_pointer_cast<remote_partition>(old_part));
         }
 
@@ -105,7 +128,7 @@ const std::string & table::get_name() const
 { return _name; }
 
 unsigned table::get_replication_factor() const
-{ return _repl_factor; }
+{ return _replication_factor; }
 
 unsigned table::get_consistency_horizon() const
 { return _consistency_horizon; }
@@ -148,8 +171,7 @@ bool table::route_ring_position(
     ring_t::const_iterator it = std::lower_bound(
         _ring.begin(), _ring.end(), ring_position, partition_order_cmp());
 
-    while(all_partitions.size() != _repl_factor && \
-          all_partitions.size() != _ring.size())
+    while(all_partitions.size() != _replication_factor)
     {
         if(it == _ring.end())
             it = _ring.begin();
@@ -256,7 +278,7 @@ bool table::merge_table(
 
                 // build a temporary remote_partition instance to build
                 //  our local view of the partition
-                remote_partition(*new_part,
+                remote_partition(*new_part, 0, 0,
                         remote_partition::ptr_t()
                     ).merge_partition(*p_it, *new_part);
             }

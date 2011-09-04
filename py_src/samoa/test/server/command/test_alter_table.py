@@ -24,6 +24,9 @@ class TestAlterTable(unittest.TestCase):
         test_table = self.fixture.add_table(name = 'test_table')
         test_table.set_replication_factor(1)
 
+        for i in xrange(5):
+            self.fixture.add_remote_partition(test_table.uuid)
+
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
 
@@ -38,7 +41,7 @@ class TestAlterTable(unittest.TestCase):
             t = request.get_message().mutable_alter_table()
             t.set_table_uuid(test_table.uuid)
             t.set_name('new_name')
-            t.set_replication_factor(10)
+            t.set_replication_factor(3)
             t.set_consistency_horizon(1234)
 
             response = yield request.finish_request()
@@ -56,7 +59,7 @@ class TestAlterTable(unittest.TestCase):
             self.assertEquals(table.get_uuid(), UUID(test_table.uuid))
 
             # replication factor / consistency horizon have been updated
-            self.assertEquals(table.get_replication_factor(), 10)
+            self.assertEquals(table.get_replication_factor(), 3)
             self.assertEquals(table.get_consistency_horizon(), 1234)
 
             context.get_tasklet_group().cancel_group()

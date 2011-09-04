@@ -16,6 +16,8 @@ void make_partition_bindings()
         .def("get_server_uuid", &partition::get_server_uuid,
             bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_ring_position", &partition::get_ring_position)
+        .def("get_range_begin", &partition::get_range_begin)
+        .def("get_range_end", &partition::get_range_end)
         .def("get_consistent_range_begin",
             &partition::get_consistent_range_begin)
         .def("get_consistent_range_end",

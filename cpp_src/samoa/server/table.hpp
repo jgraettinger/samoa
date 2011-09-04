@@ -96,7 +96,7 @@ private:
     core::uuid _server_uuid;
     persistence::data_type _data_type;
     std::string _name;
-    unsigned _repl_factor;
+    unsigned _replication_factor;
     unsigned _consistency_horizon;
 
     ring_t        _ring;

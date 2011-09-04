@@ -27,6 +27,7 @@ public:
     */
     local_partition(
         const spb::ClusterState::Table::Partition &,
+        uint64_t range_begin, uint64_t range_end,
         const ptr_t & current);
 
     const persistence::persister_ptr_t & get_persister()
