@@ -27,17 +27,18 @@ bpl::tuple py_route_ring_position(const table & t,
     uint64_t ring_position,
     const peer_set::ptr_t & peer_set)
 {
-    partition::ptr_t primary_partition;
-    table::ring_t all_partitions;
+    table::ring_route route = t.route_ring_position(ring_position, peer_set);
 
-    bool is_local = t.route_ring_position(ring_position, peer_set,
-        primary_partition, all_partitions);
+    bpl::list py_secondary_partitions;
 
-    bpl::list py_all_partitions;
-    for(auto it = all_partitions.begin(); it != all_partitions.end(); ++it)
-        py_all_partitions.append(*it);
+    for(auto it = route.secondary_partitions.begin();
+        it != route.secondary_partitions.end(); ++it)
+    {
+        py_secondary_partitions.append(bpl::make_tuple(
+            it->first, it->second));
+    }
 
-    return bpl::make_tuple(is_local, primary_partition, py_all_partitions);
+    return bpl::make_tuple(route.primary_partition, py_secondary_partitions);
 }
 
 void make_table_bindings()

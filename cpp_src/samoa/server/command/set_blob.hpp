@@ -4,6 +4,7 @@
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
+#include "samoa/server/table.hpp"
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/uuid.hpp"
@@ -42,8 +43,7 @@ private:
     void on_put_record(
         const boost::system::error_code &,
         const client_ptr_t &,
-        const partition_ptr_t &,
-        const std::vector<partition_ptr_t> &,
+        table::ring_route &,
         const spb::PersistedRecord_ptr_t &);
 };
 

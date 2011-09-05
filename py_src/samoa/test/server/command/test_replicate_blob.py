@@ -11,6 +11,7 @@ from samoa.persistence.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 
 from samoa.test.module import TestModule
+from samoa.test.peered_cluster import PeeredCluster
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
@@ -18,24 +19,42 @@ class TestReplicateBlob(unittest.TestCase):
 
     def setUp(self):
 
-        self.injector = TestModule().configure(getty.Injector())
-        self.fixture = self.injector.get_instance(ClusterStateFixture)
+        common_fixture = ClusterStateFixture()
+        self.table_uuid = UUID(
+            common_fixture.add_table(
+                data_type = DataType.BLOB_TYPE,
+                replication_factor = 2,
+            ).uuid)
 
-        self.table = self.fixture.add_table(
-            data_type = DataType.BLOB_TYPE)
-        self.partition = self.fixture.add_local_partition(self.table.uuid)
+        self.cluster = PeeredCluster(common_fixture,
+            server_names = ['local', 'remote'])
 
-        self.listener = self.injector.get_instance(Listener)
-        self.context = self.listener.get_context()
+        # add a partition to both local & remote servers
+        self.local_part_uuid = UUID(
+            self.cluster.fixtures['local'].add_local_partition(
+                self.table_uuid).uuid)
 
-        self.key = self.fixture.generate_bytes()
+        self.remote_part_uuid = UUID(
+            self.cluster.fixtures['remote'].add_local_partition(
+                self.table_uuid).uuid)
 
-        self.rolling_hash = self.context.get_cluster_state(
+        self.cluster.start_server_contexts()
+
+        self.local_hash = self.cluster.contexts['local'].get_cluster_state(
             ).get_table_set(
-            ).get_table(UUID(self.table.uuid)
-            ).get_partition(UUID(self.partition.uuid)
+            ).get_table(self.table_uuid
+            ).get_partition(self.local_part_uuid
             ).get_persister(
             ).get_layer(0)
+
+        self.remote_hash = self.cluster.contexts['remote'].get_cluster_state(
+            ).get_table_set(
+            ).get_table(self.table_uuid
+            ).get_partition(self.remote_part_uuid
+            ).get_persister(
+            ).get_layer(0)
+
+        self.key = common_fixture.generate_bytes()
 
     def test_new_key(self):
 
@@ -51,17 +70,22 @@ class TestReplicateBlob(unittest.TestCase):
 
             # request succeeded
             self.assertFalse(response.get_error_code())
+
+            # remote is updated but non-divergent
+            self.assertTrue(response.get_message().replication.updated)
+            self.assertFalse(response.get_message().replication.divergent)
+
             response.finish_response()
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.cluster.stop_server_contexts()
             yield
 
         Proactor.get_proactor().run_test(test)
 
-        # exact record contents were stored
+        # validate exact record contents were stored
         self.assertEquals(expected.SerializeToBytes(),
-            self.rolling_hash.get(self.key).value)
+            self.remote_hash.get(self.key).value)
 
     def test_merge_no_clocks(self):
 
@@ -139,93 +163,109 @@ class TestReplicateBlob(unittest.TestCase):
         if local_clock:
             local_record.mutable_cluster_clock().CopyFrom(local_clock)
 
-        raw_record = self.rolling_hash.prepare_record(self.key,
+        raw_record = self.local_hash.prepare_record(self.key,
             local_record.ByteSize())
         raw_record.set_value(local_record.SerializeToBytes())
-        self.rolling_hash.commit_record()
+        self.local_hash.commit_record()
 
-        # build the remote, replicated record
+        # set the remote record fixture
         remote_record = PersistedRecord()
         remote_record.add_blob_value('remote')
 
         if remote_clock:
             remote_record.mutable_cluster_clock().CopyFrom(remote_clock)
 
-        response_record = PersistedRecord()
+        raw_record = self.remote_hash.prepare_record(self.key,
+            remote_record.ByteSize())
+        raw_record.set_value(remote_record.SerializeToBytes())
+        self.remote_hash.commit_record()
 
         def test():
 
-            response = yield self._make_request(remote_record)
+            response = yield self._make_request(local_record)
 
             # request succeeded
             self.assertFalse(response.get_error_code())
 
-            # parse out a response record, if one was returned
-            if len(response.get_response_data_blocks()) == 1:
-                response_record.ParseFromBytes(
-                    response.get_response_data_blocks()[0])
+            repl_resp = response.get_message().replication
+
+            if expect == 'no_change':
+                self.assertFalse(repl_resp.updated)
+                self.assertFalse(repl_resp.divergent)
+            elif expect == 'local':
+                self.assertTrue(repl_resp.updated)
+                self.assertFalse(repl_resp.divergent)
+            elif expect == 'remote':
+                self.assertFalse(repl_resp.updated)
+                self.assertTrue(repl_resp.divergent)
+            elif expect == 'both':
+                self.assertTrue(repl_resp.updated)
+                self.assertTrue(repl_resp.divergent)
 
             response.finish_response()
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.cluster.stop_server_contexts()
             yield
 
         Proactor.get_proactor().run_test(test)
 
-        stored_record = PersistedRecord()
-        stored_record.ParseFromBytes(
-            self.rolling_hash.get(self.key).value)
+        # extract local & remote stored records directly from hashes
+        local_record = PersistedRecord()
+        local_record.ParseFromBytes(
+            self.local_hash.get(self.key).value)
+
+        remote_record = PersistedRecord()
+        remote_record.ParseFromBytes(
+            self.remote_hash.get(self.key).value)
 
         if expect == 'no_change':
-            self.assertEquals(len(stored_record.blob_value), 1)
-            self.assertEquals(stored_record.blob_value[0], 'local')
+            # we manufactured equal clocks, such that local & remote
+            #  store their original (actually divergent) blob values
 
-            # remote up-to-date, no record was returned
-            self.assertEquals(len(response_record.blob_value), 0)
+            self.assertEquals(len(local_record.blob_value), 1)
+            self.assertEquals(local_record.blob_value[0], 'local')
+
+            self.assertEquals(len(remote_record.blob_value), 1)
+            self.assertEquals(remote_record.blob_value[0], 'remote')
 
         elif expect == 'local':
-            self.assertEquals(len(stored_record.blob_value), 1)
-            self.assertEquals(stored_record.blob_value[0], 'local')
 
-            # remote out-of-date, local record was returned
-            self.assertEquals(len(response_record.blob_value), 1)
-            self.assertEquals(response_record.blob_value[0], 'local')
+            self.assertEquals(len(local_record.blob_value), 1)
+            self.assertEquals(local_record.blob_value[0], 'local')
+
+            self.assertEquals(len(remote_record.blob_value), 1)
+            self.assertEquals(remote_record.blob_value[0], 'local')
 
         elif expect == 'remote':
-            self.assertEquals(len(stored_record.blob_value), 1)
-            self.assertEquals(stored_record.blob_value[0], 'remote')
 
-            # remote up-to-date, no record was returned
-            self.assertEquals(len(response_record.blob_value), 0)
+            self.assertEquals(len(local_record.blob_value), 1)
+            self.assertEquals(local_record.blob_value[0], 'remote')
+
+            self.assertEquals(len(remote_record.blob_value), 1)
+            self.assertEquals(remote_record.blob_value[0], 'remote')
 
         else:
             assert expect == 'both'
 
-            self.assertEquals(len(stored_record.blob_value), 2)
-            self.assertEquals(stored_record.blob_value[0], 'local')
-            self.assertEquals(stored_record.blob_value[1], 'remote')
+            self.assertEquals(len(local_record.blob_value), 2)
+            self.assertEquals(local_record.blob_value[0], 'remote')
+            self.assertEquals(local_record.blob_value[1], 'local')
 
-            self.assertEquals(
-                len(stored_record.cluster_clock.partition_clock), 2)
-
-            # merged record was also returned in response
-            self.assertEquals(len(response_record.blob_value), 2)
-            self.assertEquals(response_record.blob_value[0], 'local')
-            self.assertEquals(response_record.blob_value[1], 'remote')
+            self.assertEquals(len(remote_record.blob_value), 2)
+            self.assertEquals(remote_record.blob_value[0], 'remote')
+            self.assertEquals(remote_record.blob_value[1], 'local')
 
     def _make_request(self, record):
 
-        server = yield Server.connect_to(
-            self.listener.get_address(), self.listener.get_port())
-
-        request = yield server.schedule_request()
+        request = yield self.cluster.schedule_request('remote')
         request.get_message().set_type(CommandType.REPLICATE_BLOB)
 
         repl_req = request.get_message().mutable_replication()
-        repl_req.set_table_uuid(UUID(self.table.uuid).to_bytes())
-        repl_req.set_partition_uuid(UUID(self.partition.uuid).to_bytes())
+        repl_req.set_table_uuid(self.table_uuid.to_bytes())
         repl_req.set_key(self.key)
+        repl_req.set_source_partition_uuid(self.local_part_uuid.to_bytes())
+        repl_req.set_target_partition_uuid(self.remote_part_uuid.to_bytes())
 
         record = record.SerializeToBytes()
 

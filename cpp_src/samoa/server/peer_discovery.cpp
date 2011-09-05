@@ -43,8 +43,9 @@ void peer_discovery::begin_iteration(const context::ptr_t & context)
         return;
     }
 
-    context->get_cluster_state()->get_peer_set()->schedule_request(boost::bind(
-        &peer_discovery::on_request, shared_from_this(), _1, _2, context),
+    context->get_cluster_state()->get_peer_set()->schedule_request(
+        boost::bind(&peer_discovery::on_request,
+            shared_from_this(), _1, _2, context),
         _peer_uuid);
 }
 
@@ -64,8 +65,9 @@ void peer_discovery::on_request(
     server.get_message().mutable_cluster_state()->CopyFrom(
         context->get_cluster_state()->get_protobuf_description());
 
-    server.finish_request(boost::bind(
-        &peer_discovery::on_response, shared_from_this(), _1, _2, context));
+    server.finish_request(
+        boost::bind(&peer_discovery::on_response,
+            shared_from_this(), _1, _2, context));
 }
 
 void peer_discovery::on_response(
@@ -90,9 +92,9 @@ void peer_discovery::on_response(
         return;
     }
 
-    context->cluster_state_transaction(boost::bind(
-        &peer_discovery::on_state_transaction, shared_from_this(),
-        _1, server, context));
+    context->cluster_state_transaction(
+        boost::bind(&peer_discovery::on_state_transaction,
+            shared_from_this(),_1, server, context));
 }
 
 bool peer_discovery::on_state_transaction(

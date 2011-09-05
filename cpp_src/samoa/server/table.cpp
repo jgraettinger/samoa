@@ -154,15 +154,10 @@ uint64_t table::ring_position(const std::string & key) const
     return boost::hash<std::string>()(key);
 }
 
-bool table::route_ring_position(
-    uint64_t ring_position, const peer_set::ptr_t & peer_set,
-    partition::ptr_t & primary_partition, table::ring_t & all_partitions) const
+table::ring_route table::route_ring_position(
+    uint64_t ring_position, const peer_set::ptr_t & peer_set) const
 {
-    bool is_local = false;
-    unsigned latency = (unsigned)-1;
-
-    primary_partition = partition::ptr_t();
-    all_partitions.clear();
+    ring_route route;
 
     // As per the Chord protocol, a ring position is mapped onto the R
     //  partitions which immediately succeed it, where R is the
@@ -171,36 +166,41 @@ bool table::route_ring_position(
     ring_t::const_iterator it = std::lower_bound(
         _ring.begin(), _ring.end(), ring_position, partition_order_cmp());
 
-    while(all_partitions.size() != _replication_factor)
+    for(unsigned count = 0; count != _replication_factor; ++count, ++it)
     {
         if(it == _ring.end())
             it = _ring.begin();
 
-        all_partitions.push_back(*it);
-
-        if(!is_local && dynamic_cast<local_partition*>(it->get()))
+        // pick the first local partition as primary
+        if(!route.primary_partition)
         {
-            // keep the first local partition
-            is_local = true;
-            primary_partition = *it;
-        }
-        else if(!is_local)
-        {
-            samoa::client::server::ptr_t srv = peer_set->get_server(
-                (*it)->get_server_uuid()); 
+            route.primary_partition = \
+                boost::dynamic_pointer_cast<local_partition>(*it);
 
-            // keep the first remote partition from the
-            //  lowest-latency, connected peer
-            if(srv && srv->get_latency_ms() < latency)
-            {
-                latency = srv->get_latency_ms();
-                primary_partition = *it;
-            }
+            if(route.primary_partition)
+                continue;
         }
 
-        ++it;
+        samoa::client::server::ptr_t srv = peer_set->get_server(
+            (*it)->get_server_uuid()); 
+
+        route.secondary_partitions.push_back(std::make_pair(
+            *it, peer_set->get_server((*it)->get_server_uuid())));
     }
-    return is_local;
+
+    route.secondary_partitions.sort(
+        [](const ring_route::partition_server_t & lhs,
+           const ring_route::partition_server_t & rhs) -> bool
+        {
+            if(!lhs.second)
+                return false;
+            if(!rhs.second)
+                return false;
+
+            return lhs.second->get_latency_ms() < rhs.second->get_latency_ms();
+        });
+
+    return route;
 }
 
 void table::spawn_tasklets(const context::ptr_t & context)

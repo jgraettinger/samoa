@@ -43,42 +43,42 @@ void get_blob_handler::handle(const client::ptr_t & client)
         return;
     }
 
-    // hash key ring position
+    // hash key ring position, & route to responsible partitions
     uint64_t ring_position = table->ring_position(blob_request.key());
 
-    // route the position to responsible partitions & primary partition
-    partition::ptr_t primary_partition;
-    table::ring_t all_partitions;
+    table::ring_route route = table->route_ring_position(ring_position,
+        cluster_state->get_peer_set());
 
-    bool primary_is_local = table->route_ring_position(ring_position,
-        cluster_state->get_peer_set(), primary_partition, all_partitions);
-
-    if(all_partitions.empty())
+    if(!route.primary_partition)
     {
-        client->send_error(404, "no table partitions");
+        if(route.secondary_partitions.empty())
+        {
+            client->send_error(404, "no table partitions");
+            return;
+        }
+
+        // first secondary partition is lowest-latency peer
+        samoa::client::server::ptr_t best_peer =
+            route.secondary_partitions.begin()->second;
+
+        if(best_peer)
+        {
+            cluster_state->get_peer_set()->forward_request(client, best_peer);
+        }
+        else
+        {
+            // no connected server instance: defer to peer_set to create one
+            cluster_state->get_peer_set()->forward_request(client,
+                route.secondary_partitions.begin()->first->get_server_uuid());
+        }
         return;
     }
 
-    if(!primary_partition)
-    {
-        client->send_error(503, "no available peer for forwarding");
-        return;
-    }
-
-    // if the primary partition isn't local, forward to it's peer server
-    if(!primary_is_local)
-    {
-        cluster_state->get_peer_set()->forward_request(
-            client, primary_partition->get_server_uuid());
-        return;
-    }
-
-    local_partition & local_primary = \
-        dynamic_cast<local_partition &>(*primary_partition);
-
-    local_primary.get_persister()->get(boost::bind(
-        &get_blob_handler::on_get_record, shared_from_this(),
-        _1, client, _2), blob_request.key());
+    // else, a primary local partition is available
+    route.primary_partition->get_persister()->get(
+        boost::bind(&get_blob_handler::on_get_record,
+            shared_from_this(), _1, client, _2),
+        blob_request.key());
 }
 
 void get_blob_handler::on_get_record(

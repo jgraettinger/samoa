@@ -46,7 +46,7 @@ void basic_replicate_handler::handle(const client::ptr_t & client)
     core::uuid table_uuid, partition_uuid;
     {
         const std::string & t_s = repl_request.table_uuid();
-        const std::string & p_s = repl_request.partition_uuid();
+        const std::string & p_s = repl_request.target_partition_uuid();
 
         SAMOA_ASSERT(t_s.size() == table_uuid.size());
         std::copy(t_s.begin(), t_s.end(), table_uuid.begin());
@@ -100,24 +100,45 @@ void basic_replicate_handler::handle(const client::ptr_t & client)
     replicate(client, table, partition, repl_request.key(), repl_record);
 }
 
-void basic_replicate_handler::send_record_response(
+void basic_replicate_handler::replication_complete(
     const client::ptr_t & client,
-    const spb::PersistedRecord_ptr_t & record)
+    const table::ptr_t & table,
+    bool was_updated,
+    bool still_divergent,
+    const spb::PersistedRecord_ptr_t & stored_record)
 {
-    core::zero_copy_output_adapter zc_adapter;
+    const spb::SamoaRequest & samoa_request = client->get_request();
+    const spb::ReplicationRequest & repl_request = samoa_request.replication();
 
-    record->SerializeToZeroCopyStream(&zc_adapter);
+    spb::ReplicationResponse & repl_response = *client->get_response(
+        ).mutable_replication();
 
-    client->get_response().add_data_block_length(zc_adapter.ByteCount());
-    client->start_response();
-
-    client->write_interface().queue_write(zc_adapter.output_regions());
+    repl_response.set_updated(was_updated);
+    repl_response.set_divergent(still_divergent);
     client->finish_response();
+    
+    const std::string & p_s = repl_request.target_partition_uuid();
+
+    SAMOA_ASSERT(t_s.size() == table_uuid.size());
+    std::copy(t_s.begin(), t_s.end(), table_uuid.begin());
+
+    SAMOA_ASSERT(p_s.size() == partition_uuid.size());
+    std::copy(p_s.begin(), p_s.end(), partition_uuid.begin());
+
+    table::ring_route route;
+    route.primary_partition = 
+
+    replication_operation::spawn_replication(
+        client->get_context()->get_cluster_state()->get_peer_set(),
+        table, repl_request.key(), 
+
+
 }
 
 void basic_replicate_handler::on_put_record(
     const boost::system::error_code & ec,
     const client::ptr_t & client,
+    const table::ptr_t & table,
     const spb::PersistedRecord_ptr_t & repl_record,
     const spb::PersistedRecord_ptr_t & put_record)
 {
@@ -129,13 +150,13 @@ void basic_replicate_handler::on_put_record(
 
     if(put_record != repl_record)
     {
-        // we performed a merge; send put_record
-        send_record_response(client, put_record);
+        // we performed a merge
+        replication_complete(client, true, true, put_record);
     }
     else
     {
-        // remote is up-to-date; send empty response
-        client->finish_response();
+        // we performed a first write, or overwrote stale content
+        replication_complete(client, true, false, put_record);
     }
 }
 

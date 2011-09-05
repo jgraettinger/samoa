@@ -14,12 +14,15 @@
 namespace samoa {
 namespace client {
 
+// would like these to pass a rvalue-reference, but this breaks
+//  current boost::asio::io_service::wrap
+
 typedef boost::function<
-    void(const boost::system::error_code &, server_request_interface &)
+    void(const boost::system::error_code &, server_request_interface)
 > server_request_callback_t;
 
 typedef boost::function<
-    void(const boost::system::error_code &, server_response_interface &)
+    void(const boost::system::error_code &, server_response_interface)
 > server_response_callback_t;
 
 typedef boost::function<

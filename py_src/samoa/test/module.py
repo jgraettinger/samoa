@@ -8,9 +8,11 @@ class TestModule(Module):
 
     def __init__(self):
         self.fixture = ClusterStateFixture()
-        Module.__init__(self, self.fixture.state)
+        Module.__init__(self, None)
 
     def configure(self, binder):
+        self.cluster_state = self.fixture.state
+
         binder = Module.configure(self, binder)
 
         binder.bind_instance(ClusterStateFixture, self.fixture)

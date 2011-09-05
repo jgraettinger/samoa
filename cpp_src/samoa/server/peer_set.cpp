@@ -209,11 +209,20 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
 void peer_set::forward_request(const client::ptr_t & client,
     const core::uuid & peer_uuid)
 {
-    
+    schedule_request(
+        boost::bind(&peer_set::on_forwarded_request,
+            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+            _1, client, _2),
+        peer_uuid);
+}
 
-    schedule_request(boost::bind(&peer_set::on_forwarded_request,
-        boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-        _1, client, _2), peer_uuid);
+void peer_set::forward_request(const client::ptr_t & client,
+    const samoa::client::server_ptr_t & peer)
+{
+    peer->schedule_request(
+        boost::bind(&peer_set::on_forwarded_request,
+            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+            _1, client, _2));
 }
 
 void peer_set::on_forwarded_request(const boost::system::error_code & ec,

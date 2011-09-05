@@ -80,7 +80,7 @@ void client::send_error(unsigned err_code,
     bool closing /* = false */)
 {
     std::stringstream tmp;
-    tmp << ec;
+    tmp << ec << " (" << ec.message() << ")";
 
     send_error(err_code, tmp.str(), closing);
 }

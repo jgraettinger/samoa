@@ -115,6 +115,74 @@ class TestSetBlob(unittest.TestCase):
 
         self.assertEquals(persisted_record.blob_value[0], self.value)
 
+    def test_replication(self):
+
+        self._common_bootstrap()
+
+        # peer server bootstrap
+        peer_injector = TestModule().configure(getty.Injector())
+        peer_fixture = peer_injector.get_instance(ClusterStateFixture)
+
+        peer_fixture.add_peer(uuid = self.fixture.state.local_uuid,
+            port = self.listener.get_port())
+
+        # copy out main server table
+        peer_table = peer_fixture.add_table()
+        peer_table.CopyFrom(self.test_table)
+        peer_table.clear_partition()
+        peer_fixture.rebuild_index()
+
+        # add a peer-local partition
+        peer_partition = peer_fixture.add_local_partition(
+            self.test_table.uuid)
+
+        # add a bogus, remote partition
+        peer_fixture.add_remote_partition(self.test_table.uuid,
+            server_uuid = peer_fixture.add_peer().uuid)
+
+        peer_listener = peer_injector.get_instance(Listener)
+        peer_context = peer_listener.get_context()
+
+        peer_rolling_hash = peer_context.get_cluster_state(
+            ).get_table_set(
+            ).get_table(UUID(peer_table.uuid)
+            ).get_partition(UUID(peer_partition.uuid)
+            ).get_persister(
+            ).get_layer(0)
+
+        def test():
+
+            server = yield Server.connect_to(
+                self.listener.get_address(), self.listener.get_port())
+
+            response = yield self._make_request(server)
+
+            # request succeeded
+            self.assertFalse(response.get_error_code())
+            self.assertTrue(response.get_message().blob.success)
+            response.finish_response()
+            yield
+
+        def validate():
+
+            persisted_record = PersistedRecord()
+
+            # validate against record stored in _main_ context
+            persisted_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
+            self.assertEquals(persisted_record.blob_value[0], self.value)
+
+            # validate against record stored in _peer_ context
+            persisted_record.ParseFromBytes(peer_rolling_hash.get(self.key).value)
+            self.assertEquals(persisted_record.blob_value[0], self.value)
+
+            # cleanup
+            self.context.get_tasklet_group().cancel_group()
+            peer_context.get_tasklet_group().cancel_group()
+            yield
+
+        Proactor.get_proactor().run_test([test, validate])
+
+
     def test_cluster_clock_semantics(self):
 
         self._common_bootstrap()
@@ -332,7 +400,7 @@ class TestSetBlob(unittest.TestCase):
             request.write_interface().queue_write(value)
 
             response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 503)
+            self.assertEquals(response.get_error_code(), 500)
             response.finish_response()
 
             # cleanup
@@ -340,9 +408,6 @@ class TestSetBlob(unittest.TestCase):
             yield
 
         Proactor.get_proactor().run_test(test)
-
-    def test_replication(self):
-        pass
 
     def _make_request(self, server, cluster_clock = None):
 

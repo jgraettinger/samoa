@@ -34,16 +34,15 @@ void replicate_blob_handler::replicate(
 
     partition->get_persister()->put(
         boost::bind(&replicate_blob_handler::on_put_record,
-            shared_from_this(), _1, client, repl_record, _2),
+            shared_from_this(), _1, client, table, repl_record, _2),
         boost::bind(&replicate_blob_handler::on_merge_record,
-            shared_from_this(), client,
-            table->get_consistency_horizon(), _1, _2),
+            shared_from_this(), client, table, _1, _2),
         key, repl_record);
 }
 
 spb::PersistedRecord_ptr_t replicate_blob_handler::on_merge_record(
     const client::ptr_t & client,
-    unsigned consistency_horizon,
+    const table::ptr_t & table,
     const spb::PersistedRecord_ptr_t & local_record,
     const spb::PersistedRecord_ptr_t & repl_record)
 {
@@ -56,14 +55,18 @@ spb::PersistedRecord_ptr_t replicate_blob_handler::on_merge_record(
 
     if(ancestry == datamodel::clock_util::EQUAL)
     {
-        // send empty response & abort the write
-        client->finish_response();
+        // no change
+        replication_complete(client, false, false, local_record);
+
+        // abort the write
         return spb::PersistedRecord_ptr_t();
     }
     else if(ancestry == datamodel::clock_util::MORE_RECENT)
     {
-        // send local_record & abort the write
-        send_record_response(client, local_record);
+        // local is more recent
+        replication_complete(client, false, true, local_record);
+
+        // abort the write
         return spb::PersistedRecord_ptr_t();
     }
     else if(ancestry == datamodel::clock_util::LESS_RECENT)

@@ -30,6 +30,11 @@ public:
     void forward_request(const client_ptr_t &,
         const core::uuid & peer_uuid);
 
+    /*! \brief Forwards the client request to a peer server
+    */
+    void forward_request(const client_ptr_t &,
+        const samoa::client::server_ptr_t & peer);
+
 private:
 
     void on_forwarded_request(const boost::system::error_code &,
