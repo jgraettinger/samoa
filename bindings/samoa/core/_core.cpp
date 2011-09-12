@@ -22,8 +22,5 @@ BOOST_PYTHON_MODULE(_core)
     samoa::core::make_server_time_bindings();
     samoa::core::make_tasklet_bindings();
     samoa::core::make_tasklet_group_bindings();
-
-    boost::python::register_ptr_to_python<
-        samoa::core::protobuf::PersistedRecord_ptr_t>();
 }
 

@@ -1,15 +1,15 @@
 
 #include "samoa/server/command/basic_replicate.hpp"
 #include "samoa/server/client.hpp"
-#include "samoa/server/cluster_state.hpp"
-#include "samoa/server/context.hpp"
-#include "samoa/server/table_set.hpp"
-#include "samoa/server/table.hpp"
-#include "samoa/server/partition.hpp"
 #include "samoa/server/local_partition.hpp"
+#include "samoa/server/table.hpp"
+#include "samoa/server/replication.hpp"
+#include "samoa/server/request_state.hpp"
+#include "samoa/persistence/persister.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
-#include "samoa/core/protobuf_helpers.hpp"
+#include "samoa/error.hpp"
+#include "samoa/log.hpp"
 #include <boost/lexical_cast.hpp>
 #include <boost/bind.hpp>
 
@@ -19,144 +19,101 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-basic_replicate_handler::~basic_replicate_handler()
-{ }
-
-void basic_replicate_handler::handle(const client::ptr_t & client)
+void replicate_handler::handle(const client::ptr_t & client)
 {
-    const spb::SamoaRequest & samoa_request = client->get_request();
-    const spb::ReplicationRequest & repl_request = samoa_request.replication();
+    request_state::ptr_t rstate = request_state::extract(client);
 
-    if(!samoa_request.has_replication())
+    bool write_request = !client->get_request_data_blocks().empty();
+
+    if(write_request)
     {
-        client->send_error(400, "expected replication field");
-        return;
-    }
+        // parse into remote-record
+        SAMOA_ASSERT(client->get_request_data_blocks().size() == 1);
+        rstate->get_zci_adapter().reset(client->get_request_data_blocks()[0]);
 
-    if(client->get_request_data_blocks().size() != 1)
-    {
-        client->send_error(400, "expected exactly one data block");
-        return;
-    }
+        SAMOA_ASSERT(rstate->get_remote_record().ParseFromZeroCopyStream(
+            &rstate->get_zci_adapter()));
 
-    cluster_state::ptr_t cluster_state = \
-        client->get_context()->get_cluster_state();
-
-    // extract table & partition UUID's from raw bytes
-    core::uuid table_uuid, partition_uuid;
-    {
-        const std::string & t_s = repl_request.table_uuid();
-        const std::string & p_s = repl_request.target_partition_uuid();
-
-        SAMOA_ASSERT(t_s.size() == table_uuid.size());
-        std::copy(t_s.begin(), t_s.end(), table_uuid.begin());
-
-        SAMOA_ASSERT(p_s.size() == partition_uuid.size());
-        std::copy(p_s.begin(), p_s.end(), partition_uuid.begin());
-    }
-
-    table::ptr_t table = cluster_state->get_table_set()->get_table(table_uuid);
-
-    if(!table)
-    {
-        client->send_error(404, "table "
-            + boost::lexical_cast<std::string>(table_uuid));
-        return;
-    }
-
-    local_partition::ptr_t partition = \
-        boost::dynamic_pointer_cast<local_partition>(
-            table->get_partition(partition_uuid));
-
-    if(!partition)
-    {
-        client->send_error(404, "local partition "
-            + boost::lexical_cast<std::string>(partition_uuid));
-        return;
-    }
-
-    uint64_t ring_position = table->ring_position(repl_request.key());
-
-    if(!partition->position_in_responsible_range(ring_position))
-    {
-        client->send_error(409, "wrong ring position");
-        return;
-    }
-
-    // parse the replicated record
-    spb::PersistedRecord_ptr_t repl_record = \
-        boost::make_shared<spb::PersistedRecord>();
-
-    core::zero_copy_input_adapter zc_adapter;
-    zc_adapter.reset(client->get_request_data_blocks()[0]);
-
-    if(!repl_record->ParseFromZeroCopyStream(&zc_adapter))
-    {
-        client->send_error(400, "failed to parse PersistedRecord message");
-        return;
-    }
-
-    // pass off to derived class for datatype-sepecific handling
-    replicate(client, table, partition, repl_request.key(), repl_record);
-}
-
-void basic_replicate_handler::replication_complete(
-    const client::ptr_t & client,
-    const table::ptr_t & table,
-    bool was_updated,
-    bool still_divergent,
-    const spb::PersistedRecord_ptr_t & stored_record)
-{
-    const spb::SamoaRequest & samoa_request = client->get_request();
-    const spb::ReplicationRequest & repl_request = samoa_request.replication();
-
-    spb::ReplicationResponse & repl_response = *client->get_response(
-        ).mutable_replication();
-
-    repl_response.set_updated(was_updated);
-    repl_response.set_divergent(still_divergent);
-    client->finish_response();
-    
-    const std::string & p_s = repl_request.target_partition_uuid();
-
-    SAMOA_ASSERT(t_s.size() == table_uuid.size());
-    std::copy(t_s.begin(), t_s.end(), table_uuid.begin());
-
-    SAMOA_ASSERT(p_s.size() == partition_uuid.size());
-    std::copy(p_s.begin(), p_s.end(), partition_uuid.begin());
-
-    table::ring_route route;
-    route.primary_partition = 
-
-    replication_operation::spawn_replication(
-        client->get_context()->get_cluster_state()->get_peer_set(),
-        table, repl_request.key(), 
-
-
-}
-
-void basic_replicate_handler::on_put_record(
-    const boost::system::error_code & ec,
-    const client::ptr_t & client,
-    const table::ptr_t & table,
-    const spb::PersistedRecord_ptr_t & repl_record,
-    const spb::PersistedRecord_ptr_t & put_record)
-{
-    if(ec)
-    {
-        client->send_error(500, ec);
-        return;
-    }
-
-    if(put_record != repl_record)
-    {
-        // we performed a merge
-        replication_complete(client, true, true, put_record);
+        rstate->get_primary_partition()->get_persister()->put(
+            boost::bind(&replicate_handler::on_write,
+                shared_from_this(), _1, _2, rstate),
+            datamodel::merge_func_t(
+                rstate->get_table()->get_consistent_merge()),
+            rstate->get_key(),
+            rstate->get_remote_record(),
+            rstate->get_local_record());
     }
     else
     {
-        // we performed a first write, or overwrote stale content
-        replication_complete(client, true, false, put_record);
+        rstate->get_primary_partition()->get_persister()->get(
+            boost::bind(&replicate_handler::on_read,
+                shared_from_this(), _1, _2, rstate),
+            rstate->get_key(),
+            rstate->get_local_record());
+    }
+}
+
+void replicate_handler::on_write(
+    const boost::system::error_code & ec,
+    const datamodel::merge_result & merge_result,
+    const request_state::ptr_t & rstate)
+{
+    if(ec)
+    {
+        LOG_WARN(ec.message());
+        rstate->send_client_error(500, ec);
+        return;
+    }
+
+    rstate->finish_client_response();
+
+    if(merge_result.remote_is_stale)
+    {
+        // start a reverse replication, to synchronize remote peer
+        replication::replicated_write(
+            boost::bind(&replicate_handler::on_reverse_replication,
+                shared_from_this(), _1),
+            rstate);
+    }
+}
+
+void replicate_handler::on_read(
+    const boost::system::error_code & ec,
+    bool found,
+    const request_state::ptr_t & rstate)
+{
+    if(ec)
+    {
+        LOG_WARN(ec.message());
+        rstate->send_client_error(500, ec);
+        return;
+    }
+
+    if(found)
+    {
+        client & client = *rstate->get_client();
+
+        rstate->get_local_record().SerializeToZeroCopyStream(
+            &rstate->get_zco_adapter());
+        client.get_response().add_data_block_length(
+            rstate->get_zco_adapter().ByteCount());
+
+        client.start_response();
+        client.write_interface().queue_write(
+            rstate->get_zco_adapter().output_regions());
+
+        rstate->get_zco_adapter().reset();
+    }
+
+    rstate->finish_client_response();
+}
+
+void replicate_handler::on_reverse_replication(
+    const boost::system::error_code & ec)
+{
+    if(ec)
+    {
+        LOG_WARN(ec.message());
     }
 }
 

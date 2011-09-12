@@ -53,6 +53,13 @@ public:
     //   response core::protobuf::SamoaResponse has been recieved
     void finish_request(const server_response_callback_t &);
 
+    /*! \brief Cancels the request, releasing ownership of the request interface
+
+    It is an error to call if start_request() has been called, or
+    any writes have been queued.
+    */
+    void abort_request();
+
     // Returns an unusable (semantically null) instance
     static server_request_interface null_instance();
 
@@ -151,6 +158,8 @@ private:
 
     void on_request_written(const boost::system::error_code &,
         const response_callback_t &);
+
+    void on_request_abort();
 
     void on_response_length(
         const boost::system::error_code &, const core::buffer_regions_t &);

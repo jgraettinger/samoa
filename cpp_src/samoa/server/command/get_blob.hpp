@@ -30,10 +30,13 @@ public:
 
 private:
 
-    void on_get_record(
-        const boost::system::error_code &,
-        const client_ptr_t &,
-        const spb::PersistedRecord_ptr_t &);
+    void on_replicated_read(
+        const boost::system::error_code & ec,
+        const request_state_ptr_t &);
+
+    void on_retrieve(
+        const boost::system::error_code & ec,
+        const request_state_ptr_t &);
 };
 
 }

@@ -1,10 +1,10 @@
-#ifndef SAMOA_PERSISTENCE_DATA_TYPE_HPP
-#define SAMOA_PERSISTENCE_DATA_TYPE_HPP
+#ifndef SAMOA_DATA_MODEL_DATA_TYPE_HPP
+#define SAMOA_DATA_MODEL_DATA_TYPE_HPP
 
 #include <string>
 
 namespace samoa {
-namespace persistence {
+namespace datamodel {
 
 enum data_type {
 

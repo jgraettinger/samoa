@@ -2,7 +2,8 @@
 #include <boost/python.hpp>
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/table.hpp"
-#include "samoa/server/partition.hpp"
+#include "samoa/server/local_partition.hpp"
+#include "samoa/server/partition_peer.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "pysamoa/iterutil.hpp"
 
@@ -27,18 +28,20 @@ bpl::tuple py_route_ring_position(const table & t,
     uint64_t ring_position,
     const peer_set::ptr_t & peer_set)
 {
-    table::ring_route route = t.route_ring_position(ring_position, peer_set);
+    local_partition::ptr_t primary_partition;
+    partition_peers_t partition_peers;
 
-    bpl::list py_secondary_partitions;
+    t.route_ring_position(ring_position, peer_set,
+        primary_partition, partition_peers);
 
-    for(auto it = route.secondary_partitions.begin();
-        it != route.secondary_partitions.end(); ++it)
+    bpl::list py_partition_peers;
+
+    for(auto it = partition_peers.begin(); it != partition_peers.end(); ++it)
     {
-        py_secondary_partitions.append(bpl::make_tuple(
-            it->first, it->second));
+        py_partition_peers.append(*it);
     }
 
-    return bpl::make_tuple(route.primary_partition, py_secondary_partitions);
+    return bpl::make_tuple(primary_partition, partition_peers);
 }
 
 void make_table_bindings()

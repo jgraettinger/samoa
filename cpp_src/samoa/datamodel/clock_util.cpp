@@ -89,7 +89,7 @@ bool clock_util::validate(const spb::ClusterClock & cluster_clock)
     return true;
 }
 
-void clock_util::prune_record(const spb::PersistedRecord_ptr_t & record,
+void clock_util::prune_record(spb::PersistedRecord & record,
     unsigned consistency_horizon)
 {
     // records are pruned if they're older than horizon _plus_ jitter bound
@@ -97,7 +97,7 @@ void clock_util::prune_record(const spb::PersistedRecord_ptr_t & record,
     uint64_t prune_ts = ignore_ts - clock_jitter_bound;
 
     typedef google::protobuf::RepeatedPtrField<spb::PartitionClock> clocks_t;
-    spb::ClusterClock & cluster_clock = *record->mutable_cluster_clock();
+    spb::ClusterClock & cluster_clock = *record.mutable_cluster_clock();
     clocks_t & clocks = *cluster_clock.mutable_partition_clock();
 
     clocks_t::iterator it = clocks.begin();
@@ -126,7 +126,7 @@ void clock_util::prune_record(const spb::PersistedRecord_ptr_t & record,
     }
 
     if(clocks.size() == 0)
-        record->clear_cluster_clock();
+        record.clear_cluster_clock();
 }
 
 clock_util::clock_ancestry clock_util::compare(

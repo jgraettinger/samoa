@@ -1,13 +1,12 @@
 
 #include "samoa/server/command/get_blob.hpp"
 #include "samoa/server/client.hpp"
-#include "samoa/server/cluster_state.hpp"
-#include "samoa/server/context.hpp"
-#include "samoa/server/table_set.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/local_partition.hpp"
+#include "samoa/server/request_state.hpp"
+#include "samoa/server/replication.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
@@ -22,89 +21,80 @@ namespace spb = samoa::core::protobuf;
 
 void get_blob_handler::handle(const client::ptr_t & client)
 {
-    const spb::SamoaRequest & samoa_request = client->get_request();
-    const spb::BlobRequest & blob_request = samoa_request.blob();
+    request_state::ptr_t rstate = request_state::extract(client);
 
-    if(!samoa_request.has_blob())
+    if(!rstate->get_primary_partition())
     {
-        client->send_error(400, "expected blob field");
+        rstate->get_peer_set()->forward_request(rstate);
         return;
     }
 
-    cluster_state::ptr_t cluster_state = \
-        client->get_context()->get_cluster_state();
-
-    table::ptr_t table = cluster_state->get_table_set()->get_table_by_name(
-        blob_request.table_name());
-
-    if(!table)
+    if(rstate->get_quorum_count() == 1)
     {
-        client->send_error(404, "table " + blob_request.table_name());
-        return;
+        // simple case: start a persister read into local-record
+        rstate->get_primary_partition()->get_persister()->get(
+            boost::bind(&get_blob_handler::on_replicated_read,
+                shared_from_this(), _1, rstate),
+            rstate->get_key(),
+            rstate->get_local_record());
     }
-
-    // hash key ring position, & route to responsible partitions
-    uint64_t ring_position = table->ring_position(blob_request.key());
-
-    table::ring_route route = table->route_ring_position(ring_position,
-        cluster_state->get_peer_set());
-
-    if(!route.primary_partition)
+    else
     {
-        if(route.secondary_partitions.empty())
-        {
-            client->send_error(404, "no table partitions");
-            return;
-        }
-
-        // first secondary partition is lowest-latency peer
-        samoa::client::server::ptr_t best_peer =
-            route.secondary_partitions.begin()->second;
-
-        if(best_peer)
-        {
-            cluster_state->get_peer_set()->forward_request(client, best_peer);
-        }
-        else
-        {
-            // no connected server instance: defer to peer_set to create one
-            cluster_state->get_peer_set()->forward_request(client,
-                route.secondary_partitions.begin()->first->get_server_uuid());
-        }
-        return;
+        // quorom read: spawn replication-read requests to peers
+        replication::replicated_read(
+            boost::bind(&get_blob_handler::on_replicated_read,
+                shared_from_this(), _1, rstate),
+            rstate);
     }
-
-    // else, a primary local partition is available
-    route.primary_partition->get_persister()->get(
-        boost::bind(&get_blob_handler::on_get_record,
-            shared_from_this(), _1, client, _2),
-        blob_request.key());
 }
 
-void get_blob_handler::on_get_record(
+void get_blob_handler::on_replicated_read(
     const boost::system::error_code & ec,
-    const client::ptr_t & client,
-    const spb::PersistedRecord_ptr_t & record)
+    const request_state::ptr_t & rstate)
 {
     if(ec)
     {
-        client->send_error(500, ec);
+        rstate->send_client_error(504, ec);
         return;
     }
 
-    spb::SamoaResponse & samoa_response = client->get_response();
-    spb::BlobResponse & blob_response = *samoa_response.mutable_blob();
-
-    if(!record)
+    if(rstate->get_remote_record().has_cluster_clock() ||
+       rstate->get_remote_record().blob_value_size())
     {
-        blob_response.set_success(false);
-        blob_response.mutable_cluster_clock();
-        client->finish_response();
+        // speculatively write the merged remote record; as a side-effect,
+        //  local-record will be populated with the merged result
+        rstate->get_primary_partition()->get_persister()->put(
+            boost::bind(&get_blob_handler::on_retrieve,
+                shared_from_this(), _1, rstate),
+            datamodel::merge_func_t(
+                rstate->get_table()->get_consistent_merge()),
+            rstate->get_key(),
+            rstate->get_remote_record(),
+            rstate->get_local_record());
+    }
+    else
+    {
+        // no peer records exist; fall back to a persister read
+        rstate->get_primary_partition()->get_persister()->get(
+            boost::bind(&get_blob_handler::on_retrieve,
+                shared_from_this(), _1, rstate),
+            rstate->get_key(),
+            rstate->get_local_record());
+    }
+}
+
+void get_blob_handler::on_retrieve(
+    const boost::system::error_code & ec,
+    const request_state::ptr_t & rstate)
+{
+    if(ec)
+    {
+        rstate->send_client_error(504, ec);
         return;
     }
 
-    blob_response.set_success(true);
-    datamodel::blob::send_blob_value(client, *record);
+    datamodel::blob::send_blob_value(rstate->get_client(),
+        rstate->get_local_record());
 }
 
 }

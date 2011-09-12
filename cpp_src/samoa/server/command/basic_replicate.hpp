@@ -3,7 +3,8 @@
 
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
-#include "samoa/core/protobuf/fwd.hpp"
+#include "samoa/datamodel/merge_func.hpp"
+#include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/shared_ptr.hpp>
 
@@ -13,61 +14,33 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-class basic_replicate_handler : public command_handler
+class replicate_handler :
+    public command_handler,
+    public boost::enable_shared_from_this<replicate_handler>
 {
 public:
 
-    typedef boost::shared_ptr<basic_replicate_handler> ptr_t;
+    typedef boost::shared_ptr<replicate_handler> ptr_t;
 
-    basic_replicate_handler()
+    replicate_handler()
     { }
-
-    virtual ~basic_replicate_handler();
 
     void handle(const client_ptr_t &);
 
 protected:
 
-    /*!
-    Performs datatype-specific consistent replication
-    */
-    virtual void replicate(
-        const client_ptr_t &,
-        const table_ptr_t & target_table,
-        const local_partition_ptr_t & target_partition,
-        const std::string & key,
-        const spb::PersistedRecord_ptr_t &) = 0;
+    void on_write(
+        const boost::system::error_code &,
+        const datamodel::merge_result &,
+        const request_state_ptr_t &);
 
-    /*!
-    Helper for derived classes which completes the client response.
+    void on_read(
+        const boost::system::error_code &,
+        bool,
+        const request_state_ptr_t &);
 
-    \arg was_updated Whether this request contained new state.
-
-    \arg still_divergent Whether the request record is out-of-date.
-        Iff true, a replication-operation pushing
-        result_record back to the peer will be initiated.
-
-    \arg stored_record Record currently stored under the request key
-        at the completion of this operation.
-    */
-    void replication_complete(
-        const client_ptr_t &,
-        bool was_updated,
-        bool still_divergent,
-        const spb::PersistedRecord_ptr_t & stored_record);
-
-    /*!
-    Final callback handler for use of derived classes.
-
-    If repl_record != put_record, a merge is assumed to have occurred
-    and the result is send back to the client. Otherwise, an empty
-    response is returned.
-    */
-    void on_put_record(
-        const boost::system::error_code & ec,
-        const client_ptr_t & client,
-        const spb::PersistedRecord_ptr_t & repl_record,
-        const spb::PersistedRecord_ptr_t & put_record);
+    void on_reverse_replication(
+        const boost::system::error_code &);
 };
 
 }

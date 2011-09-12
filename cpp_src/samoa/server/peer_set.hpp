@@ -27,21 +27,19 @@ public:
 
     /*! \brief Forwards the client request to a peer server
     */
-    void forward_request(const client_ptr_t &,
-        const core::uuid & peer_uuid);
-
-    /*! \brief Forwards the client request to a peer server
-    */
-    void forward_request(const client_ptr_t &,
-        const samoa::client::server_ptr_t & peer);
+    void forward_request(const request_state_ptr_t &);
 
 private:
 
-    void on_forwarded_request(const boost::system::error_code &,
-        const client_ptr_t &, samoa::client::server_request_interface &);
+    void on_forwarded_request(
+        const boost::system::error_code &,
+        samoa::client::server_request_interface &,
+        const request_state_ptr_t &);
 
-    void on_forwarded_response(const boost::system::error_code &,
-        const client_ptr_t &, samoa::client::server_response_interface &);
+    void on_forwarded_response(
+        const boost::system::error_code &,
+        samoa::client::server_response_interface &,
+        const request_state_ptr_t &);
 
     typedef std::map<core::uuid, peer_discovery_ptr_t> discovery_tasklets_t;
     discovery_tasklets_t _discovery_tasklets;

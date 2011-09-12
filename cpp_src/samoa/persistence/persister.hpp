@@ -3,6 +3,7 @@
 
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/persistence/record.hpp"
+#include "samoa/datamodel/merge_func.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
@@ -25,18 +26,18 @@ public:
 
     typedef boost::function<void(
         const boost::system::error_code &,
-        const spb::PersistedRecord_ptr_t &)
-    > callback_t;
+        bool) // found
+    > get_callback_t;
+
+    typedef boost::function<void(
+        const boost::system::error_code &,
+        const datamodel::merge_result &)
+    > put_callback_t;
 
     typedef boost::function<void(
         const boost::system::error_code &,
         const std::vector<const record*> &)
     > iterate_callback_t;
-
-    typedef boost::function<spb::PersistedRecord_ptr_t(
-        const spb::PersistedRecord_ptr_t &, // current record
-        const spb::PersistedRecord_ptr_t &) // new record
-    > merge_callback_t;
 
 
     persister();
@@ -47,12 +48,22 @@ public:
     void add_mapped_hash(const std::string & file,
         size_t storage_size, size_t index_size);
 
-    void get(callback_t &&, const std::string & key);
+    void get(
+        get_callback_t &&,
+        const std::string & key, // referenced
+        spb::PersistedRecord &); // referenced
 
-    void put(callback_t &&, merge_callback_t &&, const std::string & key,
-        const spb::PersistedRecord_ptr_t &);
+    void put(
+        put_callback_t &&,
+        datamodel::merge_func_t &&,
+        const std::string & key, //referenced
+        const spb::PersistedRecord &, // referenced, remote record
+        spb::PersistedRecord &); // referenced, local record
 
-    void drop(callback_t &&, const std::string & key);
+    void drop(
+        get_callback_t &&,
+        const std::string & key, // referenced
+        spb::PersistedRecord &); // referenced
 
     /*
     * No preconditions
@@ -84,12 +95,22 @@ public:
 
 private:
     
-    void on_get(const callback_t &, const std::string &);
+    void on_get(
+        const get_callback_t &,
+        const std::string &,
+        spb::PersistedRecord &);
 
-    void on_put(const callback_t &, const merge_callback_t &,
-        const std::string &, spb::PersistedRecord_ptr_t);
+    void on_put(
+        const put_callback_t &,
+        const datamodel::merge_func_t &,
+        const std::string &,
+        const spb::PersistedRecord &,
+        spb::PersistedRecord &);
 
-    void on_drop(const callback_t &, const std::string &);
+    void on_drop(
+        const get_callback_t &,
+        const std::string &,
+        spb::PersistedRecord &);
 
     void on_iterate(const iterate_callback_t &, size_t);
 

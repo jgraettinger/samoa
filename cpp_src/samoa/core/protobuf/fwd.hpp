@@ -8,7 +8,7 @@ namespace core {
 namespace protobuf {
 
 class PersistedRecord;
-typedef boost::shared_ptr<PersistedRecord> PersistedRecord_ptr_t;
+//typedef boost::shared_ptr<PersistedRecord> PersistedRecord_ptr_t;
 
 }
 }

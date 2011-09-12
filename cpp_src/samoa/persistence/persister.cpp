@@ -52,29 +52,46 @@ void persister::add_mapped_hash(
 }
 
 void persister::get(
-    callback_t && callback,
-    const std::string & key)
+    get_callback_t && callback,
+    const std::string & key,
+    spb::PersistedRecord & precord)
 {
-    _strand.post(boost::bind(&persister::on_get, shared_from_this(),
-        std::move(callback), key));
+    _strand.post(
+        boost::bind(&persister::on_get,
+            shared_from_this(),
+            std::move(callback),
+            boost::cref(key),
+            boost::ref(precord)));
 }
 
 void persister::put(
-    callback_t && callback,
-    merge_callback_t && merge_callback,
+    put_callback_t && callback,
+    datamodel::merge_func_t && merge_func,
     const std::string & key,
-    const spb::PersistedRecord_ptr_t & precord)
+    const spb::PersistedRecord & remote_record,
+    spb::PersistedRecord & local_record)
 {
-    _strand.post(boost::bind(&persister::on_put, shared_from_this(),
-        std::move(callback), std::move(merge_callback), key, precord));
+    _strand.post(
+        boost::bind(&persister::on_put,
+            shared_from_this(),
+            std::move(callback),
+            std::move(merge_func),
+            boost::cref(key),
+            boost::cref(remote_record),
+            boost::ref(local_record)));
 }
 
 void persister::drop(
-    callback_t && callback,
-    const std::string & key)
+    get_callback_t && callback,
+    const std::string & key,
+    spb::PersistedRecord & precord)
 {
-    _strand.post(boost::bind(&persister::on_drop, shared_from_this(),
-        std::move(callback), key));
+    _strand.post(
+        boost::bind(&persister::on_drop,
+            shared_from_this(),
+            std::move(callback),
+            boost::cref(key),
+            boost::ref(precord)));
 }
 
 size_t persister::begin_iteration()
@@ -119,8 +136,12 @@ bool persister::iterate(
         return false;
     }
 
-    _strand.post(boost::bind(&persister::on_iterate, shared_from_this(),
-        std::move(callback), ticket));
+    _strand.post(
+        boost::bind(&persister::on_iterate,
+            shared_from_this(),
+            std::move(callback),
+            ticket));
+
     return true;
 }
 
@@ -128,8 +149,9 @@ const rolling_hash & persister::get_layer(size_t index) const
 { return *_layers.at(index); }
 
 void persister::on_get(
-    const callback_t & callback,
-    const std::string & key)
+    const get_callback_t & callback,
+    const std::string & key,
+    spb::PersistedRecord & precord)
 {
     for(size_t i = 0; i != _layers.size(); ++i)
     {
@@ -137,25 +159,28 @@ void persister::on_get(
 
         if(!rec) continue;
 
-        spb::PersistedRecord_ptr_t prec = \
-            boost::make_shared<spb::PersistedRecord>();
-
-        SAMOA_ASSERT(prec->ParseFromArray(
+        SAMOA_ASSERT(precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
-        callback(boost::system::error_code(), prec);
+        callback(boost::system::error_code(), true);
         return;
     }
-    callback(boost::system::error_code(), spb::PersistedRecord_ptr_t());
+    callback(boost::system::error_code(), false);
 }
 
 void persister::on_put(
-    const callback_t & callback,
-    const merge_callback_t & merge_callback,
+    const put_callback_t & put_callback,
+    const datamodel::merge_func_t & merge_func,
     const std::string & key,
-    spb::PersistedRecord_ptr_t new_prec)
+    const spb::PersistedRecord & remote_precord,
+    spb::PersistedRecord & local_precord)
 {
-    unsigned value_length = new_prec->ByteSize();
+    unsigned value_length = remote_precord.ByteSize();
+
+    // garden path result
+    datamodel::merge_result result;
+    result.local_was_updated = true;
+    result.remote_is_stale = false;
 
     // first, find a previous record instance
     size_t cur_layer = 0;
@@ -191,9 +216,9 @@ void persister::on_put(
     if(!_layers[0]->would_fit(key.length(), value_length))
     {
         // won't fit? return error to caller
-        callback(boost::system::errc::make_error_code(
+        put_callback(boost::system::errc::make_error_code(
             boost::system::errc::not_enough_memory),
-            spb::PersistedRecord_ptr_t());
+            result);
         return;
     }
 
@@ -203,29 +228,36 @@ void persister::on_put(
     if(rec)
     {
         // a previous record exists under this key;
-        //  give the caller the opportunity to merge them
+        //  give caller the opportunity to merge them
 
-        spb::PersistedRecord_ptr_t prec =
-            boost::make_shared<spb::PersistedRecord>();
-        SAMOA_ASSERT(prec->ParseFromArray(
+        SAMOA_ASSERT(local_precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
-        new_prec = merge_callback(prec, new_prec);
+        result = merge_func(local_precord, remote_precord);
 
-        if(!new_prec)
+        if(!result.local_was_updated)
         {
-            // caller aborted write
+            // merge-callback aborted the write
+            put_callback(boost::system::error_code(), result);
             return;
         }
-        value_length = new_prec->ByteSize();
+
+        value_length = local_precord.ByteSize();
+        SAMOA_ASSERT(value_length <= new_rec->value_length());
+
+        local_precord.SerializeWithCachedSizesToArray(
+            reinterpret_cast<google::protobuf::uint8*>(
+                new_rec->value_begin()));
+    }
+    else
+    {
+        // no existing record; directly serialize remote_precord
+        local_precord.SerializeWithCachedSizesToArray(
+            reinterpret_cast<google::protobuf::uint8*>(
+                new_rec->value_begin()));
     }
 
-    SAMOA_ASSERT(value_length <= new_rec->value_length());
-
-    new_prec->SerializeWithCachedSizesToArray(
-        reinterpret_cast<google::protobuf::uint8*>(
-            new_rec->value_begin()));
-
+    // trim & commit serialized record
     new_rec->trim_value_length(value_length);
 
     _layers[0]->commit_record(root_hint);
@@ -236,12 +268,13 @@ void persister::on_put(
         _layers[cur_layer]->mark_for_deletion(key.begin(), key.end(), cur_hint);
     }
 
-    callback(boost::system::error_code(), new_prec);
+    put_callback(boost::system::error_code(), result);
 }
 
 void persister::on_drop(
-    const callback_t & callback,
-    const std::string & key)
+    const get_callback_t & callback,
+    const std::string & key,
+    spb::PersistedRecord & precord)
 {
     for(size_t i = 0; i != _layers.size(); ++i)
     {
@@ -251,20 +284,16 @@ void persister::on_drop(
 
         if(!rec) continue;
 
-        spb::PersistedRecord_ptr_t prec = \
-            boost::make_shared<spb::PersistedRecord>();
-
-        SAMOA_ASSERT(prec->ParseFromArray(
+        SAMOA_ASSERT(precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
         layer.mark_for_deletion(key.begin(), key.end(), hint);
         make_room(0, 0, 0, 0, 0);
 
-        callback(boost::system::error_code(), prec);
+        callback(boost::system::error_code(), true);
         return;
     }
-    callback(boost::system::error_code(),
-        spb::PersistedRecord_ptr_t());
+    callback(boost::system::error_code(), false);
 }
 
 void persister::on_iterate(

@@ -1,12 +1,25 @@
+#ifndef SAMOA_SERVER_REQUEST_STATE_HPP
+#define SAMOA_SERVER_REQUEST_STATE_HPP
+
+#include "samoa/server/fwd.hpp"
+#include "samoa/server/partition_peer.hpp"
+#include "samoa/client/fwd.hpp"
+#include "samoa/core/protobuf/samoa.pb.h"
+#include "samoa/core/protobuf_helpers.hpp"
+#include "samoa/core/proactor.hpp"
+
+namespace samoa {
+namespace server {
+
+namespace spb = samoa::core::protobuf;
 
 class request_state
 {
 public:
 
-    typedef boost::shared_ptr<request_state> ptr_t;
+    // should also validate cluster-clock?
 
-    typedef std::list<partition_ptr_t> peer_partitions_t;
-    typedef std::list<samoa::client::server::ptr_t> peer_servers_t;
+    typedef boost::shared_ptr<request_state> ptr_t;
 
     const client_ptr_t & get_client()
     { return _client; }
@@ -23,11 +36,8 @@ public:
     const local_partition_ptr_t & get_primary_partition()
     { return _primary_partition; }
 
-    const peer_partitions_t & get_peer_partitions()
-    { return _peer_partitions; }
-
-    const peer_servers_t & get_peer_servers()
-    { return _peer_servers; } 
+    const partition_peers_t & get_partition_peers()
+    { return _partition_peers; }
 
     spb::PersistedRecord & get_local_record()
     { return _local_record; }
@@ -35,8 +45,8 @@ public:
     spb::PersistedRecord & get_remote_record()
     { return _remote_record; }
 
-    unsigned get_quorom_count()
-    { return _quorom_count; }
+    unsigned get_quorum_count()
+    { return _quorum_count; }
 
     unsigned get_peer_error_count()
     { return _error_count; }
@@ -53,7 +63,35 @@ public:
     const core::io_service_ptr_t & get_io_service()
     { return _io_srv; }
 
-    static ptr_t extract_request_state(const client_ptr_t &);
+    static ptr_t extract(const client_ptr_t &);
+
+    /*!
+    To be called on failed peer replication.
+    
+    Increments peer_error, and returns true iff this increment
+    makes it impossible to meet quorum.
+    */
+    bool replication_failure();
+
+    /*!
+    To be called on successful peer replication.
+
+    Increments peer_success, and returns true iff this increment
+    caused us to meet quorum.
+    */
+    bool replication_success();;
+
+    /*!
+    \returns True if either replication_failure() or replication_success()
+        have returned true (eg, replication has already failed or succeeded)
+    */
+    bool replication_complete();
+
+    void send_client_error(unsigned code, const std::string & message);
+    
+    void send_client_error(unsigned code, const boost::system::error_code & ec);
+
+    void finish_client_response();
 
 private:
 
@@ -63,13 +101,12 @@ private:
     std::string _key;
 
     local_partition_ptr_t _primary_partition;
-    peer_partitions_t _peer_partitions;
-    peer_servers_t _peer_servers;
+    partition_peers_t _partition_peers;
 
     spb::PersistedRecord _local_record;
     spb::PersistedRecord _remote_record;
 
-    unsigned _quorom_count;
+    unsigned _quorum_count;
     unsigned _error_count;
     unsigned _success_count;
 
@@ -78,6 +115,11 @@ private:
 
     core::io_service_ptr_t _io_srv;
 };
+
+}
+}
+
+#endif
 
 /*
 

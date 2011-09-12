@@ -1,8 +1,8 @@
 #include <boost/python.hpp>
-#include "samoa/persistence/data_type.hpp"
+#include "samoa/datamodel/data_type.hpp"
 
 namespace samoa {
-namespace persistence {
+namespace datamodel {
 
 namespace bpl = boost::python;
 

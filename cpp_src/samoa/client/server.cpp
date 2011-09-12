@@ -158,6 +158,15 @@ void server_request_interface::finish_request(
     }
 }
 
+void server_request_interface::abort_request()
+{
+    SAMOA_ASSERT(!_srv->has_queued_writes());
+    SAMOA_ASSERT(!_srv->_start_request_called);
+
+    _srv->get_io_service()->dispatch(boost::bind(
+        &server::on_request_abort, _srv));
+}
+
 server_request_interface server_request_interface::null_instance()
 { return server_request_interface((server_ptr_t())); }
 
@@ -281,6 +290,30 @@ void server::on_request_written(const boost::system::error_code & ec,
             boost::posix_time::milliseconds(_timeout_ms));
         _timeout_timer.async_wait(boost::bind(
             &server::on_timeout, shared_from_this(), _1));
+    }
+
+    _start_request_called = false;
+
+    // start another request, if any are pending
+    if(!_request_queue.empty())
+    {
+        request_callback_t callback = _request_queue.front();
+        _request_queue.pop_front();
+
+        get_io_service()->post(boost::bind(callback,
+            boost::system::error_code(),
+            request_interface(shared_from_this())));
+    }
+    else
+        _in_request = false;
+}
+
+void server::on_request_abort()
+{
+    if(_error)
+    {
+        // a connection error is already set; ignore
+        return;
     }
 
     _start_request_called = false;

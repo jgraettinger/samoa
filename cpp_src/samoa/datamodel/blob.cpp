@@ -18,7 +18,7 @@ void blob::send_blob_value(
 {
     spb::SamoaResponse & samoa_response = client->get_response();
 
-    samoa_response.mutable_blob()->mutable_cluster_clock()->CopyFrom(
+    samoa_response.mutable_cluster_clock()->CopyFrom(
         record.cluster_clock());
 
     for(auto val_it = record.blob_value().begin();

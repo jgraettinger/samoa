@@ -22,7 +22,7 @@ enum CommandType {
 
     TEST = 12;
 
-    REPLICATE_BLOB = 13;
+    REPLICATE = 13;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -129,14 +129,9 @@ message AlterTableRequest {
     optional uint32 consistency_horizon = 4;
 };
 
-message DropTableRequest {
-    required string table_uuid = 1;
-};
-
 // Partition Manipulation
 
 message CreatePartitionRequest {
-    required string table_uuid = 1;
     required uint64 ring_position = 2;
 
     repeated ClusterState.Table.Partition.RingLayer ring_layer = 3;
@@ -144,11 +139,6 @@ message CreatePartitionRequest {
 
 message CreatePartitionResponse {
     required string partition_uuid = 1;
-};
-
-message DropPartitionRequest {
-    required string table_uuid = 1;
-    required string partition_uuid = 2;
 };
 
 // *INTERNAL* Datamodel serialization
@@ -172,46 +162,6 @@ message PersistedRecord
     repeated bytes blob_value = 2;
 };
 
-// BLOB datatype operations
-
-message BlobRequest
-{
-    required string table_name = 1;
-    optional bytes  key = 2;
-    optional ClusterClock cluster_clock = 4;
-    optional uint32 quorum = 5 [default = 1];
-};
-
-message BlobResponse
-{
-    required bool success = 1;
-    optional ClusterClock cluster_clock = 2;
-};
-
-// Replication operation
-
-message ReplicationRequest
-{
-    required bytes table_uuid = 1;
-    required bytes key = 3;
-    required bytes source_partition_uuid = 2;
-    required bytes target_partition_uuid = 4;
-};
-
-message ReplicationResponse
-{
-    // true iff the replication captured new state
-    // false iff the replication was redundant
-    //   (eg, no peer state change occurred)
-    required bool updated = 1;
-
-    // true iff the peer server has more recent
-    //  state than that captured by this replication;
-    //  the peer server will initiate an out-of-band
-    //  replication request to synchronize
-    required bool divergent = 2;
-};
-
 // Union container type
 
 message SamoaRequest {
@@ -219,24 +169,29 @@ message SamoaRequest {
     required CommandType type = 1;
 
     // whether the client will be closing the connection after this request
-    optional bool closing = 3 [default = false];
+    optional bool closing = 2 [default = false];
 
     // the byte-lengths of any data blocks accompanying the request.
     //  data blocks directly follow the SamoaRequest
-    repeated uint32 data_block_length = 2;
+    repeated uint32 data_block_length = 3;
 
-    optional ClusterState     cluster_state = 7;
+    optional ClusterClock cluster_clock = 4;
 
-    optional CreateTableRequest create_table = 8;
-    optional AlterTableRequest  alter_table = 9;
-    optional DropTableRequest   drop_table = 10;
+    optional bytes table_uuid = 6;
+    optional string table_name = 7;
 
-    optional CreatePartitionRequest create_partition = 11;
-    optional DropPartitionRequest   drop_partition = 12;
+    optional bytes key = 5;
 
-    optional ReplicationRequest replication = 13;
+    optional bytes partition_uuid = 8;
+    repeated bytes peer_partition_uuid = 9;
 
-    optional BlobRequest blob = 14;
+    optional uint32 quorum = 10;
+
+    optional ClusterState     cluster_state = 11;
+
+    optional CreateTableRequest create_table = 12;
+    optional AlterTableRequest  alter_table = 13;
+    optional CreatePartitionRequest create_partition = 14;
 };
 
 message SamoaResponse {
@@ -250,15 +205,14 @@ message SamoaResponse {
     //  data blocks directly follow the SamoaResponse
     repeated uint32 data_block_length = 3;
 
-    optional Error         error = 4;
-    optional ClusterState  cluster_state = 5;
+    optional bool success = 4;
 
-    optional CreateTableResponse create_table = 6;
+    optional bytes table_uuid = 5;
+    optional bytes partition_uuid = 6;
 
-    optional CreatePartitionResponse create_partition = 7;
+    optional ClusterClock cluster_clock = 7;
 
-    optional ReplicationResponse replication = 13;
-
-    optional BlobResponse blob = 8;
+    optional Error         error = 8;
+    optional ClusterState  cluster_state = 9;
 };
 

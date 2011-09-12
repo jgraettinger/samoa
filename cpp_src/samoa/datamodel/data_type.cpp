@@ -1,8 +1,8 @@
-#include "samoa/persistence/data_type.hpp"
+#include "samoa/datamodel/data_type.hpp"
 #include "samoa/error.hpp"
 
 namespace samoa {
-namespace persistence {
+namespace datamodel {
 
 data_type data_type_from_string(const std::string & s)
 {

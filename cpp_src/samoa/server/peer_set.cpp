@@ -1,8 +1,10 @@
 
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/peer_discovery.hpp"
-#include "samoa/server/context.hpp"
+#include "samoa/server/request_state.hpp"
+#include "samoa/server/partition.hpp"
 #include "samoa/server/client.hpp"
+#include "samoa/server/context.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -206,69 +208,85 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
     }
 }
 
-void peer_set::forward_request(const client::ptr_t & client,
-    const core::uuid & peer_uuid)
+void peer_set::forward_request(const request_state::ptr_t & rstate)
 {
-    schedule_request(
-        boost::bind(&peer_set::on_forwarded_request,
-            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-            _1, client, _2),
-        peer_uuid);
-}
+    SAMOA_ASSERT(!rstate->get_primary_partition());
 
-void peer_set::forward_request(const client::ptr_t & client,
-    const samoa::client::server_ptr_t & peer)
-{
-    peer->schedule_request(
-        boost::bind(&peer_set::on_forwarded_request,
-            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-            _1, client, _2));
-}
-
-void peer_set::on_forwarded_request(const boost::system::error_code & ec,
-    const client::ptr_t & client,
-    samoa::client::server_request_interface & server)
-{
-    if(ec)
+    if(rstate->get_partition_peers().empty())
     {
-        client->send_error(500, ec);
+        rstate->send_client_error(404, "no partitions for forwarding");
         return;
     }
 
-    server.get_message().CopyFrom(client->get_request());
+    // first secondary partition should be lowest-latency peer
+    const partition_peer & best_peer =
+        *rstate->get_partition_peers().begin();
+
+    if(best_peer.server)
+    {
+        best_peer.server->schedule_request(
+            boost::bind(&peer_set::on_forwarded_request,
+                boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+                _1, _2, rstate));
+    }
+    else
+    {
+        // no connected server instance: defer to server_pool to create one
+        schedule_request(
+            boost::bind(&peer_set::on_forwarded_request,
+                boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+                _1, _2, rstate),
+            best_peer.partition->get_server_uuid());
+    }
+}
+
+void peer_set::on_forwarded_request(
+    const boost::system::error_code & ec,
+    samoa::client::server_request_interface & server,
+    const request_state::ptr_t & rstate)
+{
+    if(ec)
+    {
+        rstate->send_client_error(500, ec);
+        return;
+    }
+
+    server.get_message().CopyFrom(rstate->get_client()->get_request());
     server.start_request();
 
-    for(auto it = client->get_request_data_blocks().begin();
-        it != client->get_request_data_blocks().end(); ++it)
+    for(auto it = rstate->get_client()->get_request_data_blocks().begin();
+        it != rstate->get_client()->get_request_data_blocks().end(); ++it)
     {
         server.write_interface().queue_write(*it);
     }
 
-    server.finish_request(boost::bind(&peer_set::on_forwarded_response,
-        boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-        _1, client, _2));
+    server.finish_request(
+        boost::bind(&peer_set::on_forwarded_response,
+            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+            _1, _2, rstate));
 }
 
-void peer_set::on_forwarded_response(const boost::system::error_code & ec,
-    const client::ptr_t & client,
-    samoa::client::server_response_interface & server)
+void peer_set::on_forwarded_response(
+    const boost::system::error_code & ec,
+    samoa::client::server_response_interface & server,
+    const request_state::ptr_t & rstate)
 {
     if(ec)
     {
-        client->send_error(500, ec);
+        rstate->send_client_error(500, ec);
         return;
     }
 
-    client->get_response().CopyFrom(server.get_message());
-    client->start_response();
+    rstate->get_client()->get_response().CopyFrom(server.get_message());
+    rstate->get_client()->start_response();
 
     for(auto it = server.get_response_data_blocks().begin();
         it != server.get_response_data_blocks().end(); ++it)
     {
-        client->write_interface().queue_write(*it);
+        rstate->get_client()->write_interface().queue_write(*it);
     }
 
-    client->finish_response();
+    rstate->finish_client_response();
     server.finish_response();
 }
 

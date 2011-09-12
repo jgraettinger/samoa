@@ -3,6 +3,7 @@
 #include "samoa/persistence/persister.hpp"
 #include "samoa/persistence/rolling_hash.hpp"
 #include "samoa/persistence/record.hpp"
+#include "samoa/datamodel/merge_func.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/future.hpp"
 #include <stdexcept>
@@ -13,12 +14,17 @@ namespace persistence {
 namespace bpl = boost::python;
 using namespace pysamoa;
 
+typedef boost::shared_ptr<std::string> str_ptr_t;
+typedef boost::shared_ptr<spb::PersistedRecord> prec_ptr_t;
+
 /////////// get support
 
-void py_on_get(
+void py_on_get_drop(
     const future::ptr_t & future,
     const boost::system::error_code & ec,
-    const spb::PersistedRecord_ptr_t & record)
+    bool found,
+    const str_ptr_t & key,
+    const prec_ptr_t & record)
 {
     python_scoped_lock block;
 
@@ -28,17 +34,30 @@ void py_on_get(
         return;
     }
 
-    future->on_result(bpl::object(record));
+    if(found)
+    {
+        future->on_result(bpl::object(record));
+    }
+    else
+    {
+        future->on_result(bpl::object(prec_ptr_t()));
+    }
 }
 
 future::ptr_t py_get(
     persister & p,
-    const std::string & key)
+    const bpl::str & py_key)
 {
     future::ptr_t f(boost::make_shared<future>());
-    f->set_reenter_via_post();
 
-    p.get(boost::bind(py_on_get, f, _1, _2), key);
+    const char * buf = PyString_AS_STRING(py_key.ptr());
+    str_ptr_t key = boost::make_shared<std::string>(
+        buf, buf + PyString_GET_SIZE(py_key.ptr()));
+
+    prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
+
+    p.get(boost::bind(py_on_get_drop, f, _1, _2, key, local_record),
+        *key, *local_record);
     return f; 
 }
 
@@ -47,7 +66,9 @@ future::ptr_t py_get(
 void py_on_put(
     const future::ptr_t & future,
     const boost::system::error_code & ec,
-    const spb::PersistedRecord_ptr_t & record)
+    const datamodel::merge_result & result,
+    const str_ptr_t & key,
+    const prec_ptr_t & local_record)
 {
     pysamoa::python_scoped_lock block;
 
@@ -57,71 +78,75 @@ void py_on_put(
         return;
     }
 
-    future->on_result(bpl::object(record));
+    future->on_result(bpl::object(result));
     return;
 }
 
-spb::PersistedRecord_ptr_t py_on_merge(
+datamodel::merge_result py_on_merge(
     const bpl::object & merge_callable,
-    const spb::PersistedRecord_ptr_t & cur_rec,
-    const spb::PersistedRecord_ptr_t & new_rec)
+    spb::PersistedRecord & local_record,
+    const spb::PersistedRecord & remote_record)
 {
     pysamoa::python_scoped_lock block;
 
-    bpl::object result = merge_callable(cur_rec, new_rec);
-    return bpl::extract<spb::PersistedRecord_ptr_t>(result);
+    bpl::reference_existing_object::apply<
+        spb::PersistedRecord &>::type convert;
+
+    bpl::reference_existing_object::apply<
+        const spb::PersistedRecord &>::type const_convert;
+
+    return bpl::extract<datamodel::merge_result>(
+        merge_callable(
+            bpl::handle<>(convert(local_record)),
+            bpl::handle<>(const_convert(remote_record))));
 }
 
 future::ptr_t py_put(
     persister & p,
     const bpl::object & merge_callable,
-    const std::string & key,
-    const spb::PersistedRecord_ptr_t & new_record)
+    const bpl::str & py_key,
+    const prec_ptr_t & remote_record)
 {
     if(!PyCallable_Check(merge_callable.ptr()))
     {
         throw std::invalid_argument(
-            "persister::put(merge_callback, key, new_record): "\
+            "persister::put(merge_callback, key, remote_record): "\
             "argument 'merge_callback' isn't a callable");
     }
 
     future::ptr_t f(boost::make_shared<future>());
     f->set_reenter_via_post();
 
+    const char * buf = PyString_AS_STRING(py_key.ptr());
+    str_ptr_t key = boost::make_shared<std::string>(
+        buf, buf + PyString_GET_SIZE(py_key.ptr()));
+
+    prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
+
     p.put(
-        boost::bind(&py_on_put, f, _1, _2),
+        boost::bind(&py_on_put, f, _1, _2, key, local_record),
         boost::bind(&py_on_merge, merge_callable, _1, _2),
-        key, new_record);
+        *key, *remote_record, *local_record);
 
     return f; 
 }
 
 /////////// drop support
 
-void py_on_drop(
-    const future::ptr_t & future,
-    const boost::system::error_code & ec,
-    const spb::PersistedRecord_ptr_t & record)
-{
-    pysamoa::python_scoped_lock block;
-
-    if(ec)
-    {
-        future->on_error(ec);
-        return;
-    }
-
-    future->on_result(bpl::object(record));
-}
-
 future::ptr_t py_drop(
     persister & p,
-    const std::string & key)
+    const bpl::str & py_key)
 {
     future::ptr_t f(boost::make_shared<future>());
-    f->set_reenter_via_post();
 
-    p.drop(boost::bind(&py_on_drop, f, _1, _2), key);
+    const char * buf = PyString_AS_STRING(py_key.ptr());
+    str_ptr_t key = boost::make_shared<std::string>(
+        buf, buf + PyString_GET_SIZE(py_key.ptr()));
+
+    prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
+
+    p.drop(boost::bind(&py_on_get_drop, f, _1, _2, key, local_record),
+        *key, *local_record);
     return f; 
 }
 
@@ -185,6 +210,8 @@ void make_persister_bindings()
         .def("get_layer_count", &persister::get_layer_count)
         .def("get_layer", &persister::get_layer,
             bpl::return_value_policy<bpl::reference_existing_object>());
+
+    boost::python::register_ptr_to_python<prec_ptr_t>();
 }
 
 }

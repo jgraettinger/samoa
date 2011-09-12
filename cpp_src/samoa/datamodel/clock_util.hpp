@@ -19,7 +19,7 @@ public:
 
     static bool validate(const spb::ClusterClock &);
 
-    static void prune_record(const spb::PersistedRecord_ptr_t &,
+    static void prune_record(spb::PersistedRecord &,
         unsigned consistency_horizon);
 
     enum clock_ancestry
