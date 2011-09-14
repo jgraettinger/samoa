@@ -106,6 +106,8 @@ private:
 
     ring_t        _ring;
     uuid_index_t  _index;
+
+    datamodel::merge_func_t _consistent_merge;
 };
 
 }

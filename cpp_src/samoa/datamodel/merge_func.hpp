@@ -15,6 +15,11 @@ struct merge_result
         remote_is_stale = false;
     }
 
+    merge_result(bool local_was_updated, bool remote_is_stale)
+     :  local_was_updated(local_was_updated),
+        remote_is_stale(remote_is_stale)
+    { }
+
     bool local_was_updated;
     bool remote_is_stale;
 };

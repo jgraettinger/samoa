@@ -6,6 +6,7 @@ import uuid
 from samoa.core.protobuf import PersistedRecord
 from samoa.core.proactor import Proactor
 from samoa.persistence.persister import Persister
+from samoa.datamodel.merge_func import MergeResult
 
 class TestPersister(unittest.TestCase):
 
@@ -22,7 +23,7 @@ class TestPersister(unittest.TestCase):
             expected = PersistedRecord()
             expected.add_blob_value('bar')
 
-            def merge1(cur_rec, new_rec):
+            def merge1(local_record, remote_record):
                 # should not be called
                 self.assertFalse(True)
 
@@ -32,10 +33,15 @@ class TestPersister(unittest.TestCase):
             self.assertEquals('bar',
                 (yield self.persister.get('foo')).blob_value[0])
 
-            def merge2(cur_rec, new_rec):
-                self.assertEquals(cur_rec.blob_value[0], 'bar')
-                self.assertEquals(new_rec.blob_value[0], 'baz')
-                return new_rec
+            def merge2(local_record, remote_record):
+                self.assertEquals(local_record.blob_value[0], 'bar')
+                self.assertEquals(remote_record.blob_value[0], 'baz')
+
+                local_record.CopyFrom(remote_record)
+
+                return MergeResult(
+                    local_was_updated = True,
+                    remote_is_stale = False)
 
             expected.blob_value[0] = 'baz'
             self.assertTrue(
@@ -67,9 +73,13 @@ class TestPersister(unittest.TestCase):
 
                 choice = random.choice(('put', 'get', 'drop'))
 
-                def merge(cur_rec, new_rec):
-                    self.assertEquals(cur_rec.blob_value[0], value)
-                    return new_rec
+                def merge(local_record, remote_record):
+                    self.assertEquals(local_record.blob_value[0], value)
+                    local_record.CopyFrom(remote_record)
+
+                    return MergeResult(
+                        local_was_updated = True,
+                        remote_is_stale = False)
 
                 if choice == 'put':
 

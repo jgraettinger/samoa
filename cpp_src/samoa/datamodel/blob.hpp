@@ -3,8 +3,7 @@
 
 #include "samoa/persistence/record.hpp"
 #include "samoa/server/fwd.hpp"
-#include "samoa/datamodel/partition_clock.hpp"
-#include "samoa/datamodel/packed_unsigned.hpp"
+#include "samoa/datamodel/merge_func.hpp"
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include <string>
@@ -12,16 +11,8 @@
 namespace samoa {
 namespace datamodel {
 
-/*! 
+namespace spb = samoa::core::protobuf;
 
-Blob is serialized as:
-
-    - cluster_clock
-    - repeated:
-      - unsigned (blob length)
-      - repeated byte (blob value)
-
-*/
 class blob
 {
 public:
@@ -29,6 +20,11 @@ public:
     static void send_blob_value(
         const server::client_ptr_t &,
         const samoa::core::protobuf::PersistedRecord &);
+
+    static merge_result consistent_merge(
+        spb::PersistedRecord & local_record,
+        const spb::PersistedRecord & remote_record,
+        const server::table & table);
 };
 
 }

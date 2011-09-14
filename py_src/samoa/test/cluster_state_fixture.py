@@ -4,7 +4,7 @@ import socket
 
 from samoa.core.uuid import UUID
 from samoa.core import protobuf as pb
-from samoa.persistence.data_type import DataType
+from samoa.datamodel.data_type import DataType
 
 class ClusterStateFixture(object):
 

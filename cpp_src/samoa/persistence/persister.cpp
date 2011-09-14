@@ -252,7 +252,7 @@ void persister::on_put(
     else
     {
         // no existing record; directly serialize remote_precord
-        local_precord.SerializeWithCachedSizesToArray(
+        remote_precord.SerializeWithCachedSizesToArray(
             reinterpret_cast<google::protobuf::uint8*>(
                 new_rec->value_begin()));
     }

@@ -6,7 +6,7 @@ import getty
 from samoa.core import protobuf
 from samoa.core.uuid import UUID
 from samoa.server.command_handler import CommandHandler
-from samoa.persistence.data_type import DataType
+from samoa.datamodel.data_type import DataType
 
 class CreateTableHandler(CommandHandler):
 

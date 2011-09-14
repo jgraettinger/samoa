@@ -1,6 +1,8 @@
 
 #include "samoa/datamodel/blob.hpp"
+#include "samoa/datamodel/clock_util.hpp"
 #include "samoa/server/client.hpp"
+#include "samoa/server/table.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/error.hpp"
 #include <boost/iostreams/device/array.hpp>
@@ -37,6 +39,67 @@ void blob::send_blob_value(
     }
 
     client->finish_response();
+}
+
+merge_result blob::consistent_merge(
+    spb::PersistedRecord & local_record,
+    const spb::PersistedRecord & remote_record,
+    const server::table & table)
+{
+    merge_result result;
+    
+    // either record may not actually have a cluster_clock,
+    //  in which case it uses the default (empty) instance
+    clock_util::clock_ancestry ancestry = \
+        clock_util::compare(
+            local_record.cluster_clock(), remote_record.cluster_clock(),
+            table.get_consistency_horizon());
+
+    if(ancestry == clock_util::EQUAL)
+    {
+        // no change
+        result.local_was_updated = false;
+        result.remote_is_stale = false;
+        return result;
+    }
+    else if(ancestry == clock_util::MORE_RECENT)
+    {
+        // local is more recent
+        result.local_was_updated = false;
+        result.remote_is_stale = true;
+        return result;
+    }
+    else if(ancestry == clock_util::LESS_RECENT)
+    {
+        // remote is more recent; fully replace local
+        local_record.CopyFrom(remote_record);
+
+        result.local_was_updated = true;
+        result.remote_is_stale = false;
+        return result;
+    }
+
+    SAMOA_ASSERT(ancestry == clock_util::DIVERGE);
+
+    // move local_record's clock out
+    std::unique_ptr<spb::ClusterClock> local_clock(
+        local_record.release_cluster_clock());
+
+    // merge local & remote clocks directly into local_record's clock
+    clock_util::compare(
+        *local_clock.get(), remote_record.cluster_clock(),
+        table.get_consistency_horizon(),
+        local_record.mutable_cluster_clock());
+
+    // merge remote_record's blob_value into local_record
+    for(int i = 0; i != remote_record.blob_value_size(); ++i)
+    {
+        local_record.add_blob_value(remote_record.blob_value(i));
+    }
+
+    result.local_was_updated = true;
+    result.remote_is_stale = true;
+    return result;
 }
 
 }

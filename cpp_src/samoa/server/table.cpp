@@ -5,11 +5,13 @@
 #include "samoa/server/partition.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/peer_set.hpp"
+#include "samoa/datamodel/blob.hpp"
 #include "samoa/core/tasklet_group.hpp"
 #include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
+#include <boost/bind.hpp>
 #include <ctime>
 
 namespace samoa {
@@ -113,6 +115,12 @@ table::table(const spb::ClusterState::Table & ptable,
         SAMOA_ASSERT(_index.insert(std::make_pair(p_uuid, part)).second);
         _ring.push_back(part);
     }
+
+    if(_data_type == datamodel::BLOB_TYPE)
+    {
+        _consistent_merge = boost::bind(&datamodel::blob::consistent_merge,
+            _1, _2, boost::cref(*this)); 
+    }
 }
 
 table::~table()
@@ -148,6 +156,9 @@ partition::ptr_t table::get_partition(const core::uuid & uuid) const
     }
     return result;
 }
+
+const datamodel::merge_func_t & table::get_consistent_merge() const
+{ return _consistent_merge; }
 
 uint64_t table::ring_position(const std::string & key) const
 {

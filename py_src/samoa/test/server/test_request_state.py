@@ -2,18 +2,16 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType, PersistedRecord
+from samoa.core.protobuf import CommandType, SamoaRequest
 from samoa.core.uuid import UUID
-from samoa.core.proactor import Proactor
-from samoa.client.server import Server
-from samoa.server.listener import Listener
-from samoa.server.command.basic_replicate import BasicReplicateHandler
+from samoa.server.context import Context
+from samoa.server.request_state import RequestState
 
 from samoa.test.module import TestModule
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
-class TestBasicReplicate(unittest.TestCase):
+class TestRequestState(unittest.TestCase):
 
     def test_basic(self):
 
