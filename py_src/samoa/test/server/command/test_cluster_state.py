@@ -2,7 +2,7 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType
+from samoa.core.protobuf import CommandType, ClusterState
 from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
@@ -43,66 +43,42 @@ class TestClusterState(unittest.TestCase):
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
 
+            response_state = ClusterState()
+            response_state.ParseFromBytes(
+                response.get_response_data_blocks()[0])
+
+            response.finish_response()
+
             # verify state reflects the local server
-            result_table = response.get_message().cluster_state.table[0]
+            result_table = response_state.table[0]
             self.assertEquals(result_table.uuid, test_table)
             self.assertEquals(len(result_table.partition), 1)
             self.assertEquals(result_table.partition[0].uuid,
                 test_local_part.uuid)
 
-            response.finish_response()
-
             # issue cluster-state request _with_ peer request state
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.CLUSTER_STATE)
-            request.get_message().mutable_cluster_state().CopyFrom(
-                peer_fixture.state)
+
+            peer_state_str = peer_fixture.state.SerializeToBytes()
+            request.get_message().add_data_block_length(len(peer_state_str))
+            request.start_request()
+
+            request.write_interface().queue_write(peer_state_str)
 
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
 
+            response_state = ClusterState()
+            response_state.ParseFromBytes(
+                response.get_response_data_blocks()[0])
+
+            response.finish_response()
+
             # verify state reflects merging of peer & local server
-            result_table = response.get_message().cluster_state.table[0]
+            result_table = response_state.table[0]
             self.assertEquals(result_table.uuid, test_table)
             self.assertEquals(len(result_table.partition), 2)
-
-            response.finish_response()
-
-            # cleanup
-            context.get_tasklet_group().cancel_group()
-            yield
-
-        Proactor.get_proactor().run_test(test)
-
-    def test_error_cases(self):
-
-        test_table = self.fixture.add_table().uuid
-        peer_fixture = self.fixture.clone_peer()
-
-        # local server & peer share common table, but divergent partitions
-        test_local_part = self.fixture.add_local_partition(test_table)
-        test_peer_part = peer_fixture.add_local_partition(test_table)
-
-        listener = self.injector.get_instance(Listener)
-        context = listener.get_context()
-
-        def test():
-
-            server = yield Server.connect_to(
-                listener.get_address(), listener.get_port())
-
-            # issue cluster-state request with malformed peer state 
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.CLUSTER_STATE)
-            request.get_message().mutable_cluster_state().CopyFrom(
-                peer_fixture.state)
-
-            request.get_message().cluster_state.table[0].set_uuid(
-                'invalid-uuid')
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 406)
-            response.finish_response()
 
             # cleanup
             context.get_tasklet_group().cancel_group()

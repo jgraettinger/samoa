@@ -1,7 +1,7 @@
 
 #include <boost/python.hpp>
 #include "samoa/server/command_handler.hpp"
-#include "samoa/server/client.hpp"
+#include "samoa/server/request_state.hpp"
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
@@ -19,7 +19,7 @@ public:
 
     typedef boost::shared_ptr<py_command_handler> ptr_t;
 
-    void handle(const client::ptr_t & client)
+    void handle(const request_state::ptr_t & rstate)
     {
         pysamoa::python_scoped_lock block;
 
@@ -29,14 +29,14 @@ public:
             SAMOA_ASSERT(_handler);
         }
 
-        bpl::object result = _handler(client);
+        bpl::object result = _handler(rstate);
 
         // is result a generator?
         if(PyGen_Check(result.ptr()))
         {
             // start a new coroutine
             pysamoa::coroutine::ptr_t coro(new pysamoa::coroutine(
-                result, client->get_io_service()));
+                result, rstate->get_io_service()));
             coro->next();
         }
         else if(result.ptr() != Py_None)

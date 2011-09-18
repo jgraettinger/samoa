@@ -17,26 +17,45 @@ class request_state
 {
 public:
 
-    // should also validate cluster-clock?
-
     typedef boost::shared_ptr<request_state> ptr_t;
 
-    const client_ptr_t & get_client()
+    request_state(const server::client_ptr_t &);
+
+    bool load_from_samoa_request(const context_ptr_t &);
+
+    // spb::SamoaRequest representation
+    core::protobuf::SamoaRequest & get_samoa_request()
+    { return _samoa_request; }
+
+    // Response currently being written for return to client
+    //   Note: the command handler invoked to managed this client request
+    //   has sole rights to mutation of the response object until
+    //   start_response() or finish_response() is called
+    core::protobuf::SamoaResponse & get_samoa_response()
+    { return _samoa_response; }
+
+    std::vector<core::buffer_regions_t> & get_request_data_blocks()
+    { return _data_blocks; }
+
+    const client_ptr_t & get_client() const
     { return _client; }
 
-    const peer_set_ptr_t & get_peer_set()
+    const context_ptr_t & get_context() const
+    { return _context; }
+
+    const peer_set_ptr_t & get_peer_set() const
     { return _peer_set; }
 
-    const table_ptr_t & get_table()
+    const table_ptr_t & get_table() const
     { return _table; }
 
-    const std::string & get_key()
+    const std::string & get_key() const
     { return _key; }
 
-    const local_partition_ptr_t & get_primary_partition()
+    const local_partition_ptr_t & get_primary_partition() const
     { return _primary_partition; }
 
-    const partition_peers_t & get_partition_peers()
+    const partition_peers_t & get_partition_peers() const
     { return _partition_peers; }
 
     spb::PersistedRecord & get_local_record()
@@ -45,25 +64,17 @@ public:
     spb::PersistedRecord & get_remote_record()
     { return _remote_record; }
 
-    unsigned get_quorum_count()
+    unsigned get_quorum_count() const
     { return _quorum_count; }
 
-    unsigned get_peer_error_count()
+    unsigned get_peer_error_count() const
     { return _error_count; }
 
-    unsigned get_peer_success_count()
+    unsigned get_peer_success_count() const
     { return _success_count; }
 
-    core::zero_copy_input_adapter & get_zci_adapter()
-    { return _zci_adapter; }
-
-    core::zero_copy_output_adapter & get_zco_adapter()
-    { return _zco_adapter; }
-
-    const core::io_service_ptr_t & get_io_service()
+    const core::io_service_ptr_t & get_io_service() const
     { return _io_srv; }
-
-    static ptr_t extract(const client_ptr_t &);
 
     /*!
     To be called on failed peer replication.
@@ -71,7 +82,7 @@ public:
     Increments peer_error, and returns true iff this increment
     makes it impossible to meet quorum.
     */
-    bool replication_failure();
+    bool peer_replication_failure();
 
     /*!
     To be called on successful peer replication.
@@ -79,23 +90,46 @@ public:
     Increments peer_success, and returns true iff this increment
     caused us to meet quorum.
     */
-    bool replication_success();;
+    bool peer_replication_success();
 
     /*!
     \returns True if either replication_failure() or replication_success()
         have returned true (eg, replication has already failed or succeeded)
     */
-    bool replication_complete();
+    bool is_replication_complete() const;
 
-    void send_client_error(unsigned code, const std::string & message);
-    
-    void send_client_error(unsigned code, const boost::system::error_code & ec);
+    /*! \brief Helper for sending an error response to the client
 
+    Precondition: start_client_response() cannot have been called yet
+    send_client_error() does the following:
+     - clears any set state in the SamoaResponse
+     - sets the error type and field in the SamoaResponse,
+        to the given code & value
+     - calls finish_response()
+    */
+    void send_client_error(unsigned err_code, const std::string & err_msg,
+        bool closing = false);
+
+    void send_client_error(unsigned err_code, const boost::system::error_code &,
+        bool closing = false);
+
+    // Serializes & writes the current core::protobuf::SamoaResponse
+    void start_client_response();
+
+    // Flushes remaining data to the client (including spb::SamoaResponse
+    //   if start_client_response() hasn't been called)
     void finish_client_response();
 
 private:
 
     client_ptr_t _client;
+
+    core::protobuf::SamoaRequest   _samoa_request;
+    core::protobuf::SamoaResponse _samoa_response;
+
+    std::vector<core::buffer_regions_t> _data_blocks;
+
+    context_ptr_t _context;
     peer_set_ptr_t _peer_set;
     table_ptr_t _table;
     std::string _key;
@@ -110,9 +144,7 @@ private:
     unsigned _error_count;
     unsigned _success_count;
 
-    core::zero_copy_input_adapter  _zci_adapter;
-    core::zero_copy_output_adapter _zco_adapter;
-
+    bool _start_response_called;
     core::io_service_ptr_t _io_srv;
 };
 
@@ -121,106 +153,3 @@ private:
 
 #endif
 
-/*
-
-merge_result
-{
-    bool local_was_updated;
-    bool remote_is_stale;
-}
-
-merge_result consistent_merge(local, remote)
-
-
-get_blob.handle(client):
-
-    rs = load_request_state(client)
-
-    if quorum > 1:
-
-        for peer in rs.peer_partitions:
-            peer.replication_read(key, get_blob.on_peer_response)
-    else:
-        persister.get(rs.key(), get_blob.on_get)
-
-get_blob.on_peer_response():
-
-    if response.is_error():
-        rs.peer_error += 1
-            if response.is_error():
-                r_s.peer_error += 1
-            else:
-                r_s.peer_success += 1
-
-            if r_s.peer_success > quorum:
-                # we've already returned to client, and are just waiting
-                #  for other peer callouts to complete 
-                return
-
-            if (r_s.peer_error + r_s.peer_success) == r_s.peer_partitions.size():
-                client.send_error()
-                return
-
-            r_s.remote_record.ParseFrom(response)
-            r_s.table->get_consistent_merge()(r_s.local_record, r_s.remote_record);
-
-            if r_s.peer_success == quorum:
-
-                if r_s.remote_record.cluster_clock:
-
-                persister.put(r_s.key, r_s.local
-
-                    on_peer_read_complete(r_s)
-            
-
-        if r_s.remote_record.has_cluster_clock():
-
-            persister.put(r_s.key, r_s.local, r_s.remote, consistent_merge)
-
-            // note: don't care if a value was actually written
-
-            return_blob_record(r_s)
-
-        persister.get(r_s.key, r_s.local)
-
-        return_blob_record(r_s)
-
-    r_s.finish_response()
-
-
-set_blob():
-
-    r_s = load_request_state()
-
-    build_remote_record(r_s)
-
-
-request_state:
-
-    client
-    peer_set
-    table
-    key
-    primary_partition
-    peer_partitions
-    peer_servers
-    local_record
-    remote_record
-
-    quorum_count
-    peer_success
-    peer_error
-
-    serial_io_service (synchronization)
-    zero_copy_input_adapter
-    zero_copy_output_adapter
-
-    * finish_response() is delegated, & client is set to nullptr
-    * key accessed after client.finish_response() (must be copied out)
-    * peer_partitions may be populated by table.route_ring_position,
-      or directly from a replication request
-
-    * persister/datatype needs to support multiple kinds of merge() callbacks
-        - a 'non-modifying' merge, which performs datatype-specific eventual consistency
-        - a 'mutating' merge (eg, set_blob ticks clock & replaces value)
-*/

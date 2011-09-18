@@ -15,54 +15,42 @@ class DropTableHandler(CommandHandler):
         CommandHandler.__init__(self)
         self.log = log
 
-    def _transaction(self, client, local_state):
+    def _transaction(self, rstate, local_state):
 
-        req = client.get_request().drop_table
+        table_uuid = rstate.get_table().get_uuid()
 
-        table = protobuf.find_table(local_state, UUID(req.table_uuid))
+        pb_table = protobuf.find_table(local_state, table_uuid)
 
-        if not table:
+        if not pb_table:
+            # race condition check
             raise KeyError(req.table_uuid)
 
-        table.Clear()
-        table.set_uuid(req.table_uuid)
-        table.set_dropped(True)
-        table.set_dropped_timestamp(int(time.time()))
+        pb_table.Clear()
+        pb_table.set_uuid(table_uuid.to_hex())
+        pb_table.set_dropped(True)
+        pb_table.set_dropped_timestamp(int(time.time()))
 
-        self.log.info('dropped table %s' % table.uuid)
+        self.log.info('dropped table %s' % table_uuid)
 
         return True
 
-    def handle(self, client):
+    def handle(self, rstate):
 
-        req = client.get_request().drop_table
-
-        if not req:
-            client.send_error(400, 'drop_table missing')
-            yield
-
-        if not UUID.check_hex(req.table_uuid):
-            client.send_error(400, 'malformed UUID %s' % req.table_uuid)
-            yield
-
-        cluster_state = client.get_context().get_cluster_state()
-        table = cluster_state.get_table_set().get_table(UUID(req.table_uuid))
-
-        if not table:
-            client.send_error(404, 'table %s' % req.table_uuid)
+        if not rstate.get_table():
+            rstate.send_client_error(400, 'expected table name / UUID')
             yield
 
         try:
-            commit = yield client.get_context().cluster_state_transaction(
-                functools.partial(self._transaction, client))
+            commit = yield rstate.get_context().cluster_state_transaction(
+                functools.partial(self._transaction, rstate))
         except KeyError:
-            client.send_error(404, 'table %s' % req.table_uuid)
+            rstate.send_client_error(404, 'table %s' % req.table_uuid)
             yield
 
         if commit:
             # TODO: notify peers of change
             pass
 
-        client.finish_response()
+        rstate.finish_client_response()
         yield
 

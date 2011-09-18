@@ -19,7 +19,7 @@ public:
     virtual ~command_handler()
     { }
 
-    virtual void handle(const client_ptr_t &) = 0;
+    virtual void handle(const request_state_ptr_t &) = 0;
 };
 
 }

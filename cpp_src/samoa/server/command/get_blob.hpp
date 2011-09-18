@@ -1,7 +1,6 @@
 #ifndef SAMOA_SERVER_COMMAND_GET_BLOB_HPP
 #define SAMOA_SERVER_COMMAND_GET_BLOB_HPP
 
-#include "samoa/persistence/fwd.hpp"
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
@@ -12,8 +11,6 @@
 namespace samoa {
 namespace server {
 namespace command {
-
-namespace spb = samoa::core::protobuf;
 
 class get_blob_handler :
     public command_handler,
@@ -26,16 +23,14 @@ public:
     get_blob_handler()
     { }
 
-    void handle(const client_ptr_t &);
+    void handle(const request_state_ptr_t &);
 
 private:
 
-    void on_replicated_read(
-        const boost::system::error_code & ec,
+    void on_replicated_read(const boost::system::error_code & ec,
         const request_state_ptr_t &);
 
-    void on_retrieve(
-        const boost::system::error_code & ec,
+    void on_retrieve(const boost::system::error_code & ec,
         const request_state_ptr_t &);
 };
 

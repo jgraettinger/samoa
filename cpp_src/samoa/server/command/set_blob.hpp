@@ -30,22 +30,17 @@ public:
     set_blob_handler()
     { }
 
-    void handle(const client_ptr_t &);
+    void handle(const request_state_ptr_t &);
 
 private:
 
-    datamodel::merge_result on_merge(
-        spb::PersistedRecord &,
-        const spb::PersistedRecord &,
-        const request_state_ptr_t &);
+    datamodel::merge_result on_merge(spb::PersistedRecord &,
+        const spb::PersistedRecord &, const request_state_ptr_t &);
 
-    void on_put(
-        const boost::system::error_code &,
-        const datamodel::merge_result &,
-        const request_state_ptr_t &);
+    void on_put(const boost::system::error_code &,
+        const datamodel::merge_result &, const request_state_ptr_t &);
 
-    void on_replicated_write(
-        const boost::system::error_code &,
+    void on_replicated_write(const boost::system::error_code &,
         const request_state_ptr_t &);
 
 };

@@ -38,6 +38,17 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
             _discovery_tasklets[uuid] = peer_discovery::ptr_t();
         }
     }
+
+    // also set the loop-back server address
+    core::uuid local_uuid = core::uuid_from_hex(state.local_uuid());
+    set_server_address(local_uuid, "localhost", state.local_port());
+
+    if(current && current->has_server(local_uuid))
+    {
+        set_connected_server(local_uuid, current->get_server(local_uuid));
+
+        // obviously, we don't run a discovery-tasklet against the loopback
+    }
 }
 
 void peer_set::spawn_tasklets(const context::ptr_t & context)
@@ -251,11 +262,11 @@ void peer_set::on_forwarded_request(
         return;
     }
 
-    server.get_message().CopyFrom(rstate->get_client()->get_request());
+    server.get_message().CopyFrom(rstate->get_samoa_request());
     server.start_request();
 
-    for(auto it = rstate->get_client()->get_request_data_blocks().begin();
-        it != rstate->get_client()->get_request_data_blocks().end(); ++it)
+    for(auto it = rstate->get_request_data_blocks().begin();
+        it != rstate->get_request_data_blocks().end(); ++it)
     {
         server.write_interface().queue_write(*it);
     }
@@ -277,8 +288,8 @@ void peer_set::on_forwarded_response(
         return;
     }
 
-    rstate->get_client()->get_response().CopyFrom(server.get_message());
-    rstate->get_client()->start_response();
+    rstate->get_samoa_response().CopyFrom(server.get_message());
+    rstate->start_client_response();
 
     for(auto it = server.get_response_data_blocks().begin();
         it != server.get_response_data_blocks().end(); ++it)

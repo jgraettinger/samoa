@@ -2,8 +2,9 @@
 import getty
 import unittest
 
-from samoa.core.protobuf import CommandType, SamoaRequest
 from samoa.core.uuid import UUID
+from samoa.core.protobuf import CommandType, ClusterClock, SamoaRequest
+from samoa.datamodel.clock_util import ClockUtil
 from samoa.server.context import Context
 from samoa.server.request_state import RequestState
 
@@ -13,141 +14,274 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestRequestState(unittest.TestCase):
 
-    def test_basic(self):
+    def setUp(self):
 
-        injector = TestModule().configure(getty.Injector())
-        fixture = injector.get_instance(ClusterStateFixture)
+        fixture = ClusterStateFixture()
 
-        table = fixture.add_table()
-        partition = fixture.add_local_partition(table.uuid)
+        # build a basic test fixture (table, two local partitions, two peers)
+        table = fixture.add_table(replication_factor = 4)
+        local_part1 = fixture.add_local_partition(table.uuid)
+        local_part2 = fixture.add_local_partition(table.uuid)
+        peer_part1 = fixture.add_remote_partition(table.uuid)
+        peer_part2 = fixture.add_remote_partition(table.uuid)
 
-        listener = injector.get_instance(Listener)
-        context = listener.get_context()
+        self.table_name = table.name
+        self.table_uuid = UUID(table.uuid)
+        self.local_part1_uuid = UUID(local_part1.uuid)
+        self.local_part2_uuid = UUID(local_part2.uuid)
+        self.peer_part1_uuid = UUID(peer_part1.uuid)
+        self.peer_part2_uuid = UUID(peer_part2.uuid)
 
-        key = fixture.generate_bytes()
-        record = PersistedRecord()
-        record.add_blob_value('test-value')
-        record = record.SerializeToBytes()
+        # build a SamoaRequest fully populated with valid fields
+        #  extracted to runtime entitites by RequestState
 
-        class Handler(BasicReplicateHandler):
-            def replicate(self_i, client, table, partition, key_i, record_i):
-                self.assertEquals(key_i, key)
-                self.assertEquals(record_i.blob_value[0], 'test-value')
-                client.finish_response()
+        # tests will selectively modify / clear field state
+        test_request = SamoaRequest()
+        test_request.set_type(CommandType.TEST)
 
-        listener.get_protocol().set_command_handler(
-            CommandType.TEST, Handler())
+        # populate cluster_clock
+        ClockUtil.tick(test_request.mutable_cluster_clock(),
+            self.local_part1_uuid)
+        ClockUtil.tick(test_request.mutable_cluster_clock(),
+            self.peer_part1_uuid)
 
-        def test():
+        # populate table_uuid & table_name
+        test_request.set_table_uuid(self.table_uuid.to_bytes())
+        test_request.set_table_name(self.table_name)
 
-            server = yield Server.connect_to(
-                listener.get_address(), listener.get_port())
+        # populate key
+        test_request.set_key('test-key')
 
-            response = yield self._make_request(
-                server, table.uuid, partition.uuid, key, record)
+        # populate partition_uuid & peer_partition_uuid
+        test_request.set_partition_uuid(
+            self.local_part1_uuid.to_bytes())
+        test_request.add_peer_partition_uuid(
+            self.local_part2_uuid.to_bytes())
+        test_request.add_peer_partition_uuid(
+            self.peer_part1_uuid.to_bytes())
+        test_request.add_peer_partition_uuid(
+            self.peer_part2_uuid.to_bytes())
 
-            # request succeeded
-            self.assertFalse(response.get_error_code())
-            response.finish_response()
+        # populate quorum
+        test_request.set_quorum(4)
 
-            # cleanup
-            context.get_tasklet_group().cancel_group()
-            yield
+        self.fixture = fixture
+        self.test_request = test_request
+        return
 
-        Proactor.get_proactor().run_test(test)
+    def test_fixed_routes(self):
 
-    def test_error_cases(self):
+        context = Context(self.fixture.state)
 
-        injector = TestModule().configure(getty.Injector())
-        fixture = injector.get_instance(ClusterStateFixture)
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
 
-        local_table = fixture.add_table()
-        local_partition = fixture.add_local_partition(local_table.uuid)
+        rstate.validate_samoa_request(context.get_cluster_state())
 
-        remote_table = fixture.add_table()
-        remote_partition = fixture.add_remote_partition(remote_table.uuid)
+        # validate populated runtime entities
+        self.assertEquals(rstate.get_table().get_uuid(),
+            self.table_uuid)
 
-        listener = injector.get_instance(Listener)
-        context = listener.get_context()
+        # assert partitions are as dictated by test fixture
+        self.assertEquals(rstate.get_primary_partition().get_uuid(),
+            self.local_part1_uuid)
 
-        key = fixture.generate_bytes()
-        record = PersistedRecord().SerializeToBytes()
+        self.assertEquals(
+            set([self.local_part2_uuid, self.peer_part1_uuid,
+                self.peer_part2_uuid]),
+            set(p.partition.get_uuid() for p in rstate.get_partition_peers()))
 
-        class Handler(BasicReplicateHandler):
-            def replicate(self_i, client, table, partition, key, record):
-                self.assertTrue(False)
+    def test_table_routing(self):
 
-        listener.get_protocol().set_command_handler(
-            CommandType.TEST, Handler())
+        context = Context(self.fixture.state)
 
-        def test():
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
 
-            server = yield Server.connect_to(
-                listener.get_address(), listener.get_port())
+        rstate.get_samoa_request().clear_table_uuid()
+        rstate.get_samoa_request().clear_partition_uuid()
+        rstate.get_samoa_request().clear_peer_partition_uuid()
 
-            # missing request message
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.TEST)
+        rstate.validate_samoa_request(context.get_cluster_state())
 
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
+        # validate populated runtime entities
+        self.assertEquals(rstate.get_table().get_uuid(),
+            self.table_uuid)
 
-            # missing request payload
-            response = yield self._make_request(
-                server, local_table.uuid, local_partition.uuid, key, None)
+        # one of the local partitions was returned
+        self.assertTrue(rstate.get_primary_partition().get_uuid() in \
+            (self.local_part1_uuid, self.local_part2_uuid))
 
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
+        # three peer partitions are also returned
+        self.assertEquals(len(rstate.get_partition_peers()), 3)
 
-            # invalid table
-            response = yield self._make_request(
-                server, UUID.from_random(), local_partition.uuid, key, record)
+    def test_replication_operation_counts(self):
 
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
+        context = Context(self.fixture.state)
 
-            # invalid partition
-            response = yield self._make_request(
-                server, local_table.uuid, UUID.from_random(), key, record)
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+        rstate.get_samoa_request().set_quorum(3)
 
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
+        rstate.validate_samoa_request(context.get_cluster_state())
 
-            # non-local partition
-            response = yield self._make_request(
-                server, remote_table.uuid, remote_partition.uuid, key, record)
+        # peer success
+        self.assertFalse(rstate.peer_replication_success())
+        self.assertFalse(rstate.is_replication_complete())
 
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
+        # peer failure
+        self.assertFalse(rstate.peer_replication_failure())
+        self.assertFalse(rstate.is_replication_complete())
 
-            # non-parsable record
-            response = yield self._make_request(
-                server, local_table.uuid, local_partition.uuid, key, 'bad')
-            
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
+        # peer success - operation succeeded
+        self.assertTrue(rstate.peer_replication_success())
+        self.assertTrue(rstate.is_replication_complete())
 
-            # cleanup
-            context.get_tasklet_group().cancel_group()
-            yield
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+        rstate.get_samoa_request().set_quorum(3)
 
-        Proactor.get_proactor().run_test(test)
+        rstate.validate_samoa_request(context.get_cluster_state())
 
-    def _make_request(self, server, table_uuid, partition_uuid, key, record):
+        # peer failure
+        self.assertFalse(rstate.peer_replication_failure())
+        self.assertFalse(rstate.is_replication_complete())
 
-        request = yield server.schedule_request()
-        request.get_message().set_type(CommandType.TEST)
+        # peer failure - operation cannot succeed
+        self.assertTrue(rstate.peer_replication_failure())
+        self.assertTrue(rstate.is_replication_complete())
 
-        repl_req = request.get_message().mutable_replication()
-        repl_req.set_table_uuid(UUID(table_uuid).to_bytes())
-        repl_req.set_partition_uuid(UUID(partition_uuid).to_bytes())
-        repl_req.set_key(key)
+    def test_bad_table(self):
 
-        if record is not None:
-            request.get_message().add_data_block_length(len(record))
-            request.start_request()
-            request.write_interface().queue_write(record)
+        context = Context(self.fixture.state)
 
-        yield (yield request.finish_request())
+        # table name doesn't exist
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().clear_table_uuid()
+        rstate.get_samoa_request().set_table_name('invalid-table')
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 404'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+        # invalid table UUID
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().clear_table_name()
+        rstate.get_samoa_request().set_table_uuid('invalid-uuid')
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 400'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+        # table UUID doesn't exist
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().clear_table_name()
+        rstate.get_samoa_request().set_table_uuid(
+            UUID.from_random().to_bytes())
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 404'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+    def test_bad_partition(self):
+
+        context = Context(self.fixture.state)
+
+        # invalid partition UUID
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().set_partition_uuid('invalid-uuid')
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 400'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+        # partition UUID doesn't exist
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().set_partition_uuid(
+            UUID.from_random().to_bytes())
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 404'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+        # partition UUID is remote
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().set_partition_uuid(
+            self.peer_part1_uuid.to_bytes())
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 404'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+    def test_bad_peer_partition(self):
+
+        context = Context(self.fixture.state)
+
+        # invalid peer_partition UUID
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().add_peer_partition_uuid('invalid-uuid')
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 400'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+        # peer partition UUID doesn't exist
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().add_peer_partition_uuid(
+            UUID.from_random().to_bytes())
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 404'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+    def test_no_table_partitions(self):
+
+        table2 = self.fixture.add_table()
+        context = Context(self.fixture.state)
+
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().clear_quorum()
+        rstate.get_samoa_request().set_table_name(table2.name)
+        rstate.get_samoa_request().clear_table_uuid()
+
+        rstate.get_samoa_request().clear_partition_uuid()
+        rstate.get_samoa_request().clear_peer_partition_uuid()
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 410'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+    def test_invalid_quorum(self):
+
+        context = Context(self.fixture.state)
+
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().set_quorum(5)
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 400'):
+            rstate.validate_samoa_request(context.get_cluster_state())
+
+    def test_invalid_cluster_clock(self):
+
+        context = Context(self.fixture.state)
+
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+
+        rstate.get_samoa_request().mutable_cluster_clock(
+            ).partition_clock.SwapElements(0, 1)
+
+        with self.assertRaisesRegexp(RuntimeError, 'code 400'):
+            rstate.validate_samoa_request(context.get_cluster_state())
 

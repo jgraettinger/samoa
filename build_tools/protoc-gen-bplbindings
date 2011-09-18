@@ -469,6 +469,7 @@ binding_templates = {}
 binding_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = """
     binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
     binder.def("set_%(field_name)s", &%(msg_name)s::set_%(field_name)s);
+    binder.def("clear_%(field_name)s", &%(msg_name)s::clear_%(field_name)s);
     binder.add_property("%(field_name)s", &py_%(field_name)s);
 """[1:-1]
 
@@ -485,6 +486,7 @@ binding_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = """
 
     binder.def("set_%(field_name)s", set_%(field_name)s_ptr);
     binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
+    binder.def("clear_%(field_name)s", &%(msg_name)s::clear_%(field_name)s);
     binder.add_property("%(field_name)s", &py_%(field_name)s);
 """[:-1]
 
@@ -506,6 +508,7 @@ binding_templates[(FieldDesc.LABEL_OPTIONAL, 'message')] = """
     binder.add_property("%(field_name)s", &py_%(field_name)s);
     binder.def("mutable_%(field_name)s", &%(msg_name)s::mutable_%(field_name)s,
         bpl::return_value_policy<bpl::reference_existing_object>());
+    binder.def("clear_%(field_name)s", &%(msg_name)s::clear_%(field_name)s);
 """[1:-1]
 
 binding_templates[(FieldDesc.LABEL_REQUIRED, 'message')] = """

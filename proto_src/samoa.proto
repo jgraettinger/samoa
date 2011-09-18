@@ -118,12 +118,7 @@ message CreateTableRequest {
     optional uint32 consistency_horizon = 4 [default = 259200];
 };
 
-message CreateTableResponse {
-    required string table_uuid = 1;
-};
-
 message AlterTableRequest {
-    required string table_uuid = 1;
     optional string name = 2;
     optional uint32 replication_factor = 3;
     optional uint32 consistency_horizon = 4;
@@ -135,10 +130,6 @@ message CreatePartitionRequest {
     required uint64 ring_position = 2;
 
     repeated ClusterState.Table.Partition.RingLayer ring_layer = 3;
-};
-
-message CreatePartitionResponse {
-    required string partition_uuid = 1;
 };
 
 // *INTERNAL* Datamodel serialization
@@ -177,7 +168,7 @@ message SamoaRequest {
 
     optional ClusterClock cluster_clock = 4;
 
-    optional bytes table_uuid = 6;
+    optional bytes  table_uuid = 6;
     optional string table_name = 7;
 
     optional bytes key = 5;
@@ -186,8 +177,6 @@ message SamoaRequest {
     repeated bytes peer_partition_uuid = 9;
 
     optional uint32 quorum = 10;
-
-    optional ClusterState     cluster_state = 11;
 
     optional CreateTableRequest create_table = 12;
     optional AlterTableRequest  alter_table = 13;
@@ -213,6 +202,5 @@ message SamoaResponse {
     optional ClusterClock cluster_clock = 7;
 
     optional Error         error = 8;
-    optional ClusterState  cluster_state = 9;
 };
 

@@ -20,14 +20,6 @@ public:
       : _count(0)
     { }
 
-    void reset()
-    {
-        // reset for next output operation
-        _buf_regions.clear();
-        _active_buf.reset();
-        _count = 0;
-    }
-
     // ZeroCopyOutputStream virtual
     bool Next(void ** data, int * size)
     {
@@ -96,7 +88,7 @@ class zero_copy_input_adapter :
 {
 public:
 
-    void reset(const buffer_regions_t & buffers)
+    zero_copy_input_adapter(const buffer_regions_t & buffers)
     {
         _pos = _buf_ind = _buf_pos = 0;
         _buffers = &buffers;

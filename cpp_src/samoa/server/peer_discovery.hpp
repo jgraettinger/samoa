@@ -35,10 +35,10 @@ protected:
         const context_ptr_t &);
 
     bool on_state_transaction(core::protobuf::ClusterState &,
-        samoa::client::server_response_interface &,
         const context_ptr_t &);
 
     const core::uuid _peer_uuid;
+    core::protobuf::ClusterState _remote_state;
 };
 
 }

@@ -15,12 +15,12 @@ class CreateTableHandler(CommandHandler):
         CommandHandler.__init__(self)
         self.log = log
 
-    def _transaction(self, client, local_state):
+    def _transaction(self, rstate, local_state):
 
-        tbl_req = client.get_request().create_table
+        tbl_req = rstate.get_samoa_request().create_table
 
         # check if another table exists with this name
-        cluster_state = client.get_context().get_cluster_state()
+        cluster_state = rstate.get_context().get_cluster_state()
         if cluster_state.get_table_set().get_table_by_name(tbl_req.name):
             raise NameError('table %s exists' % tbl_req.name)
 
@@ -34,33 +34,32 @@ class CreateTableHandler(CommandHandler):
         self.log.info('created table %s' % table.uuid)
 
         # update response with new UUID, & return
-        tbl_resp = client.get_response().mutable_create_table()
-        tbl_resp.set_table_uuid(table.uuid)
+        rstate.get_samoa_response().set_table_uuid(table.uuid)
         return True
 
-    def handle(self, client):
+    def handle(self, rstate):
 
-        tbl_req = client.get_request().create_table
+        tbl_req = rstate.get_samoa_request().create_table
 
         if not tbl_req:
-            client.send_error(400, 'create_table missing')
+            rstate.send_client_error(400, 'create_table missing')
             yield
 
         if tbl_req.data_type not in DataType.names:
-            client.send_error(406, 'invalid data type %s' % tbl_req.data_type)
+            rstate.send_client_error(406, 'invalid data type %s' % tbl_req.data_type)
             yield
 
         try:
-            commit = yield client.get_context().cluster_state_transaction(
-                functools.partial(self._transaction, client))
+            commit = yield rstate.get_context().cluster_state_transaction(
+                functools.partial(self._transaction, rstate))
         except NameError, exc:
-            client.send_error(409, exc.message)
+            rstate.send_client_error(409, exc.message)
             yield
 
         if commit:
             # TODO: notify peers of change
             pass
 
-        client.finish_response()
+        rstate.finish_client_response()
         yield
 

@@ -14,78 +14,75 @@ class AlterTableHandler(CommandHandler):
         CommandHandler.__init__(self)
         self.log = log
 
-    def _transaction(self, client, local_state):
+    def _transaction(self, rstate, local_state):
 
-        req = client.get_request().alter_table
+        req = rstate.get_samoa_request().alter_table
+        table_uuid = rstate.get_table().get_uuid()
 
-        table = protobuf.find_table(local_state, UUID(req.table_uuid))
+        pb_table = protobuf.find_table(local_state, table_uuid)
 
-        if not table:
-            raise KeyError('table %s' % req.table_uuid)
+        if not pb_table:
+            # subtle race condition here
+            raise KeyError('table %s' % table_uuid)
 
         modified = False
 
         # check for name change
-        if req.has_name() and req.name != table.name:
+        if req.has_name() and req.name != pb_table.name:
             self.log.info('altered table %s (name %r => %r)' % (
-                table.uuid, table.name, req.name))
+                table_uuid, pb_table.name, req.name))
 
-            table.set_name(req.name)
+            pb_table.set_name(req.name)
             modified = True
 
         # check for replication_factor change
         if req.has_replication_factor() and \
-            req.replication_factor != table.replication_factor:
+            req.replication_factor != pb_table.replication_factor:
 
             self.log.info('altered table %s (replication factor %r => %r)' % (
-                table.uuid, table.replication_factor,
+                table_uuid, pb_table.replication_factor,
                 req.replication_factor))
 
-            table.set_replication_factor(req.replication_factor)
+            pb_table.set_replication_factor(req.replication_factor)
             modified = True
 
         # check for consistency_horizon change
         if req.has_consistency_horizon() and \
-            req.consistency_horizon != table.consistency_horizon:
+            req.consistency_horizon != pb_table.consistency_horizon:
 
             self.log.info('altered table %s (consistency horizon %r => %r)' % (
-                table.uuid, table.consistency_horizon,
+                table_uuid, pb_table.consistency_horizon,
                 req.consistency_horizon))
 
-            table.set_consistency_horizon(req.consistency_horizon)
+            pb_table.set_consistency_horizon(req.consistency_horizon)
             modified = True
 
         if modified:
-            table.set_lamport_ts(table.lamport_ts + 1)
+            pb_table.set_lamport_ts(pb_table.lamport_ts + 1)
 
         return modified
 
-    def handle(self, client):
+    def handle(self, rstate):
 
-        req = client.get_request().alter_table
-
-        if not req:
-            client.send_error(400, 'alter_table missing')
+        if not rstate.get_samoa_request().alter_table:
+            rstate.send_client_error(400, 'alter_table missing')
             yield
 
-        if not UUID.check_hex(req.table_uuid):
-            client.send_error(400, 'malformed UUID %s' % req.table_uuid)
+        if not rstate.get_table():
+            rstate.send_client_error(400, 'expected table name or UUID')
             yield
-
-        cluster_state = client.get_context().get_cluster_state()
-        table = cluster_state.get_table_set().get_table(UUID(req.table_uuid))
 
         try:
-            commit = yield client.get_context().cluster_state_transaction(
-                functools.partial(self._transaction, client))
+            commit = yield rstate.get_context().cluster_state_transaction(
+                functools.partial(self._transaction, rstate))
         except KeyError, exc:
-            client.send_error(404, exc.message)
+            rstate.send_client_error(404, exc.message)
             yield
 
         if commit:
             # TODO: notify peers of change
             pass
 
-        client.finish_response()
+        rstate.finish_client_response()
         yield
 

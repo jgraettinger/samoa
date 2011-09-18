@@ -19,10 +19,8 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-void get_blob_handler::handle(const client::ptr_t & client)
+void get_blob_handler::handle(const request_state::ptr_t & rstate)
 {
-    request_state::ptr_t rstate = request_state::extract(client);
-
     if(!rstate->get_primary_partition())
     {
         rstate->get_peer_set()->forward_request(rstate);
@@ -93,7 +91,7 @@ void get_blob_handler::on_retrieve(
         return;
     }
 
-    datamodel::blob::send_blob_value(rstate->get_client(),
+    datamodel::blob::send_blob_value(rstate,
         rstate->get_local_record());
 }
 

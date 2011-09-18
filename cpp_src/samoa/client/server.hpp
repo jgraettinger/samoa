@@ -3,7 +3,6 @@
 
 #include "samoa/core/fwd.hpp"
 #include "samoa/client/fwd.hpp"
-#include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include "samoa/core/connection_factory.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
@@ -182,9 +181,6 @@ private:
 
     core::protobuf::SamoaRequest   _request;
     core::protobuf::SamoaResponse _response;
-
-    core::zero_copy_output_adapter _proto_out_adapter;
-    core::zero_copy_input_adapter  _proto_in_adapter;
 
     std::vector<core::buffer_regions_t> _response_data_blocks;
 

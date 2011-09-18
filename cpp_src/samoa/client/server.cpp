@@ -1,6 +1,7 @@
 
 #include "samoa/client/server.hpp"
 #include "samoa/core/connection_factory.hpp"
+#include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
@@ -103,10 +104,11 @@ void server_request_interface::start_request()
     }
 
     // serlialize & queue core::protobuf::SamoaRequest for writing
-    _srv->_request.SerializeToZeroCopyStream(&_srv->_proto_out_adapter);
+    core::zero_copy_output_adapter zco_adapter;
+    _srv->_request.SerializeToZeroCopyStream(&zco_adapter);
     _srv->_request.Clear();
 
-    if(_srv->_proto_out_adapter.ByteCount() > (1<<16))
+    if(zco_adapter.ByteCount() > (1<<16))
     {
         throw std::runtime_error(
             "server::request_interface::start_request(): "
@@ -114,14 +116,11 @@ void server_request_interface::start_request()
     }
 
     // write network order unsigned short length
-    uint16_t len = htons((uint16_t)_srv->_proto_out_adapter.ByteCount());
+    uint16_t len = htons((uint16_t)zco_adapter.ByteCount());
     _srv->queue_write((char*)&len, ((char*)&len) + 2);
 
     // queue write of serialized output regions
-    _srv->queue_write(_srv->_proto_out_adapter.output_regions());
-
-    // clear state for next operation
-    _srv->_proto_out_adapter.reset();
+    _srv->queue_write(zco_adapter.output_regions());
 }
 
 core::stream_protocol::write_interface_t &
@@ -368,8 +367,8 @@ void server::on_response_body(const boost::system::error_code & ec,
         return;
     }
 
-    _proto_in_adapter.reset(read_body);
-    if(!_response.ParseFromZeroCopyStream(&_proto_in_adapter))
+    core::zero_copy_input_adapter zci_adapter(read_body);
+    if(!_response.ParseFromZeroCopyStream(&zci_adapter))
     {
         // protobuf parse failure
         on_error(boost::system::errc::make_error_code(

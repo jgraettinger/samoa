@@ -20,20 +20,9 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-void set_blob_handler::handle(const client::ptr_t & client)
+void set_blob_handler::handle(const request_state::ptr_t & rstate)
 {
-    request_state::ptr_t rstate = request_state::extract(client);
-
-    const spb::SamoaRequest & samoa_request = client->get_request();
-
-    if(samoa_request.has_cluster_clock() &&
-       !datamodel::clock_util::validate(samoa_request.cluster_clock()))
-    {
-        rstate->send_client_error(400, "malformed cluster clock");
-        return;
-    }
-
-    if(client->get_request_data_blocks().size() != 1)
+    if(rstate->get_request_data_blocks().size() != 1)
     {
         rstate->send_client_error(400, "expected exactly one data block");
         return;
@@ -53,8 +42,8 @@ void set_blob_handler::handle(const client::ptr_t & client)
 
     // assign client's value
     record.add_blob_value()->assign(
-        boost::asio::buffers_begin(client->get_request_data_blocks()[0]),
-        boost::asio::buffers_end(client->get_request_data_blocks()[0]));
+        boost::asio::buffers_begin(rstate->get_request_data_blocks()[0]),
+        boost::asio::buffers_end(rstate->get_request_data_blocks()[0]));
 
     rstate->get_primary_partition()->get_persister()->put(
         boost::bind(&set_blob_handler::on_put,
@@ -71,20 +60,17 @@ datamodel::merge_result set_blob_handler::on_merge(
     const spb::PersistedRecord & remote_record,
     const request_state::ptr_t & rstate)
 {
-    const spb::SamoaRequest & samoa_request = \
-        rstate->get_client()->get_request();
-
     datamodel::merge_result result;
     result.local_was_updated = false;
     result.remote_is_stale = false;
 
     // if request included a cluster clock, validate
     //  _exact_ equality against the stored cluster clock
-    if(samoa_request.has_cluster_clock())
+    if(rstate->get_samoa_request().has_cluster_clock())
     {
         if(datamodel::clock_util::compare(
                 local_record.cluster_clock(),
-                samoa_request.cluster_clock()
+                rstate->get_samoa_request().cluster_clock()
             ) != datamodel::clock_util::EQUAL)
         {
             // clock doesn't match: abort
@@ -117,18 +103,15 @@ void set_blob_handler::on_put(
         return;
     }
 
-    spb::SamoaResponse & samoa_response = \
-        rstate->get_client()->get_response();
-
     if(!merge_result.local_was_updated)
     {
-        samoa_response.set_success(false);
-        datamodel::blob::send_blob_value(rstate->get_client(),
+        rstate->get_samoa_response().set_success(false);
+        datamodel::blob::send_blob_value(rstate,
             rstate->get_local_record());
         return;
     }
 
-    samoa_response.set_success(true);
+    rstate->get_samoa_response().set_success(true);
 
     if(rstate->get_quorum_count() == 1)
     {

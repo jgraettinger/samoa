@@ -7,7 +7,7 @@ from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
 from samoa.client.server import Server
-from samoa.persistence.data_type import DataType
+from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 
 from samoa.test.module import TestModule

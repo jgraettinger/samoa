@@ -7,7 +7,7 @@ from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.server.listener import Listener
 from samoa.client.server import Server
-from samoa.persistence.data_type import DataType
+from samoa.datamodel.data_type import DataType
 
 from samoa.test.module import TestModule
 from samoa.test.cluster_state_fixture import ClusterStateFixture
@@ -42,7 +42,7 @@ class TestCreateTable(unittest.TestCase):
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
 
-            tbl_uuid = UUID(response.get_message().create_table.table_uuid)
+            tbl_uuid = UUID(response.get_message().table_uuid)
             response.finish_response()
 
             # inspect server state's protobuf description

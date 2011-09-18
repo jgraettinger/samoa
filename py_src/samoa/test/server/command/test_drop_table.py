@@ -21,8 +21,7 @@ class TestDropTable(unittest.TestCase):
 
     def test_drop_table(self):
 
-        self.fixture.add_table(name = 'test_table',
-            uuid = UUID.from_name('test_table'))
+        test_table = UUID(self.fixture.add_table(name = 'test_table').uuid)
 
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
@@ -30,8 +29,8 @@ class TestDropTable(unittest.TestCase):
         def test():
 
             # precondition: runtime table exists on server
-            table = context.get_cluster_state().get_table_set().get_table(
-                UUID.from_name('test_table'))
+            table = context.get_cluster_state().get_table_set(
+                ).get_table(test_table)
             self.assertEquals(table.get_name(), 'test_table')
 
             # issue table drop request
@@ -40,17 +39,15 @@ class TestDropTable(unittest.TestCase):
             request = yield server.schedule_request()
 
             request.get_message().set_type(CommandType.DROP_TABLE)
-
-            dt = request.get_message().mutable_drop_table()
-            dt.set_table_uuid(UUID.from_name('test_table').to_hex())
+            request.get_message().set_table_uuid(test_table.to_bytes())
 
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
             # postcondition: table is no longer on server
-            table = context.get_cluster_state().get_table_set().get_table(
-                UUID.from_name('test_table'))
+            table = context.get_cluster_state().get_table_set(
+                ).get_table(test_table)
             self.assertFalse(table) 
 
             # cleanup
@@ -61,9 +58,6 @@ class TestDropTable(unittest.TestCase):
 
     def test_error_cases(self):
 
-        self.fixture.add_table(name = 'test_table',
-            uuid = UUID.from_name('test_table'))
-
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
 
@@ -72,29 +66,7 @@ class TestDropTable(unittest.TestCase):
             server = yield Server.connect_to(
                 listener.get_address(), listener.get_port())
 
-            # table doesn't exist
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.DROP_TABLE)
-
-            dt = request.get_message().mutable_drop_table()
-            dt.set_table_uuid(UUID.from_random().to_hex())
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
-
-            # malformed UUID
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.DROP_TABLE)
-
-            dt = request.get_message().mutable_drop_table()
-            dt.set_table_uuid('invalid uuid')
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
-
-            # missing drop_table message
+            # missing table
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.DROP_TABLE)
 

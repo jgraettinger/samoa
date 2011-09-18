@@ -2,6 +2,7 @@
 #include "samoa/server/client.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/protocol.hpp"
+#include "samoa/server/request_state.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include "samoa/error.hpp"
@@ -28,7 +29,6 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    core::tasklet<client>(io_srv),
    _context(context),
    _protocol(protocol),
-   _start_called(false),
    _timeout_ms(default_timeout_ms),
    _timeout_timer(*get_io_service())
 {
@@ -62,74 +62,18 @@ void client::halt_tasklet()
     _timeout_timer.cancel();
 }
 
-void client::send_error(unsigned err_code,
-    const std::string & err_msg, bool closing /* = false */)
+void client::finish_response(bool close)
 {
-    _response.Clear();
-
-    _response.set_type(core::protobuf::ERROR);
-    _response.set_closing(closing);
-    _response.mutable_error()->set_code(err_code);
-    _response.mutable_error()->set_message(err_msg);
-
-    finish_response();
-}
-
-void client::send_error(unsigned err_code,
-    const boost::system::error_code & ec,
-    bool closing /* = false */)
-{
-    std::stringstream tmp;
-    tmp << ec << " (" << ec.message() << ")";
-
-    send_error(err_code, tmp.str(), closing);
-}
-
-void client::start_response()
-{
-    if(_start_called)
-        return;
-
-    SAMOA_ASSERT(!has_queued_writes());
-
-    _start_called = true;
-
-    // serlialize & queue core::protobuf::SamoaResponse for writing
-    _response.SerializeToZeroCopyStream(&_proto_out_adapter);
-
-    SAMOA_ASSERT(_proto_out_adapter.ByteCount() < (1<<16));
-
-    // write network order unsigned short length
-    uint16_t len = htons((uint16_t)_proto_out_adapter.ByteCount());
-    queue_write((char*)&len, ((char*)&len) + 2);
-
-    // write serialized output regions
-    queue_write(_proto_out_adapter.output_regions());
-
-    // clear state for next operation
-    _proto_out_adapter.reset();
-}
-
-core::stream_protocol::write_interface_t & client::write_interface()
-{
-    SAMOA_ASSERT(_start_called);
-    return core::stream_protocol::write_interface();
-}
-
-void client::finish_response()
-{
-    start_response();
-
     // command handler may have written additional data,
     //   and already waited for those writes to finish
     if(has_queued_writes())
     {
         write_queued(boost::bind(&client::on_response_finish,
-            shared_from_this(), _1));
+            shared_from_this(), _1, close));
     }
     else
     {
-        on_response_finish(boost::system::error_code());
+        on_response_finish(boost::system::error_code(), close);
     }
     return;
 }
@@ -175,20 +119,23 @@ void client::on_request_body(const boost::system::error_code & ec,
         return;
     }
 
-    _proto_in_adapter.reset(read_body);
-    if(!_request.ParseFromZeroCopyStream(&_proto_in_adapter))
+    request_state::ptr_t rstate = boost::make_shared<request_state>(
+        shared_from_this());
+
+    core::zero_copy_input_adapter zci_adapter(read_body);
+    if(!rstate->get_samoa_request().ParseFromZeroCopyStream(&zci_adapter))
     {
-        send_error(400, "protobuf parse error", true);
+        rstate->send_client_error(400, "protobuf parse error", true);
         return;
     }
 
-    _request_data_blocks.clear();
     on_request_data_block(boost::system::error_code(),
-        0, core::buffer_regions_t());
+        0, core::buffer_regions_t(), rstate);
 }
 
 void client::on_request_data_block(const boost::system::error_code & ec,
-    unsigned ind, const core::buffer_regions_t & data)
+    unsigned ind, const core::buffer_regions_t & data,
+    const request_state::ptr_t & rstate)
 {
     if(ec)
     {
@@ -197,30 +144,35 @@ void client::on_request_data_block(const boost::system::error_code & ec,
         return;
     }
 
-    if(ind < _request_data_blocks.size())
+    spb::SamoaRequest & samoa_request = rstate->get_samoa_request();
+    std::vector<core::buffer_regions_t> & data_blocks = \
+        rstate->get_request_data_blocks();
+
+    if(ind < data_blocks.size())
     {
-        _request_data_blocks[ind] = data;
+        data_blocks[ind] = data;
         ++ind;
     }
     else
     {
-        // first entrance into on_request_data_block; size _request_data_blocks
-        _request_data_blocks.resize(_request.data_block_length_size());
+        // this is first entrance into on_request_data_block();
+        //   resize data_blocks appropriately
+        data_blocks.resize(samoa_request.data_block_length_size());
     }
 
-    if(ind != _request_data_blocks.size())
+    if(ind != data_blocks.size())
     {
         // still more data blocks to read
-        unsigned block_len = _request.data_block_length(ind);
+        unsigned block_len = samoa_request.data_block_length(ind);
 
         if(block_len > MAX_DATA_BLOCK_LENGTH)
         {
-            send_error(400, "data block too large", true);
+            rstate->send_client_error(400, "data block too large", true);
             return;
         }
 
         read_data(boost::bind(&client::on_request_data_block,
-            shared_from_this(), _1, ind, _3), block_len);
+            shared_from_this(), _1, ind, _3, rstate), block_len);
         return;
     }
 
@@ -229,27 +181,27 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     // we've recieved a complete request in the timeout period
     _ignore_timeout = true;
 
-    command_handler::ptr_t handler = _protocol->get_command_handler(
-        _request.type());
-
-    if(!handler)
+    if(!rstate->load_from_samoa_request(get_context()))
     {
-        send_error(501, "unknown operation type");
+        // an error has already been sent to the client
         return;
     }
 
-    // as a convienence, preset the response type
-    _response.set_type(_request.type());
+    command_handler::ptr_t handler = _protocol->get_command_handler(
+        samoa_request.type());
 
-    // also set 'closing' if the client requested it
-    if(_request.closing())
-        _response.set_closing(true);
+    if(!handler)
+    {
+        rstate->send_client_error(501, "unknown operation type");
+        return;
+    }
 
-    handler->handle(shared_from_this());
+    handler->handle(rstate);
     return;
 }
 
-void client::on_response_finish(const boost::system::error_code & ec)
+void client::on_response_finish(const boost::system::error_code & ec,
+    bool should_close)
 {
     if(ec)
     {
@@ -258,15 +210,11 @@ void client::on_response_finish(const boost::system::error_code & ec)
         return;
     }
 
-    // close after writing this response?
-    if(_response.closing())
+    if(should_close)
     {
         close();
         return;
     }
-
-    _start_called = false;
-    _response.Clear();
 
     // post to begin next request
     get_io_service()->post(boost::bind(

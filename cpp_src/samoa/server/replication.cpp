@@ -74,14 +74,14 @@ void replication::on_peer_request(
         // increments peer_error, and returns true
         //  iff this increment makes it impossible
         //  to meet quorum
-        if(rstate->replication_failure())
+        if(rstate->peer_replication_failure())
         {
             callback(ec);
         }
         return;
     }
 
-    if(rstate->replication_complete())
+    if(rstate->is_replication_complete())
     {
         // this request should be ignored
         server.abort_request();
@@ -109,16 +109,13 @@ void replication::on_peer_request(
     // if this is a replicated write, send local-record to peer
     if(write_request)
     {
-        rstate->get_local_record().SerializeToZeroCopyStream(
-            &rstate->get_zco_adapter());
-        server.get_message().add_data_block_length(
-            rstate->get_zco_adapter().ByteCount());
+        core::zero_copy_output_adapter zco_adapter;
+
+        rstate->get_local_record().SerializeToZeroCopyStream(&zco_adapter);
+        server.get_message().add_data_block_length(zco_adapter.ByteCount());
 
         server.start_request();
-        server.write_interface().queue_write(
-            rstate->get_zco_adapter().output_regions());
-
-        rstate->get_zco_adapter().reset();
+        server.write_interface().queue_write(zco_adapter.output_regions());
     }
 
     server.finish_request(
@@ -141,14 +138,14 @@ void replication::on_peer_response(
         // increments peer_error, and returns true
         //  iff this increment makes it impossible
         //  to meet quorum
-        if(rstate->replication_failure())
+        if(rstate->peer_replication_failure())
         {
             callback(ec);
         }
         return;
     }
 
-    if(rstate->replication_complete())
+    if(rstate->is_replication_complete())
     {
         // this response should be ignored
         server.finish_response();
@@ -160,10 +157,12 @@ void replication::on_peer_response(
     {
         // parse into local-record (used here as scratch space)
         SAMOA_ASSERT(server.get_response_data_blocks().size() == 1);
-        rstate->get_zci_adapter().reset(server.get_response_data_blocks()[0]);
+
+        core::zero_copy_input_adapter zci_adapter(
+            server.get_response_data_blocks()[0]);
 
         SAMOA_ASSERT(rstate->get_local_record().ParseFromZeroCopyStream(
-            &rstate->get_zci_adapter()));
+            &zci_adapter));
 
         // merge local-record into remote-record
         rstate->get_table()->get_consistent_merge()(
@@ -172,7 +171,7 @@ void replication::on_peer_response(
 
     // increments peer_success, and returns true
     //  iff this increment caused us to meet quorum
-    if(rstate->replication_success())
+    if(rstate->peer_replication_success())
     {
         callback(boost::system::error_code());
     }

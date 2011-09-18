@@ -21,8 +21,8 @@ class TestDropPartition(unittest.TestCase):
 
     def test_drop_partition(self):
 
-        test_table = self.fixture.add_table()
-        test_part = self.fixture.add_local_partition(test_table.uuid)
+        test_table = UUID(self.fixture.add_table().uuid)
+        test_part = UUID(self.fixture.add_local_partition(test_table).uuid)
 
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
@@ -30,11 +30,11 @@ class TestDropPartition(unittest.TestCase):
         def test():
 
             # precondition: runtime partition exists on server
-            table = context.get_cluster_state().get_table_set().get_table(
-                UUID(test_table.uuid))
-            part = table.get_partition(UUID(test_part.uuid))
+            table = context.get_cluster_state().get_table_set(
+                ).get_table(test_table)
+            part = table.get_partition(test_part)
 
-            self.assertEquals(part.get_uuid(), UUID(test_part.uuid))
+            self.assertEquals(part.get_uuid(), test_part)
 
             # issue partition drop request
             server = yield Server.connect_to(
@@ -42,22 +42,19 @@ class TestDropPartition(unittest.TestCase):
             request = yield server.schedule_request()
 
             request.get_message().set_type(CommandType.DROP_PARTITION)
-
-            dp = request.get_message().mutable_drop_partition()
-            dp.set_table_uuid(test_table.uuid)
-            dp.set_partition_uuid(test_part.uuid)
+            request.get_message().set_table_uuid(test_table.to_bytes())
+            request.get_message().set_partition_uuid(test_part.to_bytes())
 
             response = yield request.finish_request()
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
             # postcondition: table is still live, but partition is not
-            table = context.get_cluster_state().get_table_set().get_table(
-                UUID(test_table.uuid))
-            part = table.get_partition(UUID(test_part.uuid))
+            table = context.get_cluster_state().get_table_set(
+                ).get_table(test_table)
 
-            self.assertFalse(part)
-            
+            self.assertFalse(table.get_partition(test_part))
+
             # cleanup
             context.get_tasklet_group().cancel_group()
             yield
@@ -66,8 +63,8 @@ class TestDropPartition(unittest.TestCase):
 
     def test_error_cases(self):
 
-        test_table = self.fixture.add_table()
-        test_part = self.fixture.add_local_partition(test_table.uuid)
+        test_table = UUID(self.fixture.add_table().uuid)
+        test_part = UUID(self.fixture.add_local_partition(test_table).uuid)
 
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
@@ -77,57 +74,19 @@ class TestDropPartition(unittest.TestCase):
             server = yield Server.connect_to(
                 listener.get_address(), listener.get_port())
 
-            # non-existent table 
+            # missing table 
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.DROP_PARTITION)
-
-            dp = request.get_message().mutable_drop_partition()
-            dp.set_table_uuid(UUID.from_random().to_hex())
-            dp.set_partition_uuid(test_part.uuid)
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
-
-            # non-existent partition 
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.DROP_PARTITION)
-
-            dp = request.get_message().mutable_drop_partition()
-            dp.set_table_uuid(test_table.uuid)
-            dp.set_partition_uuid(UUID.from_random().to_hex())
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
-
-            # malformed table UUID 
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.DROP_PARTITION)
-
-            dp = request.get_message().mutable_drop_partition()
-            dp.set_table_uuid('invalid uuid')
-            dp.set_partition_uuid(test_part.uuid)
+            request.get_message().set_partition_uuid(test_part.to_bytes())
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
-            # malformed partition UUID 
+            # missing partition
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.DROP_PARTITION)
-
-            dp = request.get_message().mutable_drop_partition()
-            dp.set_table_uuid(test_part.uuid)
-            dp.set_partition_uuid('invalid uuid')
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
-
-            # missing request message
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.DROP_PARTITION)
+            request.get_message().set_table_uuid(test_table.to_bytes())
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 400)

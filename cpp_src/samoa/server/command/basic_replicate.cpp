@@ -19,20 +19,23 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-void replicate_handler::handle(const client::ptr_t & client)
+void replicate_handler::handle(const request_state::ptr_t & rstate)
 {
-    request_state::ptr_t rstate = request_state::extract(client);
-
-    bool write_request = !client->get_request_data_blocks().empty();
+    bool write_request = !rstate->get_request_data_blocks().empty();
 
     if(write_request)
     {
-        // parse into remote-record
-        SAMOA_ASSERT(client->get_request_data_blocks().size() == 1);
-        rstate->get_zci_adapter().reset(client->get_request_data_blocks()[0]);
+        if(rstate->get_request_data_blocks().size() != 1)
+        {
+            rstate->send_client_error(400, "expected just one data block");
+            return;
+        }
 
-        SAMOA_ASSERT(rstate->get_remote_record().ParseFromZeroCopyStream(
-            &rstate->get_zci_adapter()));
+        // parse into remote-record
+        core::zero_copy_input_adapter zci_adapter(
+            rstate->get_request_data_blocks()[0]);
+        SAMOA_ASSERT(rstate->get_remote_record(
+            ).ParseFromZeroCopyStream(&zci_adapter));
 
         rstate->get_primary_partition()->get_persister()->put(
             boost::bind(&replicate_handler::on_write,
@@ -53,8 +56,7 @@ void replicate_handler::handle(const client::ptr_t & client)
     }
 }
 
-void replicate_handler::on_write(
-    const boost::system::error_code & ec,
+void replicate_handler::on_write(const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
     const request_state::ptr_t & rstate)
 {
@@ -77,10 +79,8 @@ void replicate_handler::on_write(
     }
 }
 
-void replicate_handler::on_read(
-    const boost::system::error_code & ec,
-    bool found,
-    const request_state::ptr_t & rstate)
+void replicate_handler::on_read(const boost::system::error_code & ec,
+    bool found, const request_state::ptr_t & rstate)
 {
     if(ec)
     {
@@ -91,18 +91,14 @@ void replicate_handler::on_read(
 
     if(found)
     {
-        client & client = *rstate->get_client();
+        core::zero_copy_output_adapter zco_adapter;
+        rstate->get_local_record().SerializeToZeroCopyStream(&zco_adapter);
+        rstate->get_samoa_response().add_data_block_length(
+            zco_adapter.ByteCount());
 
-        rstate->get_local_record().SerializeToZeroCopyStream(
-            &rstate->get_zco_adapter());
-        client.get_response().add_data_block_length(
-            rstate->get_zco_adapter().ByteCount());
-
-        client.start_response();
-        client.write_interface().queue_write(
-            rstate->get_zco_adapter().output_regions());
-
-        rstate->get_zco_adapter().reset();
+        rstate->start_client_response();
+        rstate->get_client()->write_interface().queue_write(
+            zco_adapter.output_regions());
     }
 
     rstate->finish_client_response();

@@ -18,7 +18,7 @@ class blob
 public:
 
     static void send_blob_value(
-        const server::client_ptr_t &,
+        const server::request_state_ptr_t &,
         const samoa::core::protobuf::PersistedRecord &);
 
     static merge_result consistent_merge(

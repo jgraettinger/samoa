@@ -23,6 +23,8 @@ void make_partition_bindings()
         .def("get_consistent_range_end",
             &partition::get_consistent_range_end)
         .def("get_lamport_ts", &partition::get_lamport_ts)
+        .def("position_in_responsible_range",
+            &partition::position_in_responsible_range)
         .def("merge_partition", &partition::merge_partition);
 }
 

@@ -41,7 +41,7 @@ public:
 
 	void spawn_tasklets();
 
-    typedef boost::function<bool (spb::ClusterState &)
+    typedef boost::function<bool(spb::ClusterState &)
         > cluster_state_callback_t;
 
     //! Begins a cluster state transaction

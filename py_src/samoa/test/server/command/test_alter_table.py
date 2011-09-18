@@ -24,8 +24,10 @@ class TestAlterTable(unittest.TestCase):
         test_table = self.fixture.add_table(name = 'test_table')
         test_table.set_replication_factor(1)
 
+        test_table_uuid = UUID(test_table.uuid)
+
         for i in xrange(5):
-            self.fixture.add_remote_partition(test_table.uuid)
+            self.fixture.add_remote_partition(test_table_uuid)
 
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
@@ -37,9 +39,9 @@ class TestAlterTable(unittest.TestCase):
             request = yield server.schedule_request()
 
             request.get_message().set_type(CommandType.ALTER_TABLE)
+            request.get_message().set_table_uuid(test_table_uuid.to_bytes())
 
             t = request.get_message().mutable_alter_table()
-            t.set_table_uuid(test_table.uuid)
             t.set_name('new_name')
             t.set_replication_factor(3)
             t.set_consistency_horizon(1234)
@@ -56,7 +58,7 @@ class TestAlterTable(unittest.TestCase):
             # but is present under new name
             table = table_set.get_table_by_name('new_name')
 
-            self.assertEquals(table.get_uuid(), UUID(test_table.uuid))
+            self.assertEquals(table.get_uuid(), test_table_uuid)
 
             # replication factor / consistency horizon have been updated
             self.assertEquals(table.get_replication_factor(), 3)
@@ -69,6 +71,7 @@ class TestAlterTable(unittest.TestCase):
 
     def test_error_cases(self):
 
+        test_table = self.fixture.add_table(name = 'test_table')
         listener = self.injector.get_instance(Listener)
         context = listener.get_context()
 
@@ -77,23 +80,11 @@ class TestAlterTable(unittest.TestCase):
             server = yield Server.connect_to(
                 listener.get_address(), listener.get_port())
 
-            # table doesn't exist 
+            # table name or UUID not set
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.ALTER_TABLE)
 
             ct = request.get_message().mutable_alter_table()
-            ct.set_table_uuid(UUID.from_random().to_hex())
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
-
-            # malformed UUID
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.ALTER_TABLE)
-
-            ct = request.get_message().mutable_alter_table()
-            ct.set_table_uuid("invalid uuid")
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 400)
@@ -102,6 +93,7 @@ class TestAlterTable(unittest.TestCase):
             # alter_table message not present
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.ALTER_TABLE)
+            request.get_message().set_table_name(test_table.name)
 
             response = yield request.finish_request()
             self.assertEquals(response.get_error_code(), 400)
