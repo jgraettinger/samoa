@@ -1,5 +1,5 @@
 #include <boost/python.hpp>
-#include "samoa/server/command/basic_replicate.hpp"
+#include "samoa/server/command/replicate.hpp"
 
 namespace samoa {
 namespace server {

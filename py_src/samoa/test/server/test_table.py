@@ -5,6 +5,7 @@ from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.table import Table
 from samoa.server.peer_set import PeerSet
+
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
@@ -266,8 +267,8 @@ class TestTable(unittest.TestCase):
         self.assertEquals(primary_partition.get_ring_position(), 3000)
 
         # replication factor of 3 => 1000, 2000 also returned
-        self.assertEquals(
-            [part.get_ring_position() for part, srv in secondary_partitions],
+        self.assertEquals([part_peer.partition.get_ring_position() \
+                for part_peer in secondary_partitions],
             [1000, 2000])
 
         # position 3500 is mapped onto ring starting at 4000, and wrapping
@@ -278,8 +279,8 @@ class TestTable(unittest.TestCase):
         self.assertFalse(primary_partition)
 
         # validate secondary partitions
-        self.assertEquals(
-            [part.get_ring_position() for part, srv in secondary_partitions],
+        self.assertEquals([part_peer.partition.get_ring_position() \
+                for part_peer in secondary_partitions],
             [4000, 0, 1000])
 
         # position 4500 is mapped onto the ring starting at 0
@@ -290,7 +291,7 @@ class TestTable(unittest.TestCase):
         self.assertFalse(primary_partition)
 
         # validate secondary partitions
-        self.assertEquals(
-            [part.get_ring_position() for part, srv in secondary_partitions],
+        self.assertEquals([part_peer.partition.get_ring_position() \
+                for part_peer in secondary_partitions],
             [0, 1000, 2000])
 

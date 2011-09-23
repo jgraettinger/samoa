@@ -3,9 +3,9 @@
 #include "samoa/datamodel/clock_util.hpp"
 #include "samoa/server/request_state.hpp"
 #include "samoa/server/client.hpp"
-#include "samoa/server/table.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/error.hpp"
+#include "samoa/log.hpp"
 #include <boost/iostreams/device/array.hpp>
 #include <boost/iostreams/stream.hpp>
 
@@ -44,16 +44,15 @@ void blob::send_blob_value(const server::request_state::ptr_t & rstate,
 merge_result blob::consistent_merge(
     spb::PersistedRecord & local_record,
     const spb::PersistedRecord & remote_record,
-    const server::table & table)
+    unsigned consistency_horizon)
 {
     merge_result result;
-    
+
     // either record may not actually have a cluster_clock,
     //  in which case it uses the default (empty) instance
-    clock_util::clock_ancestry ancestry = \
-        clock_util::compare(
-            local_record.cluster_clock(), remote_record.cluster_clock(),
-            table.get_consistency_horizon());
+    clock_util::clock_ancestry ancestry = clock_util::compare(
+        local_record.cluster_clock(), remote_record.cluster_clock(),
+        consistency_horizon);
 
     if(ancestry == clock_util::EQUAL)
     {
@@ -88,7 +87,7 @@ merge_result blob::consistent_merge(
     // merge local & remote clocks directly into local_record's clock
     clock_util::compare(
         *local_clock.get(), remote_record.cluster_clock(),
-        table.get_consistency_horizon(),
+        consistency_horizon,
         local_record.mutable_cluster_clock());
 
     // merge remote_record's blob_value into local_record

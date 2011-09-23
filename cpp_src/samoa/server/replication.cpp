@@ -64,26 +64,23 @@ void replication::on_peer_request(
     samoa::client::server_request_interface server,
     const replication::callback_t & callback,
     const request_state::ptr_t & rstate,
-    const partition::ptr_t & partition,
+    const partition::ptr_t & peer_part,
     bool write_request)
 {
     if(ec)
     {
         LOG_WARN(ec.message());
 
-        // increments peer_error, and returns true
-        //  iff this increment makes it impossible
-        //  to meet quorum
         if(rstate->peer_replication_failure())
         {
-            callback(ec);
+            callback();
         }
         return;
     }
 
-    if(rstate->is_replication_complete())
+    if(!write_request && rstate->is_client_quorum_met())
     {
-        // this request should be ignored
+        // this read-replication request no longer needs to be made
         server.abort_request();
         return;
     }
@@ -91,22 +88,36 @@ void replication::on_peer_request(
     spb::SamoaRequest & samoa_request = server.get_message();
 
     samoa_request.set_type(spb::REPLICATE);
-
     samoa_request.set_key(rstate->get_key());
 
     samoa_request.mutable_table_uuid()->assign(
         rstate->get_table()->get_uuid().begin(),
         rstate->get_table()->get_uuid().end());
 
+    // assign remote partition as partition_uuid
     samoa_request.mutable_partition_uuid()->assign(
-        partition->get_uuid().begin(),
-        partition->get_uuid().end());
+        peer_part->get_uuid().begin(),
+        peer_part->get_uuid().end());
 
+    // assign our local partition as a peer_partition_uuid
     samoa_request.add_peer_partition_uuid()->assign(
         rstate->get_primary_partition()->get_uuid().begin(),
         rstate->get_primary_partition()->get_uuid().end());
 
-    // if this is a replicated write, send local-record to peer
+    // assign _other_ remote partitions as peer_partition_uuid
+    for(auto p_it = rstate->get_partition_peers().begin();
+            p_it != rstate->get_partition_peers().end(); ++p_it)
+    {
+        const partition & part = *p_it->partition;
+
+        if(part.get_uuid() != peer_part->get_uuid())
+        {
+            samoa_request.add_peer_partition_uuid()->assign(
+                part.get_uuid().begin(), part.get_uuid().end());
+        }
+    }
+
+    // if this is a write-replication, send local-record to peer
     if(write_request)
     {
         core::zero_copy_output_adapter zco_adapter;
@@ -131,29 +142,31 @@ void replication::on_peer_response(
     const request_state::ptr_t & rstate,
     bool write_request)
 {
-    if(ec)
+    if(ec || server.get_error_code())
     {
-        LOG_WARN(ec.message());
+        if(ec)
+        {
+            LOG_WARN(ec.message());
+        }
+        else
+        {
+            LOG_WARN("remote error: " << \
+                server.get_message().error().ShortDebugString());
 
-        // increments peer_error, and returns true
-        //  iff this increment makes it impossible
-        //  to meet quorum
+            server.finish_response();
+        }
+
         if(rstate->peer_replication_failure())
         {
-            callback(ec);
+            callback();
         }
         return;
     }
 
-    if(rstate->is_replication_complete())
-    {
-        // this response should be ignored
-        server.finish_response();
-        return;
-    }
-
-    // peer responded with a record for this key?
-    if(!write_request && !server.get_response_data_blocks().empty())
+    // is this a non-empty response to a still-needed replicated read?
+    if(!write_request &&
+       !rstate->is_client_quorum_met() &&
+       !server.get_response_data_blocks().empty())
     {
         // parse into local-record (used here as scratch space)
         SAMOA_ASSERT(server.get_response_data_blocks().size() == 1);
@@ -166,14 +179,14 @@ void replication::on_peer_response(
 
         // merge local-record into remote-record
         rstate->get_table()->get_consistent_merge()(
-            rstate->get_local_record(), rstate->get_remote_record());
+            rstate->get_remote_record(), rstate->get_local_record());
     }
 
-    // increments peer_success, and returns true
-    //  iff this increment caused us to meet quorum
+    server.finish_response();
+
     if(rstate->peer_replication_success())
     {
-        callback(boost::system::error_code());
+        callback();
     }
 }
 

@@ -40,9 +40,7 @@ private:
     void on_put(const boost::system::error_code &,
         const datamodel::merge_result &, const request_state_ptr_t &);
 
-    void on_replicated_write(const boost::system::error_code &,
-        const request_state_ptr_t &);
-
+    void on_replicated_write(const request_state_ptr_t &);
 };
 
 }

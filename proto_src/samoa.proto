@@ -176,7 +176,7 @@ message SamoaRequest {
     optional bytes partition_uuid = 8;
     repeated bytes peer_partition_uuid = 9;
 
-    optional uint32 quorum = 10;
+    optional uint32 requested_quorum = 10 [default = 1];
 
     optional CreateTableRequest create_table = 12;
     optional AlterTableRequest  alter_table = 13;
@@ -198,6 +198,9 @@ message SamoaResponse {
 
     optional bytes table_uuid = 5;
     optional bytes partition_uuid = 6;
+
+    optional uint32 replication_success = 9 [default = 1];
+    optional uint32 replication_failure = 10 [default = 0];
 
     optional ClusterClock cluster_clock = 7;
 

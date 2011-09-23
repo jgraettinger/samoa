@@ -12,6 +12,7 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/datamodel/clock_util.hpp"
+#include "samoa/log.hpp"
 #include <boost/bind.hpp>
 
 namespace samoa {
@@ -22,15 +23,24 @@ namespace spb = samoa::core::protobuf;
 
 void set_blob_handler::handle(const request_state::ptr_t & rstate)
 {
-    if(rstate->get_request_data_blocks().size() != 1)
+    if(!rstate->get_table())
     {
-        rstate->send_client_error(400, "expected exactly one data block");
+        rstate->send_client_error(400, "expected table name or UUID");
         return;
     }
-
+    if(rstate->get_key().empty())
+    {
+        rstate->send_client_error(400, "expected key");
+        return;
+    }
     if(!rstate->get_primary_partition())
     {
         rstate->get_peer_set()->forward_request(rstate);
+        return;
+    }
+    if(rstate->get_request_data_blocks().size() != 1)
+    {
+        rstate->send_client_error(400, "expected exactly one data block");
         return;
     }
 
@@ -87,6 +97,8 @@ datamodel::merge_result set_blob_handler::on_merge(
     datamodel::clock_util::prune_record(local_record,
         rstate->get_table()->get_consistency_horizon());
 
+    local_record.mutable_blob_value()->CopyFrom(remote_record.blob_value());
+
     result.local_was_updated = true;
     result.remote_is_stale = true;
     return result;
@@ -113,25 +125,30 @@ void set_blob_handler::on_put(
 
     rstate->get_samoa_response().set_success(true);
 
-    if(rstate->get_quorum_count() == 1)
+    if(!rstate->get_client_quorum())
     {
         rstate->finish_client_response();
     }
 
     replication::replicated_write(
         boost::bind(&set_blob_handler::on_replicated_write,
-            shared_from_this(), _1, rstate),
+            shared_from_this(), rstate),
         rstate);
 }
 
-void set_blob_handler::on_replicated_write(
-    const boost::system::error_code & ec,
-    const request_state::ptr_t & rstate)
+void set_blob_handler::on_replicated_write(const request_state::ptr_t & rstate)
 {
-    if(ec)
+    if(!rstate->get_client())
     {
-        rstate->send_client_error(504, ec);
         return;
+    }
+
+    if(rstate->get_samoa_request().has_requested_quorum())
+    {
+        rstate->get_samoa_response().set_replication_success(
+            rstate->get_peer_success_count() + 1 /* for local write */);
+        rstate->get_samoa_response().set_replication_failure(
+            rstate->get_peer_error_count());
     }
 
     rstate->finish_client_response();

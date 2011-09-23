@@ -96,9 +96,9 @@ void peer_discovery::on_response(
 
     if(server.get_error_code())
     {
-        const spb::Error & error = server.get_message().error();
+        LOG_ERR(_peer_uuid << " discovery: " << \
+            server.get_message().error().ShortDebugString());
 
-        LOG_ERR(_peer_uuid << ": " << error.code() << " " << error.message());
         server.finish_response();
         end_iteration();
         return;

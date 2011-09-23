@@ -24,7 +24,7 @@ public:
     static merge_result consistent_merge(
         spb::PersistedRecord & local_record,
         const spb::PersistedRecord & remote_record,
-        const server::table & table);
+        unsigned consistency_horizon);
 };
 
 }

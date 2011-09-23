@@ -17,9 +17,7 @@ public:
 
     typedef boost::shared_ptr<replication> ptr_t;
 
-    typedef boost::function<void(
-        const boost::system::error_code &)
-    > callback_t;
+    typedef boost::function<void()> callback_t;
 
     static void replicated_read(
         const callback_t &,

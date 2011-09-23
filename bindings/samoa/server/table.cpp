@@ -41,7 +41,7 @@ bpl::tuple py_route_ring_position(const table & t,
         py_partition_peers.append(*it);
     }
 
-    return bpl::make_tuple(primary_partition, partition_peers);
+    return bpl::make_tuple(primary_partition, py_partition_peers);
 }
 
 void make_table_bindings()

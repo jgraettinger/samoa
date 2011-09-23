@@ -63,7 +63,7 @@ class TestRequestState(unittest.TestCase):
             self.peer_part2_uuid.to_bytes())
 
         # populate quorum
-        test_request.set_quorum(4)
+        test_request.set_requested_quorum(4)
 
         self.fixture = fixture
         self.test_request = test_request
@@ -76,7 +76,7 @@ class TestRequestState(unittest.TestCase):
         rstate = RequestState(None)
         rstate.get_samoa_request().CopyFrom(self.test_request)
 
-        rstate.validate_samoa_request(context.get_cluster_state())
+        rstate.load_from_samoa_request(context)
 
         # validate populated runtime entities
         self.assertEquals(rstate.get_table().get_uuid(),
@@ -102,7 +102,7 @@ class TestRequestState(unittest.TestCase):
         rstate.get_samoa_request().clear_partition_uuid()
         rstate.get_samoa_request().clear_peer_partition_uuid()
 
-        rstate.validate_samoa_request(context.get_cluster_state())
+        rstate.load_from_samoa_request(context)
 
         # validate populated runtime entities
         self.assertEquals(rstate.get_table().get_uuid(),
@@ -119,37 +119,75 @@ class TestRequestState(unittest.TestCase):
 
         context = Context(self.fixture.state)
 
+        # Test peer_replication_failure() is no-op after quorum met
+
         rstate = RequestState(None)
         rstate.get_samoa_request().CopyFrom(self.test_request)
-        rstate.get_samoa_request().set_quorum(3)
+        rstate.get_samoa_request().set_requested_quorum(3)
 
-        rstate.validate_samoa_request(context.get_cluster_state())
+        rstate.load_from_samoa_request(context)
 
         # peer success
         self.assertFalse(rstate.peer_replication_success())
-        self.assertFalse(rstate.is_replication_complete())
+        self.assertFalse(rstate.is_client_quorum_met())
 
-        # peer failure
-        self.assertFalse(rstate.peer_replication_failure())
-        self.assertFalse(rstate.is_replication_complete())
-
-        # peer success - operation succeeded
+        # peer success - quorum met
         self.assertTrue(rstate.peer_replication_success())
-        self.assertTrue(rstate.is_replication_complete())
+        self.assertTrue(rstate.is_client_quorum_met())
+
+        # peer failure - false, as quorum already met
+        self.assertFalse(rstate.peer_replication_failure())
+        self.assertTrue(rstate.is_client_quorum_met())
+
+        # Test peer_replication_success() fires when quorum can't be met
 
         rstate = RequestState(None)
         rstate.get_samoa_request().CopyFrom(self.test_request)
-        rstate.get_samoa_request().set_quorum(3)
+        rstate.get_samoa_request().set_requested_quorum(3)
 
-        rstate.validate_samoa_request(context.get_cluster_state())
+        rstate.load_from_samoa_request(context)
 
         # peer failure
         self.assertFalse(rstate.peer_replication_failure())
-        self.assertFalse(rstate.is_replication_complete())
+        self.assertFalse(rstate.is_client_quorum_met())
 
-        # peer failure - operation cannot succeed
+        # peer failure
+        self.assertFalse(rstate.peer_replication_failure())
+        self.assertFalse(rstate.is_client_quorum_met())
+
+        # peer success - all responses receieved
+        self.assertTrue(rstate.peer_replication_success())
+        self.assertTrue(rstate.is_client_quorum_met())
+
+        # Test peer_replication_failure() fires when quorum can't be met
+
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+        rstate.get_samoa_request().set_requested_quorum(3)
+
+        rstate.load_from_samoa_request(context)
+
+        # peer failure
+        self.assertFalse(rstate.peer_replication_failure())
+        self.assertFalse(rstate.is_client_quorum_met())
+
+        # peer success
+        self.assertFalse(rstate.peer_replication_success())
+        self.assertFalse(rstate.is_client_quorum_met())
+
+        # peer failure - all responses receieved
         self.assertTrue(rstate.peer_replication_failure())
-        self.assertTrue(rstate.is_replication_complete())
+        self.assertTrue(rstate.is_client_quorum_met())
+
+        # Test requested_quorum of 0 is interpreted as "all"
+
+        rstate = RequestState(None)
+        rstate.get_samoa_request().CopyFrom(self.test_request)
+        rstate.get_samoa_request().set_requested_quorum(0)
+
+        rstate.load_from_samoa_request(context)
+
+        self.assertEquals(rstate.get_client_quorum(), 3)
 
     def test_bad_table(self):
 
@@ -163,7 +201,7 @@ class TestRequestState(unittest.TestCase):
         rstate.get_samoa_request().set_table_name('invalid-table')
 
         with self.assertRaisesRegexp(RuntimeError, 'code 404'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
         # invalid table UUID
         rstate = RequestState(None)
@@ -173,7 +211,7 @@ class TestRequestState(unittest.TestCase):
         rstate.get_samoa_request().set_table_uuid('invalid-uuid')
 
         with self.assertRaisesRegexp(RuntimeError, 'code 400'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
         # table UUID doesn't exist
         rstate = RequestState(None)
@@ -184,7 +222,7 @@ class TestRequestState(unittest.TestCase):
             UUID.from_random().to_bytes())
 
         with self.assertRaisesRegexp(RuntimeError, 'code 404'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
     def test_bad_partition(self):
 
@@ -197,7 +235,7 @@ class TestRequestState(unittest.TestCase):
         rstate.get_samoa_request().set_partition_uuid('invalid-uuid')
 
         with self.assertRaisesRegexp(RuntimeError, 'code 400'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
         # partition UUID doesn't exist
         rstate = RequestState(None)
@@ -207,7 +245,7 @@ class TestRequestState(unittest.TestCase):
             UUID.from_random().to_bytes())
 
         with self.assertRaisesRegexp(RuntimeError, 'code 404'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
         # partition UUID is remote
         rstate = RequestState(None)
@@ -217,7 +255,7 @@ class TestRequestState(unittest.TestCase):
             self.peer_part1_uuid.to_bytes())
 
         with self.assertRaisesRegexp(RuntimeError, 'code 404'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
     def test_bad_peer_partition(self):
 
@@ -230,7 +268,7 @@ class TestRequestState(unittest.TestCase):
         rstate.get_samoa_request().add_peer_partition_uuid('invalid-uuid')
 
         with self.assertRaisesRegexp(RuntimeError, 'code 400'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
         # peer partition UUID doesn't exist
         rstate = RequestState(None)
@@ -240,7 +278,7 @@ class TestRequestState(unittest.TestCase):
             UUID.from_random().to_bytes())
 
         with self.assertRaisesRegexp(RuntimeError, 'code 404'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
     def test_no_table_partitions(self):
 
@@ -250,7 +288,7 @@ class TestRequestState(unittest.TestCase):
         rstate = RequestState(None)
         rstate.get_samoa_request().CopyFrom(self.test_request)
 
-        rstate.get_samoa_request().clear_quorum()
+        rstate.get_samoa_request().clear_requested_quorum()
         rstate.get_samoa_request().set_table_name(table2.name)
         rstate.get_samoa_request().clear_table_uuid()
 
@@ -258,7 +296,7 @@ class TestRequestState(unittest.TestCase):
         rstate.get_samoa_request().clear_peer_partition_uuid()
 
         with self.assertRaisesRegexp(RuntimeError, 'code 410'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
     def test_invalid_quorum(self):
 
@@ -267,10 +305,11 @@ class TestRequestState(unittest.TestCase):
         rstate = RequestState(None)
         rstate.get_samoa_request().CopyFrom(self.test_request)
 
-        rstate.get_samoa_request().set_quorum(5)
+        # quorum larger than available partitions
+        rstate.get_samoa_request().set_requested_quorum(5)
 
         with self.assertRaisesRegexp(RuntimeError, 'code 400'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 
     def test_invalid_cluster_clock(self):
 
@@ -283,5 +322,5 @@ class TestRequestState(unittest.TestCase):
             ).partition_clock.SwapElements(0, 1)
 
         with self.assertRaisesRegexp(RuntimeError, 'code 400'):
-            rstate.validate_samoa_request(context.get_cluster_state())
+            rstate.load_from_samoa_request(context)
 

@@ -71,7 +71,7 @@ server::server(const core::io_service_ptr_t & io_srv,
     _timeout_ms(default_timeout_ms),
     _timeout_timer(*get_io_service())
 {
-    LOG_DBG("created");
+    LOG_DBG("created " << this);    
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -221,7 +221,7 @@ void server_response_interface::finish_response()
 
 server::~server()
 {
-    LOG_DBG("destroyed");    
+    LOG_DBG("destroyed " << this);    
 }
 
 void server::schedule_request(const server::request_callback_t & callback)

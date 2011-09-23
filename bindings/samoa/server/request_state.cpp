@@ -105,7 +105,7 @@ void make_request_state_bindings()
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("get_remote_record", &request_state::get_remote_record,
             bpl::return_value_policy<bpl::reference_existing_object>())
-        .def("get_quorum_count", &request_state::get_quorum_count)
+        .def("get_client_quorum", &request_state::get_client_quorum)
         .def("get_peer_error_count", &request_state::get_peer_error_count)
         .def("get_peer_success_count", &request_state::get_peer_success_count)
         .def("get_io_service", &request_state::get_io_service,
@@ -114,8 +114,7 @@ void make_request_state_bindings()
             &request_state::peer_replication_failure)
         .def("peer_replication_success",
             &request_state::peer_replication_success)
-        .def("is_replication_complete",
-            &request_state::is_replication_complete)
+        .def("is_client_quorum_met", &request_state::is_client_quorum_met)
         .def("send_client_error", send_client_error_ptr,
             (bpl::arg("code"), bpl::arg("message"), bpl::arg("close") = false))
         .def("start_client_response", &request_state::start_client_response)

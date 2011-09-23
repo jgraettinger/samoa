@@ -1,5 +1,5 @@
 
-#include "samoa/server/command/basic_replicate.hpp"
+#include "samoa/server/command/replicate.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/table.hpp"
@@ -21,6 +21,27 @@ namespace spb = samoa::core::protobuf;
 
 void replicate_handler::handle(const request_state::ptr_t & rstate)
 {
+    if(!rstate->get_table())
+    {
+        rstate->send_client_error(400, "expected table name or UUID");
+        return;
+    }
+    if(!rstate->get_primary_partition())
+    {
+        rstate->send_client_error(400, "expected partition UUID");
+        return;
+    }
+    if(rstate->get_partition_peers().empty())
+    {
+        rstate->send_client_error(400, "expected peer partition UUIDs");
+        return;
+    }
+    if(rstate->get_key().empty())
+    {
+        rstate->send_client_error(400, "expected key");
+        return;
+    }
+
     bool write_request = !rstate->get_request_data_blocks().empty();
 
     if(write_request)
@@ -74,7 +95,7 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
         // start a reverse replication, to synchronize remote peer
         replication::replicated_write(
             boost::bind(&replicate_handler::on_reverse_replication,
-                shared_from_this(), _1),
+                shared_from_this()),
             rstate);
     }
 }
@@ -104,14 +125,8 @@ void replicate_handler::on_read(const boost::system::error_code & ec,
     rstate->finish_client_response();
 }
 
-void replicate_handler::on_reverse_replication(
-    const boost::system::error_code & ec)
-{
-    if(ec)
-    {
-        LOG_WARN(ec.message());
-    }
-}
+void replicate_handler::on_reverse_replication()
+{ }
 
 }
 }

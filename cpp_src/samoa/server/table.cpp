@@ -119,7 +119,7 @@ table::table(const spb::ClusterState::Table & ptable,
     if(_data_type == datamodel::BLOB_TYPE)
     {
         _consistent_merge = boost::bind(&datamodel::blob::consistent_merge,
-            _1, _2, boost::cref(*this)); 
+            _1, _2, _consistency_horizon);
     }
 }
 

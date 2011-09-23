@@ -7,425 +7,376 @@ from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.client.server import Server
 from samoa.server.listener import Listener
-from samoa.persistence.data_type import DataType
+from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
+from samoa.persistence.persister import Persister
 
 from samoa.test.module import TestModule
+from samoa.test.peered_cluster import PeeredCluster
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
 class TestSetBlob(unittest.TestCase):
 
-    def _common_bootstrap(self):
-        # not in setUp(), because not all tests need it
-    
-        self.injector = TestModule().configure(getty.Injector())
-        self.fixture = self.injector.get_instance(ClusterStateFixture)
+    def _build_diverged_fixture(self):
+        """
+        Builds a test-table with replication-factor 4, and five peers:
 
-        self.test_table = self.fixture.add_table(
-            data_type = DataType.BLOB_TYPE)
-        self.test_partition = self.fixture.add_local_partition(
-            self.test_table.uuid)
+            peer A: has a partition with test-value A
+            peer B: has a partition with test-value B
+            peer nil: has a partition, but no value
+            forwarder: has no partition
+            unreachable: a remote partition which is unavailable
+        """
 
-        self.listener = self.injector.get_instance(Listener)
-        self.context = self.listener.get_context()
+        common_fixture = ClusterStateFixture()
+        self.table_uuid = UUID(
+            common_fixture.add_table(
+                data_type = DataType.BLOB_TYPE,
+                replication_factor = 4).uuid)
 
-        self.key = self.fixture.generate_name()
-        self.value = self.fixture.generate_bytes()
+        # add a partition owned by an unreachable peer
+        common_fixture.add_remote_partition(self.table_uuid)
 
-        self.rolling_hash = self.context.get_cluster_state(
+        self.cluster = PeeredCluster(common_fixture,
+            server_names = ['peer_A', 'peer_B', 'peer_nil', 'forwarder'])
+
+        # create local partitions for peer A, B, & nil
+        self.partition_uuids = {}
+        for srv_name in ['peer_A', 'peer_B', 'peer_nil']:
+            self.partition_uuids[srv_name] = UUID(self.cluster.fixtures[
+                srv_name].add_local_partition(self.table_uuid).uuid)
+
+        self.cluster.start_server_contexts()
+
+        # pull out top persister rolling-hash layers
+        self.hashes = {}
+
+        for srv_name in ['peer_A', 'peer_B', 'peer_nil']:
+            self.hashes[srv_name] = \
+                self.cluster.contexts[srv_name].get_cluster_state(
+                    ).get_table_set(
+                    ).get_table(self.table_uuid
+                    ).get_partition(self.partition_uuids[srv_name]
+                    ).get_persister(
+                    ).get_layer(0)
+
+        self.key = 'test-key' #common_fixture.generate_bytes()
+        self.value = 'test-value' #common_fixture.generate_bytes()
+        self.preset_A = 'preset-A' #common_fixture.generate_bytes()
+        self.preset_B = 'preset-B' #common_fixture.generate_bytes()
+
+        # set test key/value under peer A & B
+        for (srv_name, test_value) in [
+                ('peer_A', self.preset_A), ('peer_B', self.preset_B)]:
+
+            record = PersistedRecord()
+            record.add_blob_value(test_value)
+
+            ClockUtil.tick(record.mutable_cluster_clock(),
+                self.partition_uuids[srv_name])
+
+            raw_record = self.hashes[srv_name].prepare_record(self.key,
+                record.ByteSize())
+            raw_record.set_value(record.SerializeToBytes())
+            self.hashes[srv_name].commit_record()
+
+    def _build_simple_fixture(self):
+        """
+        Builds a test-table with a single partition, and two peers:
+
+        main: has a partition with preset value
+        forwarder: has no partition
+        """
+
+        common_fixture = ClusterStateFixture()
+        self.table_uuid = UUID(
+            common_fixture.add_table(
+                data_type = DataType.BLOB_TYPE).uuid)
+
+        self.cluster = PeeredCluster(common_fixture,
+            server_names = ['main', 'forwarder'])
+
+        self.partition_uuid = UUID(self.cluster.fixtures[
+            'main'].add_local_partition(self.table_uuid).uuid)
+
+        self.cluster.start_server_contexts()
+
+        # pull out main's persister
+        self.main_hash = self.cluster.contexts['main'].get_cluster_state(
             ).get_table_set(
-            ).get_table(UUID(self.test_table.uuid)
-            ).get_partition(UUID(self.test_partition.uuid)
+            ).get_table(self.table_uuid
+            ).get_partition(self.partition_uuid
             ).get_persister(
             ).get_layer(0)
 
-    def test_basic(self):
+        self.key = common_fixture.generate_bytes()
+        self.value = common_fixture.generate_bytes()
+        self.preset = common_fixture.generate_bytes()
 
-        self._common_bootstrap()
+        # set preset value in main's persister
+        record = PersistedRecord()
+        record.add_blob_value(self.preset)
+
+        ClockUtil.tick(record.mutable_cluster_clock(), self.partition_uuid)
+
+        raw_record = self.main_hash.prepare_record(self.key,
+            record.ByteSize())
+        raw_record.set_value(record.SerializeToBytes())
+        self.main_hash.commit_record()
+
+    def test_direct_write_no_clock(self):
+        self._build_simple_fixture()
+        self._simple_write_passes('main', None)
+
+    def test_forwarded_write_no_clock(self):
+        self._build_simple_fixture()
+        self._simple_write_passes('forwarder', None)
+
+    def test_direct_write_with_clock(self):
+        self._build_simple_fixture()
+
+        clock = ClusterClock()
+        ClockUtil.tick(clock, self.partition_uuid)
+        self._simple_write_passes('main', clock)
+
+    def test_forwarded_write_with_clock(self):
+        self._build_simple_fixture()
+
+        clock = ClusterClock()
+        ClockUtil.tick(clock, self.partition_uuid)
+        self._simple_write_passes('forwarder', clock)
+
+    def test_direct_write_empty_clock(self):
+        self._build_simple_fixture()
+
+        self._simple_write_fails('main', ClusterClock())
+
+    def test_forwarded_write_empty_clock(self):
+        self._build_simple_fixture()
+
+        self._simple_write_fails('forwarder', ClusterClock())
+
+    def test_direct_write_wrong_clock(self):
+        self._build_simple_fixture()
+
+        clock = ClusterClock()
+        ClockUtil.tick(clock, UUID.from_random())
+        self._simple_write_fails('main', clock)
+        
+    def test_forwarded_write_wrong_clock(self):
+        self._build_simple_fixture()
+
+        clock = ClusterClock()
+        ClockUtil.tick(clock, UUID.from_random())
+        self._simple_write_fails('forwarder', clock)
+
+    def _simple_write_fails(self, server_name, clock):
 
         def test():
 
-            server = yield Server.connect_to(
-                self.listener.get_address(), self.listener.get_port())
+            clock = ClusterClock()
+            ClockUtil.tick(clock, UUID.from_random())
 
-            response = yield self._make_request(server)
+            response = yield self._make_request(server_name, clock)
 
-            # request succeeded
+            samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().blob.success)
-            self.assertEquals(response.get_response_data_blocks(), [])
+            self.assertFalse(samoa_response.success)
+
+            # preset value was returned
+            self.assertEquals(response.get_response_data_blocks(),
+                [self.preset])
+
+            expected_clock = ClusterClock()
+            ClockUtil.tick(expected_clock, self.partition_uuid)
+
+            # expected clock was returned
+            self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+                expected_clock, samoa_response.cluster_clock))
+
             response.finish_response()
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.cluster.stop_server_contexts()
             yield
 
         Proactor.get_proactor().run_test(test)
 
-        # directly parse stored record
-        test_record = PersistedRecord()
-        test_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
+    def _simple_write_passes(self, server_name, clock):
+
+        def test():
+
+            response = yield self._make_request(server_name, clock)
+
+            samoa_response = response.get_message()
+            self.assertFalse(response.get_error_code())
+            self.assertTrue(samoa_response.success)
+            self.assertEquals(samoa_response.replication_success, 1)
+            self.assertEquals(samoa_response.replication_failure, 0)
+            response.finish_response()
+
+            # cleanup
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+        # validate written record
+        record = PersistedRecord()
+        record.ParseFromBytes(self.main_hash.get(self.key).value)
 
         expected_clock = ClusterClock()
-        ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
+        ClockUtil.tick(expected_clock, self.partition_uuid)
+        ClockUtil.tick(expected_clock, self.partition_uuid)
 
-        self.assertEquals(ClockAncestry.EQUAL,
-            ClockUtil.compare(expected_clock, test_record.cluster_clock))
+        self.assertEquals(list(record.blob_value), [self.value])
+        self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+            expected_clock, record.cluster_clock))
 
-        self.assertEquals(len(test_record.blob_value), 1)
-        self.assertEquals(test_record.blob_value[0], self.value)
+    def test_quorum_write_A(self):
+        self._build_diverged_fixture()
 
-    def test_forwarding(self):
+        clock = ClusterClock()
+        ClockUtil.tick(clock, self.partition_uuids['peer_A'])
 
-        self._common_bootstrap()
+        self._quorum_write_test('peer_A', clock, [self.value, self.preset_B])
 
-        # peer server bootstrap
-        peer_injector = TestModule().configure(getty.Injector())
-        peer_fixture = peer_injector.get_instance(ClusterStateFixture)
+    def test_quorum_write_B(self):
+        self._build_diverged_fixture()
 
-        peer_fixture.add_peer(uuid = self.fixture.state.local_uuid,
-            port = self.listener.get_port())
+        clock = ClusterClock()
+        ClockUtil.tick(clock, self.partition_uuids['peer_B'])
 
-        peer_listener = peer_injector.get_instance(Listener)
-        peer_context = peer_listener.get_context()
+        self._quorum_write_test('peer_B', clock, [self.value, self.preset_A])
 
-        def test():
+    def test_quorum_write_nil(self):
+        self._build_diverged_fixture()
 
-            server = yield Server.connect_to(
-                peer_listener.get_address(), peer_listener.get_port())
+        clock = ClusterClock() # empty
 
-            response = yield self._make_request(server)
+        self._quorum_write_test('peer_nil', clock,
+            [self.value, self.preset_A, self.preset_B])
 
-            # request succeeded
-            self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().blob.success)
-            response.finish_response()
-
-            # cleanup
-            self.context.get_tasklet_group().cancel_group()
-            peer_context.get_tasklet_group().cancel_group()
-            yield
-
-        Proactor.get_proactor().run_test(test)
-
-        # directly validate against record stored in _main_ context
-        persisted_record = PersistedRecord()
-        persisted_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
-
-        self.assertEquals(persisted_record.blob_value[0], self.value)
-
-    def test_replication(self):
-
-        self._common_bootstrap()
-
-        # peer server bootstrap
-        peer_injector = TestModule().configure(getty.Injector())
-        peer_fixture = peer_injector.get_instance(ClusterStateFixture)
-
-        peer_fixture.add_peer(uuid = self.fixture.state.local_uuid,
-            port = self.listener.get_port())
-
-        # copy out main server table
-        peer_table = peer_fixture.add_table()
-        peer_table.CopyFrom(self.test_table)
-        peer_table.clear_partition()
-        peer_fixture.rebuild_index()
-
-        # add a peer-local partition
-        peer_partition = peer_fixture.add_local_partition(
-            self.test_table.uuid)
-
-        # add a bogus, remote partition
-        peer_fixture.add_remote_partition(self.test_table.uuid,
-            server_uuid = peer_fixture.add_peer().uuid)
-
-        peer_listener = peer_injector.get_instance(Listener)
-        peer_context = peer_listener.get_context()
-
-        peer_rolling_hash = peer_context.get_cluster_state(
-            ).get_table_set(
-            ).get_table(UUID(peer_table.uuid)
-            ).get_partition(UUID(peer_partition.uuid)
-            ).get_persister(
-            ).get_layer(0)
+    def _quorum_write_test(self, server_name, request_clock, expected_values):
 
         def test():
 
-            server = yield Server.connect_to(
-                self.listener.get_address(), self.listener.get_port())
+            response = yield self._make_request(server_name, request_clock, 4)
 
-            response = yield self._make_request(server)
-
-            # request succeeded
+            samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().blob.success)
+            self.assertTrue(samoa_response.success)
+            self.assertEquals(samoa_response.replication_success, 3)
+            self.assertEquals(samoa_response.replication_failure, 1)
+
+            self.assertEquals(len(samoa_response.data_block_length), 0)
+
             response.finish_response()
             yield
 
         def validate():
 
-            persisted_record = PersistedRecord()
+            expected_clock = ClusterClock()
+            ClockUtil.tick(expected_clock, self.partition_uuids['peer_A'])
+            ClockUtil.tick(expected_clock, self.partition_uuids['peer_B'])
+            ClockUtil.tick(expected_clock, self.partition_uuids[server_name])
 
-            # validate against record stored in _main_ context
-            persisted_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
-            self.assertEquals(persisted_record.blob_value[0], self.value)
+            # assert all servers have expected values & clock
+            for srv_name in ['peer_A', 'peer_B', 'peer_nil']:
 
-            # validate against record stored in _peer_ context
-            persisted_record.ParseFromBytes(peer_rolling_hash.get(self.key).value)
-            self.assertEquals(persisted_record.blob_value[0], self.value)
+                record = PersistedRecord()
+                record.ParseFromBytes(
+                    self.hashes[srv_name].get(self.key).value)
+
+                self.assertEquals(set(record.blob_value), set(expected_values))
+
+                self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+                    expected_clock, record.cluster_clock))
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
-            peer_context.get_tasklet_group().cancel_group()
+            self.cluster.stop_server_contexts()
             yield
 
         Proactor.get_proactor().run_test([test, validate])
 
-
-    def test_cluster_clock_semantics(self):
-
-        self._common_bootstrap()
-
-        # set an existing record, with non-empty cluster-clock
-        expected_clock = ClusterClock()
-        ClockUtil.tick(expected_clock, UUID.from_random())
-
-        persisted_record = PersistedRecord()
-        persisted_record.mutable_cluster_clock().CopyFrom(expected_clock)
-        persisted_record.add_blob_value("previous-value")
-
-        record = self.rolling_hash.prepare_record(
-            self.key, persisted_record.ByteSize())
-        record.set_value(persisted_record.SerializeToBytes())
-
-        self.rolling_hash.commit_record()
-
-        def test():
-
-            server = yield Server.connect_to(
-                self.listener.get_address(), self.listener.get_port())
-
-            # first request: pass empty clock (won't succeed)
-            response = yield self._make_request(server,
-                cluster_clock = ClusterClock())
-
-            self.assertFalse(response.get_error_code())
-            self.assertFalse(response.get_message().blob.success)
-
-            self.assertEquals(response.get_response_data_blocks(),
-                ['previous-value'])
-
-            response_clock = response.get_message().blob.cluster_clock
-            self.assertEquals(ClockAncestry.EQUAL,
-                ClockUtil.compare(expected_clock, response_clock))
-
-            response.finish_response()
-
-            # second request: pass previously returned tag (succeeds)
-            response = yield self._make_request(server,
-                cluster_clock = response_clock)
-
-            self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().blob.success)
-            self.assertEquals(response.get_response_data_blocks(), [])
-
-            response.finish_response()
-
-            # third request: don't pass a tag at all (succeeds)
-            response = yield self._make_request(server, cluster_clock = None)
-
-            self.assertFalse(response.get_error_code())
-            self.assertTrue(response.get_message().blob.success)
-            self.assertEquals(response.get_response_data_blocks(), [])
-
-            response.finish_response()
-
-            # cleanup
-            self.context.get_tasklet_group().cancel_group()
-            yield
-
-        Proactor.get_proactor().run_test(test)
-
-        # query for runtime record
-        persisted_record = PersistedRecord()
-        persisted_record.ParseFromBytes(self.rolling_hash.get(self.key).value)
-
-        # two writes from test_partition occurred during the test
-        ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
-        ClockUtil.tick(expected_clock, UUID(self.test_partition.uuid))
-
-        self.assertEquals(ClockAncestry.EQUAL,
-            ClockUtil.compare(expected_clock, persisted_record.cluster_clock))
-
     def test_error_cases(self):
-
-        injector = TestModule().configure(getty.Injector())
-        fixture = injector.get_instance(ClusterStateFixture)
-
-        test_table = fixture.add_table(
-            data_type = DataType.BLOB_TYPE)
-        fixture.add_local_partition(test_table.uuid)
-
-        table_no_partitions = fixture.add_table(
-            data_type = DataType.BLOB_TYPE)
-
-        table_remote_not_available = fixture.add_table(
-            data_type = DataType.BLOB_TYPE)
-
-        fixture.add_remote_partition(
-            table_remote_not_available.uuid)
-
-        listener = injector.get_instance(Listener)
-        context = listener.get_context()
-
-        key = fixture.generate_name()
-        value = fixture.generate_bytes()
+        self._build_simple_fixture()
 
         def test():
 
-            server = yield Server.connect_to(
-                listener.get_address(), listener.get_port())
+            # missing table
+            request = yield self.cluster.schedule_request('forwarder')
 
-            # missing request message
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
+            samoa_request = request.get_message()
+            samoa_request.set_type(CommandType.SET_BLOB)
+            samoa_request.set_key(self.key)
 
-            request.get_message().add_data_block_length(len(value))
+            samoa_request.add_data_block_length(len(self.value))
             request.start_request()
-            request.write_interface().queue_write(value)
+            request.write_interface().queue_write(self.value)
 
             response = yield request.finish_request()
+            samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
+
             response.finish_response()
 
-            # missing request payload
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
+            # missing key
+            request = yield self.cluster.schedule_request('forwarder')
 
-            sb = request.get_message().mutable_blob()
-            sb.set_table_name(test_table.name)
-            sb.set_key(key)
+            samoa_request = request.get_message()
+            samoa_request.set_type(CommandType.SET_BLOB)
+            samoa_request.set_table_uuid(self.table_uuid.to_bytes())
+
+            samoa_request.add_data_block_length(len(self.value))
+            request.start_request()
+            request.write_interface().queue_write(self.value)
 
             response = yield request.finish_request()
+            samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
+
             response.finish_response()
 
-            # too many request payloads
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
+            # missing data-block
+            request = yield self.cluster.schedule_request('forwarder')
 
-            sb = request.get_message().mutable_blob()
-            sb.set_table_name(test_table.name)
-            sb.set_key(key)
-
-            request.get_message().add_data_block_length(len(value))
-            request.get_message().add_data_block_length(len(value))
-            request.start_request()
-            request.write_interface().queue_write(value)
-            request.write_interface().queue_write(value)
+            samoa_request = request.get_message()
+            samoa_request.set_type(CommandType.SET_BLOB)
+            samoa_request.set_table_uuid(self.table_uuid.to_bytes())
+            samoa_request.set_key(self.key)
 
             response = yield request.finish_request()
+            samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
 
-            # invalid cluster clock
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
-
-            blob_request = request.get_message().mutable_blob()
-            blob_request.set_table_name(test_table.name)
-            blob_request.set_key(key)
-
-            p_clock = blob_request.mutable_cluster_clock().add_partition_clock()
-            p_clock.set_partition_uuid('b' * 16)
-            p_clock.set_unix_timestamp(0)
-            p_clock.set_lamport_tick(0)
-
-            p_clock = blob_request.mutable_cluster_clock().add_partition_clock()
-            p_clock.set_partition_uuid('a' * 16)
-            p_clock.set_unix_timestamp(0)
-            p_clock.set_lamport_tick(0)
-
-            request.get_message().add_data_block_length(len(value))
-            request.start_request()
-            request.write_interface().queue_write(value)
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 400)
-            response.finish_response()
-
-            # non-existent table 
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
-
-            sb = request.get_message().mutable_blob()
-            sb.set_table_name('invalid table')
-            sb.set_key(key)
-
-            request.get_message().add_data_block_length(len(value))
-            request.start_request()
-            request.write_interface().queue_write(value)
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
-
-            # no table partitions
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
-
-            sb = request.get_message().mutable_blob()
-            sb.set_table_name(table_no_partitions.name)
-            sb.set_key(key)
-
-            request.get_message().add_data_block_length(len(value))
-            request.start_request()
-            request.write_interface().queue_write(value)
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 404)
-            response.finish_response()
-
-            # remote partitions not available
-            request = yield server.schedule_request()
-            request.get_message().set_type(CommandType.SET_BLOB)
-
-            sb = request.get_message().mutable_blob()
-            sb.set_table_name(table_remote_not_available.name)
-            sb.set_key(key)
-
-            request.get_message().add_data_block_length(len(value))
-            request.start_request()
-            request.write_interface().queue_write(value)
-
-            response = yield request.finish_request()
-            self.assertEquals(response.get_error_code(), 500)
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            self.cluster.stop_server_contexts()
             yield
 
         Proactor.get_proactor().run_test(test)
 
-    def _make_request(self, server, cluster_clock = None):
+    def _make_request(self, server_name, request_clock = None, quorum = None):
 
-        request = yield server.schedule_request()
-        request.get_message().set_type(CommandType.SET_BLOB)
+        request = yield self.cluster.schedule_request(server_name)
 
-        blob_request = request.get_message().mutable_blob()
-        blob_request.set_table_name(self.test_table.name)
-        blob_request.set_key(self.key)
+        samoa_request = request.get_message()
+        samoa_request.set_type(CommandType.SET_BLOB)
+        samoa_request.set_table_uuid(self.table_uuid.to_bytes())
+        samoa_request.set_key(self.key)
 
-        if cluster_clock is not None:
-            blob_request.mutable_cluster_clock().CopyFrom(cluster_clock)
+        if request_clock:
+            samoa_request.mutable_cluster_clock().CopyFrom(request_clock)
+        if quorum:
+            samoa_request.set_requested_quorum(4)
 
-        request.get_message().add_data_block_length(len(self.value))
+        samoa_request.add_data_block_length(len(self.value))
         request.start_request()
         request.write_interface().queue_write(self.value)
 
         response = yield request.finish_request()
         yield response
-
 

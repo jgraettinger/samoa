@@ -64,8 +64,8 @@ public:
     spb::PersistedRecord & get_remote_record()
     { return _remote_record; }
 
-    unsigned get_quorum_count() const
-    { return _quorum_count; }
+    unsigned get_client_quorum() const
+    { return _client_quorum; }
 
     unsigned get_peer_error_count() const
     { return _error_count; }
@@ -78,25 +78,36 @@ public:
 
     /*!
     To be called on failed peer replication.
-    
-    Increments peer_error, and returns true iff this increment
-    makes it impossible to meet quorum.
+
+    Increments peer_error_count, and returns true iff the client should be
+    responded to as a result of this specific completion. Eg, because we
+    haven't yet responded, and this completion was the last remaining
+    replication.
+
+    Note: Only one of peer_replication_failure() or peer_replication_success()
+    will return True for a given request_state.
     */
     bool peer_replication_failure();
 
     /*!
     To be called on successful peer replication.
 
-    Increments peer_success, and returns true iff this increment
-    caused us to meet quorum.
+    Increments peer_success, and returns true iff the client should be
+    responded to as a result of this specific completion. Eg, because
+    this completion caused us to meet the client-requested quorum, or
+    because this completion was the last remaining replication.
+
+    Note: Only one of peer_replication_failure() or peer_replication_success()
+    will return True for a given request_state.
     */
     bool peer_replication_success();
 
     /*!
-    \returns True if either replication_failure() or replication_success()
-        have returned true (eg, replication has already failed or succeeded)
+    Indicates whether one of peer_replication_failure() or
+    peer_replication_success() have returned True, and the client's
+    quorum has already been met (or failed).
     */
-    bool is_replication_complete() const;
+    bool is_client_quorum_met() const;
 
     /*! \brief Helper for sending an error response to the client
 
@@ -110,8 +121,8 @@ public:
     void send_client_error(unsigned err_code, const std::string & err_msg,
         bool closing = false);
 
-    void send_client_error(unsigned err_code, const boost::system::error_code &,
-        bool closing = false);
+    void send_client_error(unsigned err_code,
+        const boost::system::error_code &, bool closing = false);
 
     // Serializes & writes the current core::protobuf::SamoaResponse
     void start_client_response();
@@ -140,7 +151,7 @@ private:
     spb::PersistedRecord _local_record;
     spb::PersistedRecord _remote_record;
 
-    unsigned _quorum_count;
+    unsigned _client_quorum;
     unsigned _error_count;
     unsigned _success_count;
 

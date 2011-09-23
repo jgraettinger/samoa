@@ -19,35 +19,35 @@ public:
 
     virtual ~partition();
 
-    const core::uuid & get_uuid()
+    const core::uuid & get_uuid() const
     { return _uuid; }
 
-    const core::uuid & get_server_uuid()
+    const core::uuid & get_server_uuid() const
     { return _server_uuid; }
 
-    uint64_t get_ring_position()
+    uint64_t get_ring_position() const
     { return _ring_position; }
 
     //! Inclusive
-    uint64_t get_range_begin()
+    uint64_t get_range_begin() const
     { return _range_begin; }
 
     //! Inclusive
-    uint64_t get_range_end()
+    uint64_t get_range_end() const
     { return _range_end; }
 
     //! Inclusive
-    uint64_t get_consistent_range_begin()
+    uint64_t get_consistent_range_begin() const
     { return _consistent_range_begin; }
 
     //! Inclusive
-    uint64_t get_consistent_range_end()
+    uint64_t get_consistent_range_end() const
     { return _consistent_range_end; }
 
-    uint64_t get_lamport_ts()
+    uint64_t get_lamport_ts() const
     { return _lamport_ts; }
 
-    bool position_in_responsible_range(uint64_t ring_position);
+    bool position_in_responsible_range(uint64_t ring_position) const;
 
     //! Merges a peer partition description into the local description
     /*!

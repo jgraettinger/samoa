@@ -241,25 +241,23 @@ void persister::on_put(
             put_callback(boost::system::error_code(), result);
             return;
         }
-
-        value_length = local_precord.ByteSize();
-        SAMOA_ASSERT(value_length <= new_rec->value_length());
-
-        local_precord.SerializeWithCachedSizesToArray(
-            reinterpret_cast<google::protobuf::uint8*>(
-                new_rec->value_begin()));
     }
     else
     {
-        // no existing record; directly serialize remote_precord
-        remote_precord.SerializeWithCachedSizesToArray(
-            reinterpret_cast<google::protobuf::uint8*>(
-                new_rec->value_begin()));
+        // no existing record; directly copy remote_record
+        local_precord.CopyFrom(remote_precord);
     }
 
-    // trim & commit serialized record
-    new_rec->trim_value_length(value_length);
+    // re-compute local record length
+    value_length = local_precord.ByteSize();
+    SAMOA_ASSERT(value_length <= new_rec->value_length());
 
+    // write, trim, & commit record
+    local_precord.SerializeWithCachedSizesToArray(
+        reinterpret_cast<google::protobuf::uint8*>(
+            new_rec->value_begin()));
+
+    new_rec->trim_value_length(value_length);
     _layers[0]->commit_record(root_hint);
 
     if(rec && cur_layer)

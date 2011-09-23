@@ -193,17 +193,26 @@ bool request_state::load_from_samoa_request(const context::ptr_t & context)
 
     ///////////// QUORUM
 
-    _quorum_count = _samoa_request.quorum();
-    _error_count = 0;
-    _success_count = 0;
-
-    if(_quorum_count > _partition_peers.size() + 1)
+    if(_samoa_request.requested_quorum() > 0)
     {
-        err << "quorum count " << _quorum_count;
+        _client_quorum = _samoa_request.requested_quorum() - 1;
+    }
+    else
+    {
+        // 0 is interpreted as "All peers"
+        _client_quorum = _partition_peers.size();
+    }
+
+    if(_client_quorum > _partition_peers.size())
+    {
+        err << "quorum count " << _client_quorum;
         err << " greater than effective replication factor ";
         err << (1 + _partition_peers.size());
         return extraction_error(*this, 400, err.str());
     }
+
+    _error_count = 0;
+    _success_count = 0;
 
     ///////////// CLUSTER CLOCK
 
@@ -226,15 +235,34 @@ bool request_state::load_from_samoa_request(const context::ptr_t & context)
 }
 
 bool request_state::peer_replication_failure()
-{ return _error_count++ == (1 + _partition_peers.size() - _quorum_count); }
+{
+    ++_error_count;
+
+    // did we already succeed?
+    if(_success_count == _client_quorum)
+    {
+        return false;
+    }
+
+    // is this the last outstanding replication?
+    return _error_count + _success_count == _partition_peers.size();
+}
 
 bool request_state::peer_replication_success()
-{ return ++_success_count + 1 == _quorum_count; }
-
-bool request_state::is_replication_complete() const
 {
-    return _success_count + 1 >= _quorum_count ||
-        _error_count > (1 + _partition_peers.size() - _quorum_count);
+    if(++_success_count == _client_quorum)
+    {
+        return true;
+    }
+
+    // is this the last outstanding replication?
+    return _error_count + _success_count == _partition_peers.size();
+}
+
+bool request_state::is_client_quorum_met() const
+{
+    return _success_count >= _client_quorum ||
+        _error_count + _success_count == _partition_peers.size();
 }
 
 void request_state::send_client_error(unsigned err_code,

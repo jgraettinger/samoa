@@ -27,8 +27,7 @@ public:
 
 private:
 
-    void on_replicated_read(const boost::system::error_code & ec,
-        const request_state_ptr_t &);
+    void on_replicated_read(const request_state_ptr_t &);
 
     void on_retrieve(const boost::system::error_code & ec,
         const request_state_ptr_t &);

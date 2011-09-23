@@ -21,7 +21,7 @@ partition::partition(
 partition::~partition()
 {}
 
-bool partition::position_in_responsible_range(uint64_t pos)
+bool partition::position_in_responsible_range(uint64_t pos) const
 {
     if(_range_end < _range_begin)
     {

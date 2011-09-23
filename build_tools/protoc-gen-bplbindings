@@ -326,19 +326,6 @@ cpp_type_map = {
 
 method_templates = {}
 
-method_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = \
-method_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = """
-bpl::object py_%(field_name)s(%(msg_name)s & msg)
-{
-    if(msg.has_%(field_name)s())
-    {
-        return bpl::object(msg.%(field_name)s());
-    }
-    // return None
-    return bpl::object();
-}
-""" 
-
 method_templates[(FieldDesc.LABEL_OPTIONAL, 'message')] = \
 method_templates[(FieldDesc.LABEL_REQUIRED, 'message')] = """
 bpl::object py_%(field_name)s(%(msg_name)s & msg)
@@ -470,7 +457,7 @@ binding_templates[(FieldDesc.LABEL_OPTIONAL, 'basic')] = """
     binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
     binder.def("set_%(field_name)s", &%(msg_name)s::set_%(field_name)s);
     binder.def("clear_%(field_name)s", &%(msg_name)s::clear_%(field_name)s);
-    binder.add_property("%(field_name)s", &py_%(field_name)s);
+    binder.add_property("%(field_name)s", &%(msg_name)s::%(field_name)s);
 """[1:-1]
 
 binding_templates[(FieldDesc.LABEL_REQUIRED, 'basic')] = """
@@ -487,7 +474,9 @@ binding_templates[(FieldDesc.LABEL_OPTIONAL, 'str')] = """
     binder.def("set_%(field_name)s", set_%(field_name)s_ptr);
     binder.def("has_%(field_name)s", &%(msg_name)s::has_%(field_name)s);
     binder.def("clear_%(field_name)s", &%(msg_name)s::clear_%(field_name)s);
-    binder.add_property("%(field_name)s", &py_%(field_name)s);
+    binder.add_property("%(field_name)s",
+        bpl::make_function(&%(msg_name)s::%(field_name)s,
+            bpl::return_value_policy<bpl::copy_const_reference>()));
 """[:-1]
 
 binding_templates[(FieldDesc.LABEL_REQUIRED, 'str')] = """
@@ -496,8 +485,7 @@ binding_templates[(FieldDesc.LABEL_REQUIRED, 'str')] = """
 
     binder.def("set_%(field_name)s", set_%(field_name)s_ptr);
     binder.add_property("%(field_name)s",
-        bpl::make_function(
-            &%(msg_name)s::%(field_name)s,
+        bpl::make_function(&%(msg_name)s::%(field_name)s,
             bpl::return_value_policy<bpl::copy_const_reference>()));
 """[:-1]
 

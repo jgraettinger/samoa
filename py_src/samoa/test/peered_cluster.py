@@ -58,11 +58,10 @@ class PeeredCluster(object):
 
         connection = yield Server.connect_to(
             self.listeners[name].get_address(), self.listeners[name].get_port())
-
         yield connection
 
     def schedule_request(self, name):
 
         connection = yield self.get_connection(name)
-        yield (yield connection.schedule_request())
-
+        request = yield connection.schedule_request()
+        yield request
