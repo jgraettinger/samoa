@@ -127,7 +127,7 @@ void set_blob_handler::on_put(
 
     if(!rstate->get_client_quorum())
     {
-        rstate->finish_client_response();
+        rstate->flush_client_response();
     }
 
     replication::replicated_write(
@@ -151,7 +151,7 @@ void set_blob_handler::on_replicated_write(const request_state::ptr_t & rstate)
             rstate->get_peer_error_count());
     }
 
-    rstate->finish_client_response();
+    rstate->flush_client_response();
 }
 
 }

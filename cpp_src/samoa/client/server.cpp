@@ -202,18 +202,9 @@ server_response_interface::get_response_data_blocks() const
 
 void server_response_interface::finish_response()
 {
-    if(!_srv->_response.closing())
-    {
-        // post next response read
-        _srv->get_io_service()->post(boost::bind(
-            &server::on_next_response, _srv));
-    }
-    else
-    {
-        // server indicated it's closing its
-        //   connection: close ours too
-        _srv->close();
-    }
+    // post next response read
+    _srv->get_io_service()->post(boost::bind(
+        &server::on_next_response, _srv));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

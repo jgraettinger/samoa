@@ -88,7 +88,8 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
         return;
     }
 
-    rstate->finish_client_response();
+    // write is committed; notify client
+    rstate->flush_client_response();
 
     if(merge_result.remote_is_stale)
     {
@@ -113,16 +114,13 @@ void replicate_handler::on_read(const boost::system::error_code & ec,
     if(found)
     {
         core::zero_copy_output_adapter zco_adapter;
-        rstate->get_local_record().SerializeToZeroCopyStream(&zco_adapter);
-        rstate->get_samoa_response().add_data_block_length(
-            zco_adapter.ByteCount());
+        SAMOA_ASSERT(rstate->get_local_record(
+            ).SerializeToZeroCopyStream(&zco_adapter));
 
-        rstate->start_client_response();
-        rstate->get_client()->write_interface().queue_write(
-            zco_adapter.output_regions());
+        rstate->add_response_data_block(zco_adapter.output_regions());
     }
 
-    rstate->finish_client_response();
+    rstate->flush_client_response();
 }
 
 void replicate_handler::on_reverse_replication()

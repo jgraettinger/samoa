@@ -26,19 +26,10 @@ void blob::send_blob_value(const server::request_state::ptr_t & rstate,
     for(auto val_it = record.blob_value().begin();
         val_it != record.blob_value().end(); ++val_it)
     {
-        samoa_response.add_data_block_length(val_it->size());
+        rstate->add_response_data_block(val_it->begin(), val_it->end());
     }
 
-    rstate->start_client_response();
-
-    for(auto val_it = record.blob_value().begin();
-        val_it != record.blob_value().end(); ++val_it)
-    {
-        rstate->get_client()->write_interface().queue_write(
-            val_it->begin(), val_it->end());
-    }
-
-    rstate->finish_client_response();
+    rstate->flush_client_response();
 }
 
 merge_result blob::consistent_merge(

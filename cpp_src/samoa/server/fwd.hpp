@@ -21,6 +21,8 @@ typedef boost::shared_ptr<listener> listener_ptr_t;
 class client;
 typedef boost::shared_ptr<client> client_ptr_t;
 
+class client_response_interface;
+
 class command_handler;
 typedef boost::shared_ptr<command_handler> command_handler_ptr_t;
 

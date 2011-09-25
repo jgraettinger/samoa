@@ -1,6 +1,8 @@
 #ifndef SAMOA_LOG_HPP
 #define SAMOA_LOG_HPP
 
+#include <iostream>
+
 #define LOG_HEADER "[" << ::samoa::log::gettid() << "] " << __FILE__ << ":" << __LINE__ << " {" << __PRETTY_FUNCTION__ << "}: "
 
 #define LOG_DBG(what)  (std::cerr << "DBG " << LOG_HEADER << what << std::endl)

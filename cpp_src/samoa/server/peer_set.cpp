@@ -289,15 +289,15 @@ void peer_set::on_forwarded_response(
     }
 
     rstate->get_samoa_response().CopyFrom(server.get_message());
-    rstate->start_client_response();
+    rstate->get_samoa_response().clear_data_block_length();
 
     for(auto it = server.get_response_data_blocks().begin();
         it != server.get_response_data_blocks().end(); ++it)
     {
-        rstate->get_client()->write_interface().queue_write(*it);
+        rstate->add_response_data_block(*it);
     }
 
-    rstate->finish_client_response();
+    rstate->flush_client_response();
     server.finish_response();
 }
 

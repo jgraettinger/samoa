@@ -159,9 +159,6 @@ message SamoaRequest {
 
     required CommandType type = 1;
 
-    // whether the client will be closing the connection after this request
-    optional bool closing = 2 [default = false];
-
     // the byte-lengths of any data blocks accompanying the request.
     //  data blocks directly follow the SamoaRequest
     repeated uint32 data_block_length = 3;
@@ -186,9 +183,6 @@ message SamoaRequest {
 message SamoaResponse {
 
     required CommandType type = 1;
-
-    // whether the server will be closing the connection after this request
-    optional bool closing = 2 [default = false];
 
     // the byte-lengths of any data blocks accompanying the response.
     //  data blocks directly follow the SamoaResponse

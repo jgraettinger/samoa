@@ -10,7 +10,7 @@
 #include "samoa/datamodel/clock_util.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/log.hpp"
-#include <boost/lexical_cast.hpp>
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {
@@ -32,7 +32,9 @@ bool extraction_error(request_state & rstate,
 
 request_state::request_state(const client::ptr_t & client)
  :  _client(client),
-    _start_response_called(false),
+    _error_count(0),
+    _success_count(0),
+    _flush_response_called(false),
     _io_srv(client ? client->get_io_service() : \
         core::proactor::get_proactor()->serial_io_service())
 { }
@@ -211,9 +213,6 @@ bool request_state::load_from_samoa_request(const context::ptr_t & context)
         return extraction_error(*this, 400, err.str());
     }
 
-    _error_count = 0;
-    _success_count = 0;
-
     ///////////// CLUSTER CLOCK
 
     if(_samoa_request.has_cluster_clock() &&
@@ -226,10 +225,6 @@ bool request_state::load_from_samoa_request(const context::ptr_t & context)
 
     // preset the response type to that of the request
     _samoa_response.set_type(_samoa_request.type());
-
-    // also set 'closing' if the client requested it
-    if(_samoa_request.closing())
-        _samoa_response.set_closing(true);
 
     return true;
 }
@@ -265,41 +260,69 @@ bool request_state::is_client_quorum_met() const
         _error_count + _success_count == _partition_peers.size();
 }
 
-void request_state::send_client_error(unsigned err_code,
-    const std::string & err_msg, bool closing /* = false */)
+void request_state::add_response_data_block(
+    const core::const_buffer_regions_t & bs)
 {
-    _samoa_response.Clear();
+    SAMOA_ASSERT(!_flush_response_called);
 
-    _samoa_response.set_type(core::protobuf::ERROR);
-    _samoa_response.set_closing(closing);
-    _samoa_response.mutable_error()->set_code(err_code);
-    _samoa_response.mutable_error()->set_message(err_msg);
+    size_t length = 0;
 
-    finish_client_response();
+    std::for_each(bs.begin(), bs.end(),
+        [&length](const core::const_buffer_region & b)
+        { length += b.size(); });
+
+    _samoa_response.add_data_block_length(length);
+    _response_data.insert(_response_data.end(), bs.begin(), bs.end());
+}
+
+void request_state::add_response_data_block(const core::buffer_regions_t & bs)
+{ 
+    SAMOA_ASSERT(!_flush_response_called);
+
+    size_t length = 0;
+
+    std::for_each(bs.begin(), bs.end(),
+        [&length](const core::buffer_region & b)
+        { length += b.size(); });
+
+    _samoa_response.add_data_block_length(length);
+    _response_data.insert(_response_data.end(), bs.begin(), bs.end());
+}
+
+void request_state::flush_client_response()
+{
+    SAMOA_ASSERT(!_flush_response_called);
+    _flush_response_called = true;
+
+    _client->schedule_response(
+        boost::bind(&request_state::on_client_response,
+            shared_from_this(), _1));
 }
 
 void request_state::send_client_error(unsigned err_code,
-    const boost::system::error_code & ec, bool closing /* = false */)
+    const std::string & err_msg)
+{
+    _samoa_response.Clear();
+    _response_data.clear();
+
+    _samoa_response.set_type(core::protobuf::ERROR);
+    _samoa_response.mutable_error()->set_code(err_code);
+    _samoa_response.mutable_error()->set_message(err_msg);
+
+    flush_client_response();
+}
+
+void request_state::send_client_error(unsigned err_code,
+    const boost::system::error_code & ec)
 {
     std::stringstream tmp;
     tmp << ec << " (" << ec.message() << ")";
 
-    send_client_error(err_code, tmp.str(), closing);
+    send_client_error(err_code, tmp.str());
 }
 
-void request_state::start_client_response()
+void request_state::on_client_response(client::response_interface iface)
 {
-    SAMOA_ASSERT(_client);
-
-    if(_start_response_called)
-    {
-        return;
-    }
-
-    SAMOA_ASSERT(!_client->has_queued_writes());
-
-    _start_response_called = true;
-
     // serlialize & queue core::protobuf::SamoaResponse for writing
     core::zero_copy_output_adapter zco_adapter;
     _samoa_response.SerializeToZeroCopyStream(&zco_adapter);
@@ -308,19 +331,18 @@ void request_state::start_client_response()
 
     // write network order unsigned short length
     uint16_t len = htons((uint16_t)zco_adapter.ByteCount());
-    _client->write_interface().queue_write((char*)&len, ((char*)&len) + 2);
+    iface.write_interface().queue_write((char*)&len, ((char*)&len) + 2);
 
-    // write serialized output regions
-    _client->write_interface().queue_write(zco_adapter.output_regions());
+    // write serialized SamoaResponse output regions
+    iface.write_interface().queue_write(zco_adapter.output_regions());
+
+    // write spooled data blocks
+    iface.write_interface().queue_write(_response_data);
+
+    // flush writes; release ownership of response_interface
+    iface.finish_response();
 }
 
-void request_state::finish_client_response()
-{
-    start_client_response();
-
-    _client->finish_response(_samoa_response.closing());
-    _client.reset();
-}
 
 
 }

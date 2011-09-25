@@ -55,13 +55,8 @@ void cluster_state_handler::on_complete(const request_state::ptr_t & rstate)
     SAMOA_ASSERT(rstate->get_context()->get_cluster_state(
         )->get_protobuf_description().SerializeToZeroCopyStream(&zco_adapter));
 
-    rstate->get_samoa_response().add_data_block_length(zco_adapter.ByteCount());
-
-    rstate->start_client_response();
-    rstate->get_client()->write_interface().queue_write(
-        zco_adapter.output_regions());
-
-    rstate->finish_client_response();
+    rstate->add_response_data_block(zco_adapter.output_regions());
+    rstate->flush_client_response();
 }
 
 }

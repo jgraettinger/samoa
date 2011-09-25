@@ -75,8 +75,6 @@ class server_response_interface
 {
 public:
 
-    server_response_interface();
-
     const core::protobuf::SamoaResponse & get_message() const;
 
     core::stream_protocol::read_interface_t & read_interface();

@@ -55,6 +55,17 @@ bpl::list py_get_partition_peers(const request_state & r)
     return out;
 }
 
+void py_add_response_data_block(request_state & r, const bpl::str & py_str)
+{
+    char * cbuf;
+    Py_ssize_t length;
+
+    if(PyString_AsStringAndSize(py_str.ptr(), &cbuf, &length) == -1)
+        bpl::throw_error_already_set();
+
+    r.add_response_data_block(cbuf, cbuf + length);
+}
+
 std::string py_repr(request_state & r)
 {
     std::stringstream s;
@@ -76,8 +87,7 @@ std::string py_repr(request_state & r)
 void make_request_state_bindings()
 {
     void (request_state::*send_client_error_ptr)(
-        unsigned, const std::string &, bool
-    ) = &request_state::send_client_error;
+        unsigned, const std::string &) = &request_state::send_client_error;
 
     bpl::class_<request_state, request_state::ptr_t, boost::noncopyable
         >("RequestState", bpl::init<const server::client::ptr_t &>())
@@ -115,10 +125,10 @@ void make_request_state_bindings()
         .def("peer_replication_success",
             &request_state::peer_replication_success)
         .def("is_client_quorum_met", &request_state::is_client_quorum_met)
+        .def("add_response_data_block", &py_add_response_data_block)
+        .def("flush_client_response", &request_state::flush_client_response)
         .def("send_client_error", send_client_error_ptr,
-            (bpl::arg("code"), bpl::arg("message"), bpl::arg("close") = false))
-        .def("start_client_response", &request_state::start_client_response)
-        .def("finish_client_response", &request_state::finish_client_response)
+            (bpl::arg("code"), bpl::arg("message")))
         ; 
 }
 

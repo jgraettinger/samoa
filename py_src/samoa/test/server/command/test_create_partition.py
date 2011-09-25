@@ -48,7 +48,6 @@ class TestCreatePartition(unittest.TestCase):
 
             # extract created UUID from response
             response = yield request.finish_request()
-            print response.get_message()
             self.assertFalse(response.get_error_code())
 
             part_uuid = UUID(response.get_message().partition_uuid)

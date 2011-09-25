@@ -22,6 +22,46 @@ using namespace boost::asio;
 // default timeout of 1 minute
 unsigned default_timeout_ms = 60 * 1000;
 
+const unsigned client::max_request_concurrency = 100;
+
+//////////////////////////////////////////////////////////////////////////////
+//  client::response_interface
+
+client_response_interface::client_response_interface(const client::ptr_t & p)
+ : _client(p)
+{
+    if(_client)
+    {
+        SAMOA_ASSERT(!_client->has_queued_writes())
+    }
+}
+
+core::stream_protocol::write_interface_t &
+client_response_interface::write_interface()
+{
+    return _client->write_interface();
+}
+
+void client_response_interface::finish_response()
+{
+    // command handler may have written additional data,
+    //   and already waited for those writes to finish
+    if(_client->has_queued_writes())
+    {
+        write_interface().write_queued(
+            boost::bind(&client::on_response_finish, _client, _1));
+    }
+    else
+    {
+        _client->on_response_finish(boost::system::error_code());
+    }
+    return;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+//  client
+
 client::client(context::ptr_t context, protocol::ptr_t protocol,
     core::io_service_ptr_t io_srv,
     std::unique_ptr<ip::tcp::socket> & sock)
@@ -29,6 +69,10 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    core::tasklet<client>(io_srv),
    _context(context),
    _protocol(protocol),
+   _ready_for_read(true),
+   _ready_for_write(true),
+   _cur_requests_outstanding(0),
+   _ignore_timeout(false),
    _timeout_ms(default_timeout_ms),
    _timeout_timer(*get_io_service())
 {
@@ -52,43 +96,31 @@ void client::run_tasklet()
         boost::posix_time::milliseconds(_timeout_ms));
     _timeout_timer.async_wait(boost::bind(
         &client::on_timeout, shared_from_this(), _1));
-
-    _ignore_timeout = false;
 }
 
 void client::halt_tasklet()
 {
-    close();
-    _timeout_timer.cancel();
-}
-
-void client::finish_response(bool close)
-{
-    // command handler may have written additional data,
-    //   and already waited for those writes to finish
-    if(has_queued_writes())
-    {
-        write_queued(boost::bind(&client::on_response_finish,
-            shared_from_this(), _1, close));
-    }
-    else
-    {
-        on_response_finish(boost::system::error_code(), close);
-    }
-    return;
-}
-
-void client::close()
-{
-    _timeout_timer.cancel();
     core::stream_protocol::close();
+    _timeout_timer.cancel();
+}
+
+void client::schedule_response(const response_callback_t & callback)
+{
+    on_next_response(false, &callback);
 }
 
 void client::on_next_request()
 {
-    // start request read
-    read_data(boost::bind(&client::on_request_length,
-        shared_from_this(), _1, _3), 2);
+    if(_ready_for_read &&
+       _cur_requests_outstanding < client::max_request_concurrency)
+    {
+        // begin a new request read
+        _ready_for_read = false;
+        _cur_requests_outstanding += 1;
+
+        read_data(boost::bind(&client::on_request_length,
+            shared_from_this(), _1, _3), 2);
+    }
 }
 
 void client::on_request_length(const boost::system::error_code & ec,
@@ -96,8 +128,8 @@ void client::on_request_length(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        close();
-        LOG_WARN("connection error: " << ec.message());
+        LOG_WARN(ec.message());
+        _timeout_timer.cancel();
         return;
     }
 
@@ -114,8 +146,8 @@ void client::on_request_body(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        close();
-        LOG_WARN("connection error: " << ec.message());
+        LOG_WARN(ec.message());
+        _timeout_timer.cancel();
         return;
     }
 
@@ -125,7 +157,8 @@ void client::on_request_body(const boost::system::error_code & ec,
     core::zero_copy_input_adapter zci_adapter(read_body);
     if(!rstate->get_samoa_request().ParseFromZeroCopyStream(&zci_adapter))
     {
-        rstate->send_client_error(400, "protobuf parse error", true);
+        rstate->send_client_error(400, "protobuf parse error");
+        // our transport is corrupted: don't begin a new read
         return;
     }
 
@@ -139,8 +172,8 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        close();
-        LOG_WARN("connection error: " << ec.message());
+        LOG_WARN(ec.message());
+        _timeout_timer.cancel();
         return;
     }
 
@@ -167,7 +200,8 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 
         if(block_len > MAX_DATA_BLOCK_LENGTH)
         {
-            rstate->send_client_error(400, "data block too large", true);
+            rstate->send_client_error(400, "data block too large");
+            // our transport is corrupted: don't begin a new read
             return;
         }
 
@@ -176,56 +210,115 @@ void client::on_request_data_block(const boost::system::error_code & ec,
         return;
     }
 
-    // we're done reading data blocks
-
-    // we've recieved a complete request in the timeout period
+    // we're done reading data blocks, and have recieved a 
+    // complete request in the timeout period
     _ignore_timeout = true;
-
-    if(!rstate->load_from_samoa_request(get_context()))
-    {
-        // an error has already been sent to the client
-        return;
-    }
-
-    command_handler::ptr_t handler = _protocol->get_command_handler(
-        samoa_request.type());
-
-    if(!handler)
-    {
-        rstate->send_client_error(501, "unknown operation type");
-        return;
-    }
-
-    handler->handle(rstate);
-    return;
-}
-
-void client::on_response_finish(const boost::system::error_code & ec,
-    bool should_close)
-{
-    if(ec)
-    {
-        close();
-        LOG_WARN("connection error: " << ec.message());
-        return;
-    }
-
-    if(should_close)
-    {
-        close();
-        return;
-    }
+    _ready_for_read = true;
 
     // post to begin next request
     get_io_service()->post(boost::bind(
         &client::on_next_request, shared_from_this()));
+
+    if(rstate->load_from_samoa_request(get_context()))
+    {
+        command_handler::ptr_t handler = _protocol->get_command_handler(
+            samoa_request.type());
+
+        if(!handler)
+        {
+            rstate->send_client_error(501, "unknown operation type");
+        }
+        else
+        {
+            handler->handle(rstate);
+        }
+    }
+    // else, an error has already been sent to the client
+
+    return;
+}
+
+void client::on_next_response(bool is_write_complete,
+    const response_callback_t * new_callback)
+{
+    spinlock::guard guard(_scheduling_lock);
+
+    SAMOA_ASSERT(is_write_complete ^ (new_callback != 0));
+
+    if(is_write_complete)
+    {
+        _ready_for_write = true;
+    }
+
+    if(!_ready_for_write)
+    {
+        if(new_callback)
+        {
+            _queued_response_callbacks.push_back(*new_callback);
+        }
+        return;
+    }
+
+    // we're ready to start a new response
+
+    if(!_queued_response_callbacks.empty())
+    {
+        // it should never be possible for us to be ready-to-write,
+        // and have both a new_callback & queued callbacks.
+        //
+        // only on_response_finish can clear the read_for_write bit,
+        // and that call never issues a new_callback
+        SAMOA_ASSERT(!new_callback);
+
+        _ready_for_write = false;
+
+        // post call to next queued response callback
+        get_io_service()->post(boost::bind(_queued_response_callbacks.front(),
+            response_interface(shared_from_this())));
+
+        _queued_response_callbacks.pop_front();
+    }
+    else if(new_callback)
+    {
+        _ready_for_write = false;
+
+        // post call directly to new_callback
+        get_io_service()->post(boost::bind(*new_callback,
+            response_interface(shared_from_this())));
+    }
+    // else, no response to begin at this point
+}
+
+void client::on_response_finish(const boost::system::error_code & ec)
+{
+    if(ec)
+    {
+        LOG_WARN(ec.message());
+    }
+
+    --_cur_requests_outstanding;
+
+    // we may have dropped below maximum request concurrency with
+    //  this write; allow a new read to begin
+    on_next_request();
+
+    // start a new response, if there is one
+    on_next_response(true, 0);
 }
 
 void client::on_timeout(boost::system::error_code ec)
 {
-    // _timeout_timer will call on_timeout with ec == 0 on timeout
-    if(!ec && _ignore_timeout)
+    if(ec)
     {
+        // timer cancelled; ignore
+        return;
+    }
+
+    if(_ignore_timeout || _cur_requests_outstanding > 1)
+    {
+        // we've recently receieved a request from this client,
+        //  or they have pending responses still in flight
+
         // start a timeout timer, waiting for requests from the client
         _timeout_timer.expires_from_now(
             boost::posix_time::milliseconds(_timeout_ms));
@@ -234,15 +327,10 @@ void client::on_timeout(boost::system::error_code ec)
 
         _ignore_timeout = false;
     }
-    else if(!ec && !_ignore_timeout)
+    else
     {
-        // treat this timeout as an error
-        ec = boost::system::errc::make_error_code(
-            boost::system::errc::stream_timeout);
-
-        close();
         LOG_INFO("client timeout");
-        return;
+        core::stream_protocol::close();
     }
 }
 

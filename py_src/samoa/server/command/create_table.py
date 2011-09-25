@@ -60,6 +60,6 @@ class CreateTableHandler(CommandHandler):
             # TODO: notify peers of change
             pass
 
-        rstate.finish_client_response()
+        rstate.flush_client_response()
         yield
 
