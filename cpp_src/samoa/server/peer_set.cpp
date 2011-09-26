@@ -253,7 +253,7 @@ void peer_set::forward_request(const request_state::ptr_t & rstate)
 
 void peer_set::on_forwarded_request(
     const boost::system::error_code & ec,
-    samoa::client::server_request_interface & server,
+    samoa::client::server_request_interface & iface,
     const request_state::ptr_t & rstate)
 {
     if(ec)
@@ -262,16 +262,16 @@ void peer_set::on_forwarded_request(
         return;
     }
 
-    server.get_message().CopyFrom(rstate->get_samoa_request());
-    server.start_request();
+    iface.get_message().CopyFrom(rstate->get_samoa_request());
+    iface.get_message().clear_data_block_length();
 
     for(auto it = rstate->get_request_data_blocks().begin();
         it != rstate->get_request_data_blocks().end(); ++it)
     {
-        server.write_interface().queue_write(*it);
+        iface.add_data_block(*it);
     }
 
-    server.finish_request(
+    iface.flush_request(
         boost::bind(&peer_set::on_forwarded_response,
             boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
             _1, _2, rstate));
@@ -279,7 +279,7 @@ void peer_set::on_forwarded_request(
 
 void peer_set::on_forwarded_response(
     const boost::system::error_code & ec,
-    samoa::client::server_response_interface & server,
+    samoa::client::server_response_interface & iface,
     const request_state::ptr_t & rstate)
 {
     if(ec)
@@ -288,17 +288,17 @@ void peer_set::on_forwarded_response(
         return;
     }
 
-    rstate->get_samoa_response().CopyFrom(server.get_message());
+    rstate->get_samoa_response().CopyFrom(iface.get_message());
     rstate->get_samoa_response().clear_data_block_length();
 
-    for(auto it = server.get_response_data_blocks().begin();
-        it != server.get_response_data_blocks().end(); ++it)
+    for(auto it = iface.get_response_data_blocks().begin();
+        it != iface.get_response_data_blocks().end(); ++it)
     {
         rstate->add_response_data_block(*it);
     }
 
     rstate->flush_client_response();
-    server.finish_response();
+    iface.finish_response();
 }
 
 }

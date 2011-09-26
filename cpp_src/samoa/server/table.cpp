@@ -211,7 +211,8 @@ void table::route_ring_position(
             if(!rhs.server)
                 return true;
 
-            return lhs.server->get_latency_ms() < rhs.server->get_latency_ms();
+            return false;
+            //return lhs.server->get_latency_ms() < rhs.server->get_latency_ms();
         });
 }
 

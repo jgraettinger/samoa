@@ -312,11 +312,9 @@ class TestSetBlob(unittest.TestCase):
             samoa_request.set_type(CommandType.SET_BLOB)
             samoa_request.set_key(self.key)
 
-            samoa_request.add_data_block_length(len(self.value))
-            request.start_request()
-            request.write_interface().queue_write(self.value)
+            request.add_data_block(self.value)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
 
@@ -329,11 +327,9 @@ class TestSetBlob(unittest.TestCase):
             samoa_request.set_type(CommandType.SET_BLOB)
             samoa_request.set_table_uuid(self.table_uuid.to_bytes())
 
-            samoa_request.add_data_block_length(len(self.value))
-            request.start_request()
-            request.write_interface().queue_write(self.value)
+            request.add_data_block(self.value)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
 
@@ -347,7 +343,7 @@ class TestSetBlob(unittest.TestCase):
             samoa_request.set_table_uuid(self.table_uuid.to_bytes())
             samoa_request.set_key(self.key)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
 
@@ -373,10 +369,8 @@ class TestSetBlob(unittest.TestCase):
         if quorum:
             samoa_request.set_requested_quorum(4)
 
-        samoa_request.add_data_block_length(len(self.value))
-        request.start_request()
-        request.write_interface().queue_write(self.value)
+        request.add_data_block(self.value)
 
-        response = yield request.finish_request()
+        response = yield request.flush_request()
         yield response
 

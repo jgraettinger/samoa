@@ -39,7 +39,7 @@ class TestCreateTable(unittest.TestCase):
             ct.set_consistency_horizon(300)
 
             # extract created UUID from response
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
 
             tbl_uuid = UUID(response.get_message().table_uuid)
@@ -93,7 +93,7 @@ class TestCreateTable(unittest.TestCase):
             ct.set_name('existing_table')
             ct.set_data_type(DataType.BLOB_TYPE.name)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 409)
             response.finish_response()
 
@@ -105,7 +105,7 @@ class TestCreateTable(unittest.TestCase):
             ct.set_name('test_table')
             ct.set_data_type('INVALID')
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 406)
             response.finish_response()
 
@@ -113,7 +113,7 @@ class TestCreateTable(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.CREATE_TABLE)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 

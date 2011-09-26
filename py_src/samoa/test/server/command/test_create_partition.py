@@ -47,7 +47,7 @@ class TestCreatePartition(unittest.TestCase):
             rl.set_index_size(1234)
 
             # extract created UUID from response
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
 
             part_uuid = UUID(response.get_message().partition_uuid)
@@ -95,7 +95,7 @@ class TestCreatePartition(unittest.TestCase):
             rl.set_storage_size(1<<19)
             rl.set_index_size(1234)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
@@ -105,7 +105,7 @@ class TestCreatePartition(unittest.TestCase):
             request.get_message().set_table_uuid(
                 UUID.from_name('test_table').to_bytes())
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
@@ -118,7 +118,7 @@ class TestCreatePartition(unittest.TestCase):
             cp = request.get_message().mutable_create_partition()
             cp.set_ring_position(1234567)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 

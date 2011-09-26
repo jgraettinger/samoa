@@ -41,7 +41,7 @@ class TestDropTable(unittest.TestCase):
             request.get_message().set_type(CommandType.DROP_TABLE)
             request.get_message().set_table_uuid(test_table.to_bytes())
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
@@ -70,7 +70,7 @@ class TestDropTable(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.DROP_TABLE)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 

@@ -7,7 +7,9 @@
 #include "samoa/core/connection_factory.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/proactor.hpp"
+#include <boost/unordered_map.hpp>
 #include <boost/asio.hpp>
+#include <list>
 #include <memory>
 
 namespace samoa {
@@ -28,38 +30,54 @@ typedef boost::function<
     void(const boost::system::error_code &, server_ptr_t)
 > server_connect_to_callback_t;
 
+
 class server_request_interface
 {
 public:
 
-    // Request to be written to the server. This object is fully mutable
-    //  and exclusively available to the current "renter" of the
-    //  server::request_interface, *until start_request() is called*
+    /*!
+     * \brief Request to be written to the server.
+     * This object is mutable and exclusive to the current holder
+     *  of the server::request_interface.
+     */
     core::protobuf::SamoaRequest & get_message();
 
-    // Serializes & writes the current core::protobuf::SamoaRequest
-    //   Postcondition: the core::protobuf::SamoaRequest is no longer mutable
-    void start_request(); 
-
-    // Exposes the writing interface of the underlying stream_protocol
-    //   Precondition: start_request() must have been called
-    //    (an exception is thrown otherwise)
-    core::stream_protocol::write_interface_t & write_interface();
-
-    // Flushes remaining writes to the server.
-    //   If start_request() hasn't yet been called, it will be.
-    // Argument callback is invoked when the corresponding
-    //   response core::protobuf::SamoaResponse has been recieved
-    void finish_request(const server_response_callback_t &);
-
-    /*! \brief Cancels the request, releasing ownership of the request interface
-
-    It is an error to call if start_request() has been called, or
-    any writes have been queued.
-    */
+    /*! \brief Cancels the current request
+     * Ownership of the request interface is released.
+     */
     void abort_request();
 
-    // Returns an unusable (semantically null) instance
+    /*!
+     * \brief Adds the const buffer-regions as a request datablock
+     * SamoaRequest::data_block_length is appropriately updated.
+     */
+    void add_data_block(const core::const_buffer_regions_t &);
+
+    /*!
+     * \brief Adds the buffer-regions as a request datablock
+     * SamoaRequest::data_block_length is appropriately updated.
+     */
+    void add_data_block(const core::buffer_regions_t &);
+
+    /*!
+     * \brief Adds the (byte) iteration-range as a request datablock
+     * SamoaRequest::data_block_length is appropriately updated.
+     */
+    template<typename Iterator>
+    void add_data_block(const Iterator & beg, const Iterator & end);
+
+    /*!
+     * \brief Writes the complete request to server.
+     * Ownership of the request interface is released.
+     *
+     * @param callback Callback to invoke when this request's
+     *  response is recieved from the server
+     */
+    void flush_request(const server_response_callback_t &);
+
+    /*!
+     *  \brief Returns an unusable (semantically null) instance
+     */
     static server_request_interface null_instance();
 
 private:
@@ -68,26 +86,35 @@ private:
     friend class server;
     explicit server_request_interface(const server_ptr_t & p);
 
-    const server_ptr_t _srv;
+    server_ptr_t _srv;
 };
 
 class server_response_interface
 {
 public:
 
+    /*!
+     * \brief Response received from server
+     */
     const core::protobuf::SamoaResponse & get_message() const;
 
-    core::stream_protocol::read_interface_t & read_interface();
-
-    /// Iff the response type is ERROR, returns the corresponding non-zero
-    //   error code. Otherwise 0 is returned, indicating a non-error.
+    /*!
+     * \brief Returns response error code (or 0 if none is set)
+     */
     unsigned get_error_code();
 
+    /*!
+     * \brief Response data blocks returned by the server
+     */
     const std::vector<core::buffer_regions_t> &
-    get_response_data_blocks() const;
+        get_response_data_blocks() const;
 
-    /// Called when reading of the response is complete.
-    ///  Releases ownership of the server::response_interface
+    /*!
+     * \brief Releases ownership of the server::response_interface
+     *
+     * Postcondition: the response interface is no longer used,
+     *  and the server is free to begin the next response read.
+     */
     void finish_response();
 
 private:
@@ -96,7 +123,7 @@ private:
     friend class server;
     explicit server_response_interface(const server_ptr_t & p);
 
-    const server_ptr_t _srv;
+    server_ptr_t _srv;
 };
 
 class server :
@@ -120,28 +147,22 @@ public:
 
     virtual ~server();
 
-    // Argument callback is called when a request is ready to be written
-    //  to the server, and is passed a request_interface instance
+    /*!
+     * \brief Schedules writing of a request
+     *
+     * Callback argument will be invoked with an exclusively-held
+     *  server::request_interface, which may be used to write the
+     *  request to the server
+     */
     void schedule_request(const request_callback_t &);
-
-    unsigned get_timeout_ms()
-    { return _timeout_ms; }
-
-    void set_timeout_ms(unsigned timeout_ms)
-    { _timeout_ms = timeout_ms; }
-
-    unsigned get_queue_size()
-    { return _queue_size; }
-
-    unsigned get_latency_ms()
-    { return 1; }
-
-    void close();
 
 private:
 
     friend class server_request_interface;
     friend class server_response_interface;
+
+    typedef boost::unordered_map<unsigned, response_callback_t
+        > pending_responses_t;
 
     static void on_connect(const boost::system::error_code &,
         const core::io_service_ptr_t &,
@@ -151,50 +172,84 @@ private:
     server(const core::io_service_ptr_t &,
         std::unique_ptr<boost::asio::ip::tcp::socket> &);
 
-    void on_schedule_request(const request_callback_t &);
-
-    void on_request_written(const boost::system::error_code &,
-        const response_callback_t &);
-
-    void on_request_abort();
-
-    void on_response_length(
-        const boost::system::error_code &, const core::buffer_regions_t &);
-
-    void on_response_body(
-        const boost::system::error_code &, const core::buffer_regions_t &);
-
-    void on_response_data_block(
-        const boost::system::error_code &, unsigned, const core::buffer_regions_t &);
-
+    /* 
+     * Begins a new response read (starting with length preamble).
+     */ 
     void on_next_response();
 
-    void on_timeout(const boost::system::error_code &);
-    void on_error(const boost::system::error_code &);
+    // Begins read of SamoaResponse
+    void on_response_length(const boost::system::error_code &,
+        const core::buffer_regions_t &);
 
-    boost::system::error_code _error;
+    // Parses SamoaResponse, and begins read of response data-blocks
+    void on_response_body(const boost::system::error_code &,
+        const core::buffer_regions_t &);
 
-    bool _in_request;
-    bool _start_request_called;
+    /*
+     * Reentrant: reads response data blocks.
+     *
+     * When last data-block is read, dispatches to the response's
+     * corresponding callback.
+     */
+    void on_response_data_block(const boost::system::error_code &,
+        unsigned, const core::buffer_regions_t &);
 
-    core::protobuf::SamoaRequest   _request;
-    core::protobuf::SamoaResponse _response;
+    /*
+     * Manages common cleanup-work for a recieved error
+     */
+    void on_response_error(const boost::system::error_code &);
 
+    /*
+     * Request scheduling workhorse.
+     *
+     * If we're ready to write a new request (_ready_for_write),
+     *  and have a queued callback, that callback is posted.
+     *
+     * If a new callback is given, that callback is either
+     *  posted (if we're ready to write, and there's no queued
+     *  callback) or itself queued.
+     *
+     * @param is_write_complete Whether this call marks that a
+     *  current request operation has completed.
+     * @param new_callback A new request callback to invoke or queue
+     */
+    void on_next_request(bool is_write_complete,
+        const request_callback_t * new_callback);
+
+    /*
+     * Callback when a request has been written (or aborted)
+     *
+     * If the request-write failed, notifies the corresponding
+     *  response callback.
+     *
+     * Begins the next queued request.
+     */
+    void on_request_finish(const boost::system::error_code &,
+        unsigned request_id);
+
+    // modified exclusively through request_interface
+    core::protobuf::SamoaRequest _samoa_request;
+    core::const_buffer_regions_t _request_data;
+    unsigned _next_request_id;
+
+    // exposed as immutable through response_interface
+    core::protobuf::SamoaResponse _samoa_response;
     std::vector<core::buffer_regions_t> _response_data_blocks;
 
-    std::list<request_callback_t> _request_queue;
-    std::list<response_callback_t> _response_queue;
-    unsigned _queue_size;
+    bool _ready_for_write; // xthread
 
-    bool _ignore_timeout;
-    unsigned _timeout_ms;
-    boost::asio::deadline_timer _timeout_timer;
+    std::list<request_callback_t> _queued_request_callbacks; // xthread
+    pending_responses_t _pending_responses; // xthread
+
+    spinlock _lock;
 
     friend class server_private_ctor;
 };
 
 }
 }
+
+#include "samoa/client/server.impl.hpp"
 
 #endif
 

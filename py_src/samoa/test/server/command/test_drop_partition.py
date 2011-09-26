@@ -45,7 +45,7 @@ class TestDropPartition(unittest.TestCase):
             request.get_message().set_table_uuid(test_table.to_bytes())
             request.get_message().set_partition_uuid(test_part.to_bytes())
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
@@ -79,7 +79,7 @@ class TestDropPartition(unittest.TestCase):
             request.get_message().set_type(CommandType.DROP_PARTITION)
             request.get_message().set_partition_uuid(test_part.to_bytes())
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
@@ -88,7 +88,7 @@ class TestDropPartition(unittest.TestCase):
             request.get_message().set_type(CommandType.DROP_PARTITION)
             request.get_message().set_table_uuid(test_table.to_bytes())
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 

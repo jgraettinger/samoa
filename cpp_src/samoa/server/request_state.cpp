@@ -323,6 +323,9 @@ void request_state::send_client_error(unsigned err_code,
 
 void request_state::on_client_response(client::response_interface iface)
 {
+    // set the response request_id to that of the request
+    _samoa_response.set_request_id(_samoa_request.request_id());
+
     // serlialize & queue core::protobuf::SamoaResponse for writing
     core::zero_copy_output_adapter zco_adapter;
     _samoa_response.SerializeToZeroCopyStream(&zco_adapter);

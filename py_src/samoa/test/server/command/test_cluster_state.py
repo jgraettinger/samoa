@@ -40,7 +40,7 @@ class TestClusterState(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.CLUSTER_STATE)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
 
             response_state = ClusterState()
@@ -60,13 +60,9 @@ class TestClusterState(unittest.TestCase):
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.CLUSTER_STATE)
 
-            peer_state_str = peer_fixture.state.SerializeToBytes()
-            request.get_message().add_data_block_length(len(peer_state_str))
-            request.start_request()
+            request.add_data_block(peer_fixture.state.SerializeToBytes())
 
-            request.write_interface().queue_write(peer_state_str)
-
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
 
             response_state = ClusterState()

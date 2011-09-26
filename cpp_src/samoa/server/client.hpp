@@ -90,10 +90,10 @@ public:
     { _timeout_ms = timeout_ms; }
 
     /*!
-     * Schedules a new response.
+     * \brief Schedules writing of response.
      *
      * Callback argument will be invoked with an exclusively-held
-     *  client_response_interface, which may be used to write the
+     *  client::response_interface, which may be used to write the
      *  response to the client
      */
     void schedule_response(const response_callback_t &);
@@ -108,39 +108,41 @@ private:
     /*
      * If a read-operation isn't already in progress and
      *  we haven't yet reach max request concurrency,
-     *  being a new request read (starting with length preamble)
+     *  begin a new request read (starting with length preamble)
      */
     void on_next_request();
 
-    // Begins read of SamoaRequest body
+    /*
+     * Begins read of SamoaRequest body
+     */
     void on_request_length(const boost::system::error_code &,
         const core::buffer_regions_t &);
 
-    // allocates request_state, parses SamoaRequest,
-    //  and directly calls into on_request_data_block
+    /*
+     * Allocates a request_state; parses SamoaRequest; enters on_request_data_block
+     */
     void on_request_body(const boost::system::error_code &,
         const core::buffer_regions_t &);
 
-    // reentrant: reads data blocks until none remain
-    // dispatches request_state to appropriate handler
-    // posts call to on_next_request() when no  
+    /*
+     * Re-entrant: reads request data blocks.
+     *
+     * When the last data-block is read, dispatches the request_state
+     *  to the appropriate handler, and posts to on_next_request()
+     */
     void on_request_data_block(const boost::system::error_code &,
         unsigned, const core::buffer_regions_t &,
         const request_state_ptr_t &);
 
     /*
-     * Core response scheduling method.
+     * Response scheduling workhorse.
      *
-     * This method may be called from multiple threads,
-     * and guards the following state with _scheduling_lock:
-     *   * _ready_for_write
-     *   * _queued_response_callbacks
+     * If we're ready to write a new response (_ready_for_write),
+     *  and have a queued callback, that callback is posted.
      *
-     * schedule_response(callback) delegates via 
-     *  on_next_response(false, callback)
-     *
-     * on_response_finish() begins a new response operation via
-     *  on_next_response(true, null)
+     * If a new callback is given, that callback is either
+     *  posted (if we're ready to write, and there's no queued
+     *  callback) or itself queued.
      *
      * @param is_write_complete Whether this call marks that a
      *  current response operation has completed.
@@ -149,27 +151,32 @@ private:
     void on_next_response(bool is_write_complete,
         const response_callback_t * new_callback);
 
+    /*
+     * Logs errors, and begins the next queued response.
+     */
     void on_response_finish(const boost::system::error_code &);
 
+    /*
+     * If a client hasn't responded within the timeout period, and has
+     *  no pending requests, then the client is stopped (socket is closed,
+     *  timeout cancelled, etc).
+     */
     void on_timeout(boost::system::error_code);
 
-    // immutable
     const context_ptr_t _context;
     const protocol_ptr_t _protocol;
 
-    // synchronizes on_next_response()
-    spinlock _scheduling_lock;
+    bool _ready_for_write; // xthread
 
-    bool _ready_for_read;
-    bool _ready_for_write; // shared
-
-    std::list<response_callback_t> _queued_response_callbacks; // shared
+    std::list<response_callback_t> _queued_response_callbacks; // xthread
 
     unsigned _cur_requests_outstanding;
 
     bool _ignore_timeout;
     unsigned _timeout_ms;
     boost::asio::deadline_timer _timeout_timer;
+    
+    spinlock _lock;
 };
 
 }

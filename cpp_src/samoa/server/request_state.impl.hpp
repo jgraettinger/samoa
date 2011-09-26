@@ -22,6 +22,7 @@ void request_state::add_response_data_block(
     _w_ring.get_read_regions(_response_data);
     _w_ring.consumed(length);
 }
+
 }
 }
 

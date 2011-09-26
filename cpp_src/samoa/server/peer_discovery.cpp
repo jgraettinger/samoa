@@ -52,7 +52,7 @@ void peer_discovery::begin_iteration(const context::ptr_t & context)
 
 void peer_discovery::on_request(
     const boost::system::error_code & ec,
-    samoa::client::server_request_interface & server,
+    samoa::client::server_request_interface & iface,
     const context::ptr_t & context)
 {
     if(ec)
@@ -62,29 +62,22 @@ void peer_discovery::on_request(
         return;
     }
 
-    // hold an explicit reference while serializing 
-    cluster_state::ptr_t cluster_state = context->get_cluster_state();
-
-    // serialize current cluster-state protobuf description
+    // serialize current cluster-state protobuf description;
     core::zero_copy_output_adapter zco_adapter;
-    cluster_state->get_protobuf_description().SerializeToZeroCopyStream(
-        &zco_adapter);
+    context->get_cluster_state()->get_protobuf_description(
+        ).SerializeToZeroCopyStream(&zco_adapter);
 
-    server.get_message().set_type(spb::CLUSTER_STATE);
-    server.get_message().add_data_block_length(zco_adapter.ByteCount());
+    iface.get_message().set_type(spb::CLUSTER_STATE);
+    iface.add_data_block(zco_adapter.output_regions());
 
-    // write serialized ClusterState as data-block
-    server.start_request();
-    server.write_interface().queue_write(zco_adapter.output_regions());
-
-    server.finish_request(
+    iface.flush_request(
         boost::bind(&peer_discovery::on_response,
             shared_from_this(), _1, _2, context));
 }
 
 void peer_discovery::on_response(
     const boost::system::error_code & ec,
-    samoa::client::server_response_interface & server,
+    samoa::client::server_response_interface & iface,
     const context::ptr_t & context)
 {
     if(ec)
@@ -94,28 +87,28 @@ void peer_discovery::on_response(
         return;
     }
 
-    if(server.get_error_code())
+    if(iface.get_error_code())
     {
         LOG_ERR(_peer_uuid << " discovery: " << \
-            server.get_message().error().ShortDebugString());
+            iface.get_message().error().ShortDebugString());
 
-        server.finish_response();
+        iface.finish_response();
         end_iteration();
         return;
     }
 
     // parse returned ClusterState protobuf message
-    SAMOA_ASSERT(server.get_response_data_blocks().size() == 1);
+    SAMOA_ASSERT(iface.get_response_data_blocks().size() == 1);
 
     core::zero_copy_input_adapter zci_adapter(
-        server.get_response_data_blocks()[0]);
+        iface.get_response_data_blocks()[0]);
     SAMOA_ASSERT(_remote_state.ParseFromZeroCopyStream(&zci_adapter));
 
     context->cluster_state_transaction(
         boost::bind(&peer_discovery::on_state_transaction,
             shared_from_this(), _1, context));
 
-    server.finish_response();
+    iface.finish_response();
 }
 
 bool peer_discovery::on_state_transaction(spb::ClusterState & local_state,

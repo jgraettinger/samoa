@@ -20,7 +20,7 @@ namespace server {
 using namespace boost::asio;
 
 // default timeout of 1 minute
-unsigned default_timeout_ms = 60 * 1000;
+unsigned default_timeout_ms = 10 * 1000;
 
 const unsigned client::max_request_concurrency = 100;
 
@@ -30,10 +30,7 @@ const unsigned client::max_request_concurrency = 100;
 client_response_interface::client_response_interface(const client::ptr_t & p)
  : _client(p)
 {
-    if(_client)
-    {
-        SAMOA_ASSERT(!_client->has_queued_writes())
-    }
+    SAMOA_ASSERT(_client && !_client->has_queued_writes())
 }
 
 core::stream_protocol::write_interface_t &
@@ -44,17 +41,11 @@ client_response_interface::write_interface()
 
 void client_response_interface::finish_response()
 {
-    // command handler may have written additional data,
-    //   and already waited for those writes to finish
-    if(_client->has_queued_writes())
-    {
-        write_interface().write_queued(
-            boost::bind(&client::on_response_finish, _client, _1));
-    }
-    else
-    {
-        _client->on_response_finish(boost::system::error_code());
-    }
+    write_interface().write_queued(
+        boost::bind(&client::on_response_finish, _client, _1));
+
+    // release ownership of client::response_interface
+    _client.reset();
     return;
 }
 
@@ -69,7 +60,6 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    core::tasklet<client>(io_srv),
    _context(context),
    _protocol(protocol),
-   _ready_for_read(true),
    _ready_for_write(true),
    _cur_requests_outstanding(0),
    _ignore_timeout(false),
@@ -111,15 +101,15 @@ void client::schedule_response(const response_callback_t & callback)
 
 void client::on_next_request()
 {
-    if(_ready_for_read &&
-       _cur_requests_outstanding < client::max_request_concurrency)
+    if(_cur_requests_outstanding < client::max_request_concurrency)
     {
-        // begin a new request read
-        _ready_for_read = false;
-        _cur_requests_outstanding += 1;
-
+        ++_cur_requests_outstanding;
         read_data(boost::bind(&client::on_request_length,
             shared_from_this(), _1, _3), 2);
+    }
+    else
+    {
+        LOG_WARN("reached maximum request concurrency; pausing read-loop");
     }
 }
 
@@ -213,9 +203,8 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     // we're done reading data blocks, and have recieved a 
     // complete request in the timeout period
     _ignore_timeout = true;
-    _ready_for_read = true;
 
-    // post to begin next request
+    // post to continue request read-loop
     get_io_service()->post(boost::bind(
         &client::on_next_request, shared_from_this()));
 
@@ -241,13 +230,14 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 void client::on_next_response(bool is_write_complete,
     const response_callback_t * new_callback)
 {
-    spinlock::guard guard(_scheduling_lock);
-
     SAMOA_ASSERT(is_write_complete ^ (new_callback != 0));
+
+    spinlock::guard guard(_lock);
 
     if(is_write_complete)
     {
         _ready_for_write = true;
+
     }
 
     if(!_ready_for_write)
@@ -264,10 +254,10 @@ void client::on_next_response(bool is_write_complete,
     if(!_queued_response_callbacks.empty())
     {
         // it should never be possible for us to be ready-to-write,
-        // and have both a new_callback & queued callbacks.
+        //  and have both a new_callback & queued callbacks.
         //
-        // only on_response_finish can clear the read_for_write bit,
-        // and that call never issues a new_callback
+        // only on_response_finish can clear the ready_for_write bit,
+        //  and that call never issues a new_callback
         SAMOA_ASSERT(!new_callback);
 
         _ready_for_write = false;
@@ -296,13 +286,17 @@ void client::on_response_finish(const boost::system::error_code & ec)
         LOG_WARN(ec.message());
     }
 
+    if(_cur_requests_outstanding == client::max_request_concurrency)
+    {
+        // this response caused us to drop back below maximum
+        //  request concurrency; restart the request read-loop via post
+        get_io_service()->post(boost::bind(&client::on_next_request,
+            shared_from_this()));
+
+        LOG_INFO("request concurrency dropped; restarting read-loop");
+    }
     --_cur_requests_outstanding;
 
-    // we may have dropped below maximum request concurrency with
-    //  this write; allow a new read to begin
-    on_next_request();
-
-    // start a new response, if there is one
     on_next_response(true, 0);
 }
 

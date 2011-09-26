@@ -94,7 +94,7 @@ class TestGetBlob(unittest.TestCase):
             samoa_request.set_key(self.key)
             samoa_request.set_requested_quorum(4)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
             self.assertEquals(samoa_response.replication_success, 3)
@@ -145,7 +145,7 @@ class TestGetBlob(unittest.TestCase):
             samoa_request.set_table_uuid(self.table_uuid.to_bytes())
             samoa_request.set_key(self.key)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
             self.assertEquals(samoa_response.replication_success, 1)
@@ -183,7 +183,7 @@ class TestGetBlob(unittest.TestCase):
             samoa_request.set_table_uuid(self.table_uuid.to_bytes())
             samoa_request.set_key(self.key)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
             self.assertEquals(samoa_response.replication_success, 1)
@@ -214,7 +214,7 @@ class TestGetBlob(unittest.TestCase):
             samoa_request.set_type(CommandType.GET_BLOB)
             samoa_request.set_key(self.key)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
 
@@ -227,7 +227,7 @@ class TestGetBlob(unittest.TestCase):
             samoa_request.set_type(CommandType.GET_BLOB)
             samoa_request.set_table_uuid(self.table_uuid.to_bytes())
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertEquals(response.get_error_code(), 400)
 

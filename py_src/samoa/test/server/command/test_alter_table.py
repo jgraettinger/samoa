@@ -46,7 +46,7 @@ class TestAlterTable(unittest.TestCase):
             t.set_replication_factor(3)
             t.set_consistency_horizon(1234)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
@@ -86,7 +86,7 @@ class TestAlterTable(unittest.TestCase):
 
             ct = request.get_message().mutable_alter_table()
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
@@ -95,7 +95,7 @@ class TestAlterTable(unittest.TestCase):
             request.get_message().set_type(CommandType.ALTER_TABLE)
             request.get_message().set_table_name(test_table.name)
 
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 

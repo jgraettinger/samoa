@@ -64,12 +64,8 @@ public:
 server::server(const core::io_service_ptr_t & io_srv,
     std::unique_ptr<boost::asio::ip::tcp::socket> & sock)
  :  core::stream_protocol(io_srv, sock),
-    _in_request(false),
-    _start_request_called(false),
-    _queue_size(0),
-    _ignore_timeout(false),
-    _timeout_ms(default_timeout_ms),
-    _timeout_timer(*get_io_service())
+    _next_request_id(1),
+    _ready_for_write(true)
 {
     LOG_DBG("created " << this);    
 }
@@ -87,33 +83,47 @@ server_request_interface::server_request_interface(const server::ptr_t & p)
 }
 
 core::protobuf::SamoaRequest & server_request_interface::get_message()
-{ return _srv->_request; }
+{ return _srv->_samoa_request; }
 
-void server_request_interface::start_request()
+void server_request_interface::add_data_block(
+    const core::const_buffer_regions_t & bs)
 {
-    if(_srv->_start_request_called)
-        return;
+    size_t length = 0;
 
-    _srv->_start_request_called = true;
+    std::for_each(bs.begin(), bs.end(),
+        [&length](const core::const_buffer_region & b)
+        { length += b.size(); });
 
-    if(_srv->has_queued_writes())
-    {
-        throw std::runtime_error(
-            "server::request_interface::start_request(): "
-            "server already has queued writes (but shouldn't)");
-    }
+    _srv->_samoa_request.add_data_block_length(length);
+    _srv->_request_data.insert(_srv->_request_data.end(), bs.begin(), bs.end());
+}
 
-    // serlialize & queue core::protobuf::SamoaRequest for writing
+void server_request_interface::add_data_block(
+    const core::buffer_regions_t & bs)
+{
+    size_t length = 0;
+
+    std::for_each(bs.begin(), bs.end(),
+        [&length](const core::buffer_region & b)
+        { length += b.size(); });
+
+    _srv->_samoa_request.add_data_block_length(length);
+    _srv->_request_data.insert(_srv->_request_data.end(), bs.begin(), bs.end());
+}
+
+void server_request_interface::flush_request(
+    const server::response_callback_t & callback)
+{
+    // generate & set a new request_id
+    unsigned request_id = _srv->_next_request_id++;
+    _srv->_samoa_request.set_request_id(request_id);
+
+    // serialize & reset SamoaRequest
     core::zero_copy_output_adapter zco_adapter;
-    _srv->_request.SerializeToZeroCopyStream(&zco_adapter);
-    _srv->_request.Clear();
+    _srv->_samoa_request.SerializeToZeroCopyStream(&zco_adapter);
+    _srv->_samoa_request.Clear();
 
-    if(zco_adapter.ByteCount() > (1<<16))
-    {
-        throw std::runtime_error(
-            "server::request_interface::start_request(): "
-            "core::protobuf::SamoaRequest overflow (larger than 65K)");
-    }
+    SAMOA_ASSERT(zco_adapter.ByteCount() < (1<<16));
 
     // write network order unsigned short length
     uint16_t len = htons((uint16_t)zco_adapter.ByteCount());
@@ -121,49 +131,32 @@ void server_request_interface::start_request()
 
     // queue write of serialized output regions
     _srv->queue_write(zco_adapter.output_regions());
-}
 
-core::stream_protocol::write_interface_t &
-    server_request_interface::write_interface()
-{
-    if(!_srv->_start_request_called)
-    {
-        throw std::runtime_error(
-            "server::request_interface::write_interface(): "
-            " start_request() hasn't been called");
-    }
-    return _srv->write_interface();
-}
+    // queue spooled request data
+    _srv->queue_write(_srv->_request_data);
+    _srv->_request_data.clear();
 
-void server_request_interface::finish_request(
-    const server::response_callback_t & callback)
-{
-    if(!_srv->_start_request_called)
-        start_request();
+    // index callback under this request_id
+    {
+        spinlock::guard guard(_srv->_lock);
 
-    // requestor may have written additional data,
-    //   and already waited for those writes to finish
-    if(_srv->has_queued_writes())
-    {
-        _srv->write_queued(boost::bind(
-            &server::on_request_written, _srv, _1, callback));
+        _srv->_pending_responses[request_id] = callback;
     }
-    else
-    {
-        // write already completed; dispatch directly
-        _srv->get_io_service()->dispatch(boost::bind(
-            &server::on_request_written, _srv,
-            boost::system::error_code(), callback));
-    }
+
+    // begin write operation, tracked with request id
+    _srv->write_queued(boost::bind(
+        &server::on_request_finish, _srv, _1, request_id));
+
+    // ownership of server::request_interface is released
+    _srv.reset();
 }
 
 void server_request_interface::abort_request()
 {
-    SAMOA_ASSERT(!_srv->has_queued_writes());
-    SAMOA_ASSERT(!_srv->_start_request_called);
+    _srv->on_request_finish(boost::system::error_code(), 0);
 
-    _srv->get_io_service()->dispatch(boost::bind(
-        &server::on_request_abort, _srv));
+    // ownership of server::request_interface is released
+    _srv.reset();
 }
 
 server_request_interface server_request_interface::null_instance()
@@ -178,11 +171,7 @@ server_response_interface::server_response_interface(const server::ptr_t & p)
 
 const core::protobuf::SamoaResponse &
 server_response_interface::get_message() const
-{ return _srv->_response; }
-
-core::stream_protocol::read_interface_t &
-server_response_interface::read_interface()
-{ return _srv->read_interface(); }
+{ return _srv->_samoa_response; }
 
 unsigned server_response_interface::get_error_code()
 {
@@ -195,7 +184,7 @@ unsigned server_response_interface::get_error_code()
 }
 
 const std::vector<core::buffer_regions_t> &
-server_response_interface::get_response_data_blocks() const
+    server_response_interface::get_response_data_blocks() const
 {
     return _srv->_response_data_blocks;
 }
@@ -205,6 +194,9 @@ void server_response_interface::finish_response()
     // post next response read
     _srv->get_io_service()->post(boost::bind(
         &server::on_next_response, _srv));
+
+    // ownership of server::response_interface is released
+    _srv.reset();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -217,109 +209,7 @@ server::~server()
 
 void server::schedule_request(const server::request_callback_t & callback)
 {
-    get_io_service()->dispatch(boost::bind(
-        &server::on_schedule_request, shared_from_this(), callback));
-}
-
-void server::close()
-{
-    _timeout_timer.cancel();
-    core::stream_protocol::close();
-}
-
-void server::on_schedule_request(const server::request_callback_t & callback)
-{
-    if(_error)
-    {
-        // a connection error is already set; return failure
-        request_interface null_int((ptr_t()));
-        callback(_error, null_int);
-        return;
-    }
-
-    if(_in_request)
-    {
-        // we're in the process of writing a request already
-        _request_queue.push_back(callback);
-        _queue_size += 1;
-    }
-    else
-    {
-        _in_request = true;
-
-        // no requests are currently being written; start one
-        get_io_service()->post(boost::bind(callback,
-            boost::system::error_code(),
-            request_interface(shared_from_this())));
-    }
-}
-
-void server::on_request_written(const boost::system::error_code & ec,
-    const server::response_callback_t & callback)
-{
-    if(_error)
-    {
-        // a connection error is already set; return failure
-        response_interface null_int((ptr_t()));
-        callback(_error, null_int);
-        return;
-    }
-
-    _response_queue.push_back(callback);
-
-    if(ec)
-    {
-        on_error(ec);
-        return;
-    }
-
-    // there was no previous pending response; start a new timeout period
-    if(_response_queue.size() == 1 && !_ignore_timeout)
-    {
-        _timeout_timer.expires_from_now(
-            boost::posix_time::milliseconds(_timeout_ms));
-        _timeout_timer.async_wait(boost::bind(
-            &server::on_timeout, shared_from_this(), _1));
-    }
-
-    _start_request_called = false;
-
-    // start another request, if any are pending
-    if(!_request_queue.empty())
-    {
-        request_callback_t callback = _request_queue.front();
-        _request_queue.pop_front();
-
-        get_io_service()->post(boost::bind(callback,
-            boost::system::error_code(),
-            request_interface(shared_from_this())));
-    }
-    else
-        _in_request = false;
-}
-
-void server::on_request_abort()
-{
-    if(_error)
-    {
-        // a connection error is already set; ignore
-        return;
-    }
-
-    _start_request_called = false;
-
-    // start another request, if any are pending
-    if(!_request_queue.empty())
-    {
-        request_callback_t callback = _request_queue.front();
-        _request_queue.pop_front();
-
-        get_io_service()->post(boost::bind(callback,
-            boost::system::error_code(),
-            request_interface(shared_from_this())));
-    }
-    else
-        _in_request = false;
+    on_next_request(false, &callback);
 }
 
 void server::on_next_response()
@@ -334,7 +224,7 @@ void server::on_response_length(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        on_error(ec);
+        on_response_error(ec);
         return;
     }
 
@@ -354,15 +244,15 @@ void server::on_response_body(const boost::system::error_code & ec,
 {
     if(ec)
     {
-        on_error(ec);
+        on_response_error(ec);
         return;
     }
 
     core::zero_copy_input_adapter zci_adapter(read_body);
-    if(!_response.ParseFromZeroCopyStream(&zci_adapter))
+    if(!_samoa_response.ParseFromZeroCopyStream(&zci_adapter))
     {
-        // protobuf parse failure
-        on_error(boost::system::errc::make_error_code(
+        // our transport is corrupted
+        on_response_error(boost::system::errc::make_error_code(
             boost::system::errc::bad_message));
         return;
     }
@@ -375,6 +265,12 @@ void server::on_response_body(const boost::system::error_code & ec,
 void server::on_response_data_block(const boost::system::error_code & ec,
     unsigned ind, const core::buffer_regions_t & data)
 {
+    if(ec)
+    {
+        on_response_error(ec);
+        return;
+    }
+
     if(ind < _response_data_blocks.size())
     {
         _response_data_blocks[ind] = data;
@@ -382,20 +278,20 @@ void server::on_response_data_block(const boost::system::error_code & ec,
     }
     else
     {
-        // first entrance into on_response_data_block; size _response_data_blocks
-        _response_data_blocks.resize(_response.data_block_length_size());
+        // first call into on_response_data_block; size _response_data_blocks
+        _response_data_blocks.resize(_samoa_response.data_block_length_size());
     }
 
     if(ind != _response_data_blocks.size())
     {
         // still more data blocks to read
-        unsigned block_len = _response.data_block_length(ind);
+        unsigned block_len = _samoa_response.data_block_length(ind);
 
         if(block_len > MAX_DATA_BLOCK_LENGTH)
         {
             LOG_ERR("block length larger than " << MAX_DATA_BLOCK_LENGTH);
 
-            on_error(boost::system::errc::make_error_code(
+            on_response_error(boost::system::errc::make_error_code(
                 boost::system::errc::bad_message));
             return;
         }
@@ -405,78 +301,125 @@ void server::on_response_data_block(const boost::system::error_code & ec,
         return;
     }
 
-    // we're done reading data blocks
+    unsigned request_id = _samoa_response.request_id();
 
-    // we've recieved a complete response in the timeout period
-    _ignore_timeout = true;
+    // we're done reading data blocks, and have assembled a complete resonse
+    {
+        spinlock::guard guard(_lock);
 
-    SAMOA_ASSERT(!_response_queue.empty());
+        pending_responses_t::iterator it = _pending_responses.find(request_id);
+        SAMOA_ASSERT(it != _pending_responses.end());
 
-    // invoke callback
-    response_interface resp_int(shared_from_this());
-    _response_queue.front()(boost::system::error_code(), resp_int);
+        // post response interface to associated callback
+        get_io_service()->post(boost::bind(it->second,
+            ec, response_interface(shared_from_this())));
 
-    // remove callback from queue
-    _response_queue.pop_front();
-    _queue_size -= 1;
+        _pending_responses.erase(it);
+    }
 }
 
-void server::on_timeout(const boost::system::error_code & ec)
+void server::on_response_error(const boost::system::error_code & ec)
 {
-    if(ec == boost::asio::error::operation_aborted)
+    // the server has closed or reset it's end of the connection;
+    //  we ought to close ours immediately, as we don't want
+    //  to write requests to a server which has declared
+    //  it won't respond.
+
+    close();
+
+    // notify pending response callbacks of the error
     {
-        // timeout timer was cancelled; not an error
+        spinlock::guard guard(_lock);
+
+        for(auto it = _pending_responses.begin();
+            it != _pending_responses.end(); ++it)
+        {
+            // post error to callback
+            get_io_service()->post(boost::bind(it->second,
+                ec, response_interface((ptr_t()))));
+        }
+
+        _pending_responses.clear();
+    }
+}
+
+void server::on_next_request(bool is_write_complete,
+    const request_callback_t * new_callback)
+{
+    spinlock::guard guard(_lock);
+
+    SAMOA_ASSERT(is_write_complete ^ (new_callback != 0));
+
+    if(is_write_complete)
+    {
+        _ready_for_write = true;
+    }
+
+    if(!_ready_for_write)
+    {
+        if(new_callback)
+        {
+            _queued_request_callbacks.push_back(*new_callback);
+        }
         return;
     }
-    SAMOA_ASSERT(!ec);
 
-    if(_ignore_timeout)
+    // we're ready to start a new request
+
+    if(!_queued_request_callbacks.empty())
     {
-        // _timeout_timer expired, but we've recieved
-        //   responses during the timeout period
+        // it should never be possible for us to be ready-to-write,
+        //  and have both a new_callback & queued callbacks.
+        //
+        // only on_request_finish can clear the ready_for_write bit,
+        //  and that call never issues a new_callback
+        SAMOA_ASSERT(!new_callback);
 
-        if(!_response_queue.empty())
-        {
-            // if there are remaining queued respones,
-            //   start a new timeout interval
+        _ready_for_write = false;
 
-            _timeout_timer.expires_from_now(
-                boost::posix_time::milliseconds(_timeout_ms));
-            _timeout_timer.async_wait(boost::bind(
-                &server::on_timeout, shared_from_this(), _1));
+        // post call to next queued request callback
+        get_io_service()->post(
+            boost::bind(_queued_request_callbacks.front(),
+                boost::system::error_code(),
+                request_interface(shared_from_this())));
 
-            _ignore_timeout = false; 
-        }
+        _queued_request_callbacks.pop_front();
     }
-    else if(!ec && !_ignore_timeout)
+    else if(new_callback)
     {
-        // treat this timeout as an error
-        on_error(boost::system::errc::make_error_code(
-            boost::system::errc::timed_out));
+        _ready_for_write = false;
+
+        // post call directly to new_callback
+        get_io_service()->post(boost::bind(*new_callback,
+            boost::system::error_code(),
+            request_interface(shared_from_this())));
     }
+    // else, no request to begin at this point
 }
 
-void server::on_error(const boost::system::error_code & ec)
+void server::on_request_finish(const boost::system::error_code & ec,
+    unsigned request_id)
 {
-    _error = ec;
-    response_interface null_resp_int((ptr_t()));
-    request_interface  null_req_int((ptr_t()));
-
-    // post errors to all pending callbacks
-    while(!_response_queue.empty())
+    if(ec)
     {
-        get_io_service()->post(boost::bind(
-            _response_queue.front(), _error, null_resp_int));
-        _response_queue.pop_front();
-    }
-    while(!_request_queue.empty())
-    {
-        get_io_service()->post(boost::bind(
-            _request_queue.front(), _error, null_req_int));
-        _request_queue.pop_front();
+        spinlock::guard guard(_lock);
+
+        pending_responses_t::iterator it = _pending_responses.find(request_id);
+
+        // race condition check: on_response_error may have already
+        //   posted an error & cleared the callback
+        if(it != _pending_responses.end())
+        {
+            // post error to response callback
+            get_io_service()->post(boost::bind(it->second,
+                ec, response_interface((ptr_t()))));
+
+            _pending_responses.erase(it);
+        }
     }
 
-    close(); 
+    // start a new request, if there is one
+    on_next_request(true, 0);
 }
 
 }

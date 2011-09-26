@@ -61,7 +61,7 @@ void replication::replicated_op(
 
 void replication::on_peer_request(
     const boost::system::error_code & ec,
-    samoa::client::server_request_interface server,
+    samoa::client::server_request_interface iface,
     const replication::callback_t & callback,
     const request_state::ptr_t & rstate,
     const partition::ptr_t & peer_part,
@@ -81,11 +81,11 @@ void replication::on_peer_request(
     if(!write_request && rstate->is_client_quorum_met())
     {
         // this read-replication request no longer needs to be made
-        server.abort_request();
+        iface.abort_request();
         return;
     }
 
-    spb::SamoaRequest & samoa_request = server.get_message();
+    spb::SamoaRequest & samoa_request = iface.get_message();
 
     samoa_request.set_type(spb::REPLICATE);
     samoa_request.set_key(rstate->get_key());
@@ -123,13 +123,10 @@ void replication::on_peer_request(
         core::zero_copy_output_adapter zco_adapter;
 
         rstate->get_local_record().SerializeToZeroCopyStream(&zco_adapter);
-        server.get_message().add_data_block_length(zco_adapter.ByteCount());
-
-        server.start_request();
-        server.write_interface().queue_write(zco_adapter.output_regions());
+        iface.add_data_block(zco_adapter.output_regions());
     }
 
-    server.finish_request(
+    iface.flush_request(
         rstate->get_io_service()->wrap(
             boost::bind(&replication::on_peer_response,
                 _1, _2, callback, rstate, write_request)));
@@ -137,12 +134,12 @@ void replication::on_peer_request(
 
 void replication::on_peer_response(
     const boost::system::error_code & ec,
-    samoa::client::server_response_interface server,
+    samoa::client::server_response_interface iface,
     const replication::callback_t & callback,
     const request_state::ptr_t & rstate,
     bool write_request)
 {
-    if(ec || server.get_error_code())
+    if(ec || iface.get_error_code())
     {
         if(ec)
         {
@@ -151,9 +148,9 @@ void replication::on_peer_response(
         else
         {
             LOG_WARN("remote error: " << \
-                server.get_message().error().ShortDebugString());
+                iface.get_message().error().ShortDebugString());
 
-            server.finish_response();
+            iface.finish_response();
         }
 
         if(rstate->peer_replication_failure())
@@ -166,13 +163,13 @@ void replication::on_peer_response(
     // is this a non-empty response to a still-needed replicated read?
     if(!write_request &&
        !rstate->is_client_quorum_met() &&
-       !server.get_response_data_blocks().empty())
+       !iface.get_response_data_blocks().empty())
     {
         // parse into local-record (used here as scratch space)
-        SAMOA_ASSERT(server.get_response_data_blocks().size() == 1);
+        SAMOA_ASSERT(iface.get_response_data_blocks().size() == 1);
 
         core::zero_copy_input_adapter zci_adapter(
-            server.get_response_data_blocks()[0]);
+            iface.get_response_data_blocks()[0]);
 
         SAMOA_ASSERT(rstate->get_local_record().ParseFromZeroCopyStream(
             &zci_adapter));
@@ -182,7 +179,7 @@ void replication::on_peer_response(
             rstate->get_remote_record(), rstate->get_local_record());
     }
 
-    server.finish_response();
+    iface.finish_response();
 
     if(rstate->peer_replication_success())
     {

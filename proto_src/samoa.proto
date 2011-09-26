@@ -157,7 +157,8 @@ message PersistedRecord
 
 message SamoaRequest {
 
-    required CommandType type = 1;
+    required uint32 request_id = 1;
+    required CommandType type = 2;
 
     // the byte-lengths of any data blocks accompanying the request.
     //  data blocks directly follow the SamoaRequest
@@ -165,39 +166,40 @@ message SamoaRequest {
 
     optional ClusterClock cluster_clock = 4;
 
-    optional bytes  table_uuid = 6;
-    optional string table_name = 7;
+    optional bytes  table_uuid = 5;
+    optional string table_name = 6;
 
-    optional bytes key = 5;
+    optional bytes key = 7;
 
     optional bytes partition_uuid = 8;
     repeated bytes peer_partition_uuid = 9;
 
     optional uint32 requested_quorum = 10 [default = 1];
 
-    optional CreateTableRequest create_table = 12;
-    optional AlterTableRequest  alter_table = 13;
-    optional CreatePartitionRequest create_partition = 14;
+    optional CreateTableRequest create_table = 11;
+    optional AlterTableRequest  alter_table = 12;
+    optional CreatePartitionRequest create_partition = 13;
 };
 
 message SamoaResponse {
 
-    required CommandType type = 1;
+    required uint32 request_id = 1;
+    required CommandType type = 2;
 
     // the byte-lengths of any data blocks accompanying the response.
     //  data blocks directly follow the SamoaResponse
     repeated uint32 data_block_length = 3;
 
-    optional bool success = 4;
+    optional Error error = 4;
 
-    optional bytes table_uuid = 5;
-    optional bytes partition_uuid = 6;
+    optional bool success = 5;
 
-    optional uint32 replication_success = 9 [default = 1];
-    optional uint32 replication_failure = 10 [default = 0];
+    optional bytes table_uuid = 6;
+    optional bytes partition_uuid = 7;
 
-    optional ClusterClock cluster_clock = 7;
+    optional uint32 replication_success = 8 [default = 1];
+    optional uint32 replication_failure = 9 [default = 0];
 
-    optional Error         error = 8;
+    optional ClusterClock cluster_clock = 10;
 };
 

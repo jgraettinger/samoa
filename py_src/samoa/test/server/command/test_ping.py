@@ -30,7 +30,7 @@ class TestPing(unittest.TestCase):
             request.get_message().set_type(CommandType.PING)
 
             # receive ping response
-            response = yield request.finish_request()
+            response = yield request.flush_request()
             self.assertFalse(response.get_error_code())
             response.finish_response()
 
