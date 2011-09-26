@@ -9,7 +9,5 @@ void null_cleanup(PyThreadState *)
 boost::thread_specific_ptr<PyThreadState> _saved_python_thread(
     &null_cleanup);
 
-unsigned python_scoped_lock::_reentrance_count = 0;
-
 }
 

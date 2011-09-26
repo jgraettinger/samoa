@@ -2,9 +2,8 @@
 #define PYSAMOA_SCOPED_PYTHON_HPP
 
 #include <Python.h>
+#include "samoa/error.hpp"
 #include <boost/python.hpp>
-#include <exception>
-#include <boost/detail/atomic_count.hpp>
 #include <boost/thread.hpp>
 
 namespace pysamoa {
@@ -17,22 +16,19 @@ class python_scoped_lock
 public:
 
     python_scoped_lock()
+     : _guards_gil(_saved_python_thread.get() != 0)
     {
-        if(_saved_python_thread.get())
+        if(_guards_gil)
         {
             // aqquire GIL, clear python thread
             PyEval_RestoreThread(_saved_python_thread.get());
             _saved_python_thread.reset();
-
-            assert(_reentrance_count == 0);
         }
-
-        ++_reentrance_count;
     }
 
     ~python_scoped_lock()
     {
-        if((--_reentrance_count) == 0)
+        if(_guards_gil)
         {
             // release GIL, save python thread
             _saved_python_thread.reset(PyEval_SaveThread());
@@ -41,9 +37,7 @@ public:
 
 private:
 
-    // note this variable is shared accross threads. However, it's
-    //   only updated when the GIL is held, and thus synchronized.
-    static unsigned _reentrance_count;
+    bool _guards_gil;
 };
 
 class python_scoped_unlock
@@ -52,11 +46,7 @@ public:
 
     python_scoped_unlock()
     {
-        if(_saved_python_thread.get())
-        {
-            throw std::runtime_error("python_scoped_unlock(): "
-                "re-entrant calls are not allowed");
-        }
+        SAMOA_ASSERT(!_saved_python_thread.get());
 
         // Release the GIL, and save this thread state. Future calls
         //  in to python from proactor handlers will call from this
