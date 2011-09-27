@@ -56,6 +56,8 @@ void make_client_bindings()
             bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_protocol", &client::get_protocol,
             bpl::return_value_policy<bpl::copy_const_reference>())
+        .def_readonly("max_request_concurrency",
+            &client::max_request_concurrency)
         .def("schedule_response", &py_schedule_response)
         .def("__repr__", &py_repr);
 }

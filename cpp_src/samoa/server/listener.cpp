@@ -86,6 +86,10 @@ void listener::on_accept(const boost::system::error_code & ec)
 
     if(_next_sock.get())
     {
+        // we internally buffer responses already when building them,
+        //   and don't want additional Nagle delay
+        _next_sock->set_option(ip::tcp::no_delay(true));
+
         // Create a client to service the socket
         // Lifetime is managed by client's use in callbacks. Eg, it's
         //  auto-destroyed when it falls out of the event-loop

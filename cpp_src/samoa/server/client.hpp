@@ -166,6 +166,7 @@ private:
     const context_ptr_t _context;
     const protocol_ptr_t _protocol;
 
+    bool _ready_for_read;
     bool _ready_for_write; // xthread
 
     std::list<response_callback_t> _queued_response_callbacks; // xthread

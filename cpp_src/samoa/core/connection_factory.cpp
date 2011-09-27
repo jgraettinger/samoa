@@ -109,6 +109,11 @@ void connection_factory::on_connect(
     {
         // successfully connected
         _timer.cancel();
+
+        // we internally buffer requests already when building them,
+        //   and don't want additional Nagle delay
+        _sock->set_option(ip::tcp::no_delay(true));
+
         callback(ec, _io_srv, _sock);
     }
 }

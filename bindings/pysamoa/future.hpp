@@ -24,6 +24,9 @@ public:
 
     void set_reenter_via_post();
 
+    bool is_called() const
+    { return _called; }
+
     // precondition: Python GIL is held
     void on_error(const boost::system::error_code &);
 
