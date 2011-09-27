@@ -60,6 +60,7 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    core::tasklet<client>(io_srv),
    _context(context),
    _protocol(protocol),
+   _ready_for_read(true),
    _ready_for_write(true),
    _cur_requests_outstanding(0),
    _ignore_timeout(false),
@@ -104,6 +105,8 @@ void client::on_next_request()
     if(_cur_requests_outstanding < client::max_request_concurrency)
     {
         ++_cur_requests_outstanding;
+        _ready_for_read = false;
+
         read_data(boost::bind(&client::on_request_length,
             shared_from_this(), _1, _3), 2);
     }
@@ -203,6 +206,7 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     // we're done reading data blocks, and have recieved a 
     // complete request in the timeout period
     _ignore_timeout = true;
+    _ready_for_read = true;
 
     // post to continue request read-loop
     get_io_service()->post(boost::bind(
@@ -286,7 +290,8 @@ void client::on_response_finish(const boost::system::error_code & ec)
         LOG_WARN(ec.message());
     }
 
-    if(_cur_requests_outstanding == client::max_request_concurrency)
+    if(_ready_for_read &&
+       _cur_requests_outstanding == client::max_request_concurrency)
     {
         // this response caused us to drop back below maximum
         //  request concurrency; restart the request read-loop via post

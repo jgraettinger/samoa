@@ -21,15 +21,15 @@ class MuxTestHandler(CommandHandler):
 
     def handle(self, rstate):
 
+        # head is this request id, tail is previous requests to respond to
         mux_ids = [int(i) for i in rstate.get_request_data_blocks()]
 
         self.pending[mux_ids[0]] = rstate
 
-        print "READ REQUEST", mux_ids[0]
-
-        for trigger_id in mux_ids[1:]:
-            self.pending[trigger_id].flush_client_response()
-            del self.pending[trigger_id]
+        # send responses for the marked requests
+        for mux_id in mux_ids[1:]:
+            self.pending[mux_id].flush_client_response()
+            del self.pending[mux_id]
 
         yield
 
@@ -54,55 +54,54 @@ class TestRequestMuxing(unittest.TestCase):
             self.listener.get_address(), self.listener.get_port())
         yield
 
-    def _make_request(self, future_id, respond_ids = [], assert_ids = []):
-
-        # validate asserted id's arrive in expected order
-        for f_id in assert_ids:
-
-            # yield future to obtain the response
-            # Note: the test will hang here, if responses don't
-            #  arrive in _exactly_ the expected order
-            response = yield self.futures[f_id]
-            response.finish_response()
-            del self.futures[f_id]
-
-            print "GOT RESPONSE %d" % f_id
-
-        for future in self.futures.values():
-            self.assertFalse(future.is_called())
-
-        if future_id is None:
-            # this call was purely for validation; don't make a request
-            yield
+    def _make_request(self, mux_id, mux_ids_to_release):
 
         request = yield self.server.schedule_request()
         request.get_message().set_type(CommandType.TEST)
-        request.add_data_block(str(future_id))
+        request.add_data_block(str(mux_id))
 
-        for resp_id in respond_ids:
-            # instruct server to respond to these requests
-            request.add_data_block(str(resp_id))
+        for m_id in mux_ids_to_release:
+            # ask server to respond to these previous requests
+            request.add_data_block(str(m_id))
 
-        self.futures[future_id] = request.flush_request()
+        self.futures[mux_id] = request.flush_request()
+        yield
+
+    def _validate_responses(self, mux_ids = []):
+
+        # validate id's arrive in expected order
+        for m_id in mux_ids:
+
+            # Note: the test will hang here, if responses don't
+            #  arrive in _exactly_ the expected order
+            response = yield self.futures[m_id]
+            response.finish_response()
+            del self.futures[m_id]
+
+        # assert no unexpected responses have arrived
+        for future in self.futures.values():
+            self.assertFalse(future.is_called())
         yield
 
     def test_basic(self):
 
         Proactor.get_proactor().run_test([
             self._build_connection,
-            functools.partial(self._make_request, 1, [], []),
-            functools.partial(self._make_request, 2, [], []),
-            functools.partial(self._make_request, 3, [3, 1], []),
-            functools.partial(self._make_request, 4, [2], [3, 1]),
-            functools.partial(self._make_request, 5, [], [2]),
-            functools.partial(self._make_request, 6, [6, 4, 5], []),
-            functools.partial(self._make_request, None, None, [6, 4, 5]),
+            functools.partial(self._make_request, 1, []),
+            functools.partial(self._make_request, 2, []),
+            functools.partial(self._make_request, 3, [3, 1]),
+            functools.partial(self._validate_responses, [3, 1]),
+            functools.partial(self._make_request, 4, [2]),
+            functools.partial(self._validate_responses, [2]),
+            functools.partial(self._make_request, 5, []),
+            functools.partial(self._make_request, 6, [6, 4, 5]),
+            functools.partial(self._validate_responses, [6, 4, 5]),
             self.context.get_tasklet_group().cancel_group
         ])
 
     def test_concurrency_limit(self):
 
-        # make Client.max_request_concurrency requests, increasing id 
+        # Client.max_request_concurrency requests, increasing id 
         request_order = range(Client.max_request_concurrency)
 
         # release in opposite order, except for 0
@@ -112,11 +111,13 @@ class TestRequestMuxing(unittest.TestCase):
 
             yield self._build_connection()
 
+            # Client.max_request_concurrency initial requests
             for r_id in request_order:
-                yield self._make_request(r_id, [], [])
+                yield self._make_request(r_id, [])
 
+            # A request to release all previous requests, except 0
             yield self._make_request(Client.max_request_concurrency,
-                release_order, [])
+                release_order)
 
             yield
 
@@ -130,14 +131,11 @@ class TestRequestMuxing(unittest.TestCase):
             self.handler.pending[0].flush_client_response()
             del self.handler.pending[0]
 
-            print "asserting 0 was released"
             # Assert request 0 was released
-            yield self._make_request(None, None, [0])
+            yield self._validate_responses([0])
 
-
-            print "asserting rest were released", release_order
             # Assert the remaining responses in release_order
-            yield self._make_request(None, None, release_order)
+            yield self._validate_responses(release_order)
 
             # cleanup
             self.context.get_tasklet_group().cancel_group()
