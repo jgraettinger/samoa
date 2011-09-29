@@ -16,7 +16,6 @@ using namespace std;
 persister::persister()
  : _proactor(core::proactor::get_proactor()),
    _strand(*_proactor->concurrent_io_service()),
-   _max_iter_records(50),
    _min_rotations(2),
    _max_rotations(10)
 {}
@@ -310,7 +309,9 @@ void persister::on_iterate(
         iter.rec = 0;
     }
 
-    for(size_t i = 0; i != _max_iter_records; ++i)
+    const record * next_rec = 0;
+
+    while(!next_rec)
     {
         // reached the end of this layer? begin the next one up
         while(iter.rec == 0 && iter.layer)
@@ -324,13 +325,14 @@ void persister::on_iterate(
         }
 
         if(!iter.rec->is_dead())
-            _tmp_record_vec.push_back(iter.rec);
+        {
+            next_rec = iter.rec;
+        }
 
         iter.rec = _layers[iter.layer]->step(iter.rec);
     }
 
-    callback(boost::system::error_code(), _tmp_record_vec);
-    _tmp_record_vec.clear();
+    callback(next_rec);
 }
 
 bool persister::make_room(size_t key_length, size_t val_length,
@@ -448,7 +450,7 @@ bool persister::make_room(size_t key_length, size_t val_length,
             }
             else
             {
-                // record is live, and needs to spill over to the next layer down
+                // record is live; spill over to the next layer down
                 if(!prep(layer + 1, head->key_length(), head->value_length()))
                     return false;
 

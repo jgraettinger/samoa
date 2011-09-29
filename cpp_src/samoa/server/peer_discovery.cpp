@@ -17,11 +17,12 @@ namespace server {
 namespace spb = samoa::core::protobuf;
 
 // default period of 1 minute
-unsigned default_period_ms = 60 * 1000;
+boost::posix_time::time_duration period = boost::posix_time::minutes(1);
 
 peer_discovery::peer_discovery(const context::ptr_t & context,
     const core::uuid & peer_uuid)
- : periodic_task<peer_discovery>(context, default_period_ms),
+ : core::periodic_task<peer_discovery>(),
+   _weak_context(context),
    _peer_uuid(peer_uuid)
 {
     LOG_DBG(peer_uuid);
@@ -33,14 +34,17 @@ peer_discovery::peer_discovery(const context::ptr_t & context,
     }
 }
 
-void peer_discovery::begin_iteration(const context::ptr_t & context)
+void peer_discovery::begin_cycle()
 {
     LOG_DBG("called " << get_tasklet_name());
+
+    context::ptr_t context = _weak_context.lock();
+    SAMOA_ASSERT(context);
 
     if(!context->get_cluster_state()->get_peer_set()->has_server(_peer_uuid))
     {
         LOG_ERR("peer is unknown: " << _peer_uuid);
-        end_iteration();
+        end_cycle(period);
         return;
     }
 
@@ -58,7 +62,7 @@ void peer_discovery::on_request(
     if(ec)
     {
         LOG_ERR(ec.message());
-        end_iteration();
+        end_cycle(period);
         return;
     }
 
@@ -83,7 +87,7 @@ void peer_discovery::on_response(
     if(ec)
     {
         LOG_ERR(ec.message());
-        end_iteration();
+        end_cycle(period);
         return;
     }
 
@@ -93,7 +97,7 @@ void peer_discovery::on_response(
             iface.get_message().error().ShortDebugString());
 
         iface.finish_response();
-        end_iteration();
+        end_cycle(period);
         return;
     }
 
@@ -119,12 +123,12 @@ bool peer_discovery::on_state_transaction(spb::ClusterState & local_state,
         bool result = context->get_cluster_state()->merge_cluster_state(
             _remote_state, local_state);
 
-        end_iteration();
+        end_cycle(period);
         return result;
     }
     catch(...)
     {
-        end_iteration();
+        end_cycle(period);
         throw;
     }
 }

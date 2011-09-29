@@ -27,6 +27,9 @@ public:
     bool is_called() const
     { return _called; }
 
+    bool is_yielded() const
+    { return _coroutine; }
+
     // precondition: Python GIL is held
     void on_error(const boost::system::error_code &);
 

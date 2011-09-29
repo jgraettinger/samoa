@@ -114,16 +114,16 @@ class TestPersister(unittest.TestCase):
 
             while True:
 
-                records = yield self.persister.iterate(ticket)
-                if not records:
+                raw_record = yield self.persister.iterate(ticket)
+
+                if not raw_record:
                     break
 
-                for raw_rec in records:
-                    rec = PersistedRecord()
-                    rec.ParseFromBytes(raw_rec.value)
+                rec = PersistedRecord()
+                rec.ParseFromBytes(raw_record.value)
 
-                    self.assertEquals(rec.blob_value[0], values[raw_rec.key])
-                    del values[raw_rec.key]
+                self.assertEquals(rec.blob_value[0], values[raw_record.key])
+                del values[raw_record.key]
 
             self.assertEquals(values, {})
             yield

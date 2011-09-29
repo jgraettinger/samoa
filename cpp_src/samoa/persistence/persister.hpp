@@ -35,8 +35,7 @@ public:
     > put_callback_t;
 
     typedef boost::function<void(
-        const boost::system::error_code &,
-        const std::vector<const record*> &)
+        const record * &)
     > iterate_callback_t;
 
 
@@ -65,27 +64,25 @@ public:
         const std::string & key, // referenced
         spb::PersistedRecord &); // referenced
 
-    /*
-    * No preconditions
-    * 
-    * Postconditions:
-    *  - an iteration ticket is returned, to be passed to iterate()
-    */
-    size_t begin_iteration();
+    /*!
+     * No preconditions
+     * 
+     * @returns A non-zero iteration ticket, to be passed to iterate()
+     */
+    unsigned begin_iteration();
 
-    /*
-    * Preconditions:
-    *  - ticket was previously returned by begin_iteration, and is still valid
-    *
-    * Postcodition:
-    *  - if false is returned, this ticket has completed iteration, and
-    *     is no longer valid. iterate_callback will not be called.
-    *
-    *  - if true is returned, iterate_callback will be called from
-    *     persister's io_service, and [1, max_elements_per_callback]
-    *     records will be returned by-argument
-    */ 
-    bool iterate(iterate_callback_t &&, size_t ticket);
+    /*!
+     * Preconditions:
+     *  - ticket was previously returned by begin_iteration, and is still valid
+     *
+     * Postcodition:
+     *  - if false is returned, this ticket has completed iteration, and
+     *     is no longer valid. iterate_callback will not be called.
+     *
+     *  - if true is returned, iterate_callback will be called from
+     *     persister's io_service, and a record will be returned by-argument
+     */ 
+    bool iterate(iterate_callback_t &&, unsigned ticket);
 
 
     size_t get_layer_count() const
@@ -132,12 +129,9 @@ private:
 
     spinlock _iterators_lock;
 
-    std::vector<const record *> _tmp_record_vec;
-
     core::proactor_ptr_t _proactor;
     boost::asio::strand _strand;
 
-    size_t _max_iter_records;
     size_t _min_rotations;
     size_t _max_rotations;
 };

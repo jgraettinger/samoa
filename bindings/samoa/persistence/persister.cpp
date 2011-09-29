@@ -152,41 +152,25 @@ future::ptr_t py_drop(
 
 /////////// iterate support
 
-void py_on_iterate(
-    const future::ptr_t & future, 
-    const boost::system::error_code & ec,
-    const std::vector<const record *> & records)
+void py_on_iterate(const future::ptr_t & future, const record * record)
 {
     pysamoa::python_scoped_lock block;
 
-    if(ec)
-    {
-        future->on_error(ec);
-        return;
-    }
-
     bpl::reference_existing_object::apply<
         const samoa::persistence::record *>::type convert;
+    bpl::object py_record(bpl::handle<>(convert(record)));
 
-    // allocate a tuple of containing python wrappers for each record
-    bpl::tuple tuple(bpl::handle<>(PyTuple_New(records.size())));
-
-    for(size_t i = 0; i != records.size(); ++i)
-    {
-        // PyTuple_SET_ITEM consumes reference created by convert
-        PyTuple_SET_ITEM(tuple.ptr(), i, convert(records[i]));
-    }
-
-    future->on_result(tuple);
+    SAMOA_ASSERT(future->is_yielded() && \
+        "iteration future must be immediately callable");
+    future->on_result(py_record);
 }
 
-future::ptr_t py_iterate(
-    persister & p, size_t ticket)
+future::ptr_t py_iterate(persister & p, size_t ticket)
 {
     future::ptr_t f(boost::make_shared<future>());
     f->set_reenter_via_post();
 
-    if(!p.iterate(boost::bind(&py_on_iterate, f, _1, _2), ticket))
+    if(!p.iterate(boost::bind(&py_on_iterate, f, _1), ticket))
     {
         // iteration is complete; return an empty tuple
 

@@ -1,16 +1,12 @@
-#ifndef SAMOA_SERVER_PERIODIC_TASK_HPP
-#define SAMOA_SERVER_PERIODIC_TASK_HPP
+#ifndef SAMOA_CORE_PERIODIC_TASK_HPP
+#define SAMOA_CORE_PERIODIC_TASK_HPP
 
-#include "samoa/server/fwd.hpp"
-#include "samoa/client/server.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/tasklet.hpp"
-#include "samoa/core/uuid.hpp"
-#include "samoa/core/protobuf/samoa.pb.h"
 #include <boost/asio.hpp>
 
 namespace samoa {
-namespace server {
+namespace core {
 
 template<typename Derived>
 class periodic_task : public core::tasklet<Derived>
@@ -20,15 +16,22 @@ public:
     using core::tasklet<Derived>::ptr_t;
     using core::tasklet<Derived>::weak_ptr_t;
 
-    periodic_task(const context_ptr_t &, unsigned target_period_ms);
+    using core::tasklet<Derived>::get_io_service;
+
+    periodic_task();
 
 protected:
 
     /*! Static polymorphism: subclasses must define
-    *     void begin_iteration(const context_ptr_t &);
-    */
-
-    void end_iteration();
+     *   void begin_cycle();
+     */
+    
+    /*!
+     * Notifies periodic_task that the cycle has finished
+     *
+     * @param delay Target interval until next cycle
+     */
+    void end_cycle(const boost::posix_time::time_duration & interval);
 
 private:
 
@@ -38,18 +41,14 @@ private:
     static void on_period(const boost::system::error_code &,
         const typename core::tasklet<Derived>::weak_ptr_t &);
 
-    const context_weak_ptr_t _context;
-    unsigned _current_period_ms;
-    unsigned _target_period_ms;
-    bool _in_iteration;
-
     boost::asio::deadline_timer _timer;
+    bool _halted;
 };
 
 }
 }
 
-#include "samoa/server/periodic_task.impl.hpp"
+#include "samoa/core/periodic_task.impl.hpp"
 
 #endif
 
