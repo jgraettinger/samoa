@@ -28,7 +28,7 @@ void replicate_handler::handle(const request_state::ptr_t & rstate)
     }
     if(!rstate->get_primary_partition())
     {
-        rstate->send_client_error(400, "expected partition UUID");
+        rstate->get_peer_set()->forward_request(rstate);
         return;
     }
     if(rstate->get_partition_peers().empty())

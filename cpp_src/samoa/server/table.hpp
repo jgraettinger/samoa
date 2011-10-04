@@ -62,8 +62,12 @@ public:
     /*! \brief Routes a position to the set of accountable partitions
 
     \param ring_position Ring position to route
-    \param primary_partition_out The primary (local) responsible partition
-            (returned by reference, see notes)
+    \param primary_partition The primary (local) responsible partition
+        If non-null, primary_partition must be responsible for this
+          ring-position; the partition's peers will be selected
+        If null, primary_partition is populated with the first responsible
+          local partition (if there is one)
+        (returned by reference, see notes)
     \param partition_peers_out Secondary responsible partitions
             (returned by reference)
 

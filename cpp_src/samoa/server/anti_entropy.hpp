@@ -22,16 +22,13 @@ public:
 
 protected:
 
-    const table_weak_ptr_t _weak_table;
+    const context_ptr_t _weak_context;
     const persister_weak_ptr_t _weak_persister;
+
+    const core::uuid _table_uuid;
     const core::uuid _partition_uuid;
 
     unsigned _ticket;
-    spb::PersistedRecord _record;
-
-    // reset at completion of each cycle
-    local_partition_ptr_t _primary_partition;
-    partition_peers_t _peer_partitions;
 };
 
 }

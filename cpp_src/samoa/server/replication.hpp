@@ -27,6 +27,11 @@ public:
         const callback_t &,
         const request_state_ptr_t &);
 
+    static void forwarded_write(
+        const callback_t &,
+        const request_state_ptr_t &,
+        const partition_ptr_t &); 
+
 private:
 
     static void replicated_op(
