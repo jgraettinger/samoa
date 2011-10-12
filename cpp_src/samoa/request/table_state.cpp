@@ -1,14 +1,17 @@
-#include "samoa/server/state/table_state.hpp"
+#include "samoa/request/table_state.hpp"
+#include "samoa/request/state_exception.hpp"
 #include "samoa/server/table_set.hpp"
 #include "samoa/server/table.hpp"
 #include <sstream>
 
 namespace samoa {
-namespace server {
-namespace state {
+namespace request {
 
 table_state::table_state()
  : _table_uuid(boost::uuids::nil_uuid())
+{ }
+
+table_state::~table_state()
 { }
 
 void table_state::set_table_uuid(const core::uuid & uuid)
@@ -26,7 +29,7 @@ void table_state::set_table_name(const std::string & name)
     _table_name = name;
 }
 
-void table_state::load_table_state(const table_set::ptr_t & table_set)
+void table_state::load_table_state(const server::table_set::ptr_t & table_set)
 {
     if(has_table_uuid())
     {
@@ -52,7 +55,6 @@ void table_state::load_table_state(const table_set::ptr_t & table_set)
             throw state_exception(404, err.str());
         }
 
-        _has_table_uuid = true;
         _table_uuid = _table->get_uuid();
     }
     else
@@ -68,7 +70,6 @@ void table_state::reset_table_state()
     _table.reset();
 }
 
-}
 }
 }
 

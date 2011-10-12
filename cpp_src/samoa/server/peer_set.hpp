@@ -4,6 +4,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/client/fwd.hpp"
 #include "samoa/client/server_pool.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include <map>
 
@@ -27,19 +28,19 @@ public:
 
     /*! \brief Forwards the client request to a peer server
     */
-    void forward_request(const request_state_ptr_t &);
+    void forward_request(const request::state_ptr_t &);
 
 private:
 
     void on_forwarded_request(
         const boost::system::error_code &,
         samoa::client::server_request_interface &,
-        const request_state_ptr_t &);
+        const request::state_ptr_t &);
 
     void on_forwarded_response(
         const boost::system::error_code &,
         samoa::client::server_response_interface &,
-        const request_state_ptr_t &);
+        const request::state_ptr_t &);
 
     typedef std::map<core::uuid, peer_discovery_ptr_t> discovery_tasklets_t;
     discovery_tasklets_t _discovery_tasklets;

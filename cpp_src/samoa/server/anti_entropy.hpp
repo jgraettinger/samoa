@@ -1,9 +1,10 @@
-#ifndef SAMOA_SERVER_ANTI_ENTROPY_HPP
+/*#ifndef SAMOA_SERVER_ANTI_ENTROPY_HPP
 #define SAMOA_SERVER_ANTI_ENTROPY_HPP
 
 #include "samoa/server/fwd.hpp"
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/core/periodic_task.hpp"
+#include "samoa/core/uuid.hpp"
 
 namespace samoa {
 namespace server {
@@ -35,3 +36,4 @@ protected:
 }
 
 #endif
+*/

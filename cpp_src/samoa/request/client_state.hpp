@@ -1,14 +1,14 @@
-#ifndef SAMOA_SERVER_STATE_CLIENT_STATE_HPP
-#define SAMOA_SERVER_STATE_CLIENT_STATE_HPP
+#ifndef SAMOA_REQUEST_CLIENT_STATE_HPP
+#define SAMOA_REQUEST_CLIENT_STATE_HPP
 
 #include "samoa/server/fwd.hpp"
+#include "samoa/server/client.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/buffer_region.hpp"
 #include <boost/shared_ptr.hpp>
 
 namespace samoa {
-namespace server {
-namespace state {
+namespace request {
 
 namespace spb = samoa::core::protobuf;
 
@@ -20,7 +20,9 @@ public:
 
     client_state();
 
-    const client_ptr_t & get_client() const
+    virtual ~client_state();
+
+    const server::client_ptr_t & get_client() const
     { return _client; }
 
     const spb::SamoaRequest & get_samoa_request()
@@ -58,11 +60,11 @@ public:
      * \brief Writes the client_state's SamoaResponse and
      *  response datablocks to the client.
      *
-     * Postcondition note: After invoking flush_client_response(),
+     * Postcondition note: After invoking flush_response(),
      *  it is an error to call add_response_data_block(), or to
      *  mutate the SamoaResponse
      */
-    void flush_client_response();
+    void flush_response();
 
     /*!
      * \brief Helper for sending an error response to the client
@@ -70,12 +72,12 @@ public:
      * Clears any state set in SamoaResponse, and arranges for
      *  an error response to be delieved to the client.
      *
-     * Postcondition: same requirements as flush_client_response()
+     * Postcondition: same requirements as flush_response()
      *
      * @param err_code Code to set on response error
      * @param err_msg Accompanying message
      */
-    void send_client_error(unsigned err_code, const std::string & err_msg);
+    void send_error(unsigned err_code, const std::string & err_msg);
 
     /*!
      * \brief Helper for sending an error response to the client
@@ -83,13 +85,15 @@ public:
      * Clears any state set in SamoaResponse, and arranges for
      *  an error response to be delivered to the client.
      *
-     * Postcondition: same requirements as flush_client_response()
+     * Postcondition: same requirements as flush_response()
      *
      * @param err_code Code to set on response error
      * @param err_msg boost error code, which will be converted to a message
      */
-    void send_client_error(unsigned err_code,
+    void send_error(unsigned err_code,
         const boost::system::error_code & err_msg);
+
+    void load_client_state(const server::client_ptr_t & client);
 
     void reset_client_state();
 
@@ -97,9 +101,10 @@ private:
 
     friend class samoa::server::client;
 
-    void on_client_response(client::response_interface);
+    void on_response(server::client::response_interface,
+        const request::state_ptr_t & guard);
 
-    client_ptr_t _client;
+    server::client_ptr_t _client;
 
     spb::SamoaRequest   _samoa_request;
     spb::SamoaResponse _samoa_response;
@@ -113,9 +118,8 @@ private:
 
 }
 }
-}
 
-#include "samoa/server/state/client_state.impl.hpp"
+#include "samoa/request/client_state.impl.hpp"
 
 #endif
 

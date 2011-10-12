@@ -1,14 +1,15 @@
 
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/peer_discovery.hpp"
-#include "samoa/server/request_state.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/core/tasklet_group.hpp"
+#include "samoa/request/request_state.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/unordered_set.hpp>
+#include <boost/uuid/uuid_generators.hpp>
 
 namespace samoa {
 namespace server {
@@ -219,54 +220,56 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
     }
 }
 
-void peer_set::forward_request(const request_state::ptr_t & rstate)
+void peer_set::forward_request(const request::state::ptr_t & rstate)
 {
-    SAMOA_ASSERT(!rstate->get_primary_partition());
+    request::route_state & route_state = rstate->get_route_state();
+    request::client_state & client_state = rstate->get_client_state();
 
-    if(rstate->get_partition_peers().empty())
+    SAMOA_ASSERT(!route_state.get_primary_partition());
+
+    if(!route_state.has_peer_partition_uuids())
     {
-        rstate->send_client_error(404, "no partitions for forwarding");
+        client_state.send_error(404, "no partitions for forwarding");
         return;
     }
 
-    // first secondary partition should be lowest-latency peer
-    const partition_peer & best_peer =
-        *rstate->get_partition_peers().begin();
+    core::uuid best_peer_uuid = boost::uuids::nil_uuid();
 
-    if(best_peer.server)
+    for(auto it = route_state.get_peer_partition_uuids().begin();
+        it != route_state.get_peer_partition_uuids().end(); ++it)
     {
-        best_peer.server->schedule_request(
-            boost::bind(&peer_set::on_forwarded_request,
-                boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-                _1, _2, rstate));
+        // TODO(johng): factor peer latency into this selection
+        if(best_peer_uuid.is_nil())
+        {
+            best_peer_uuid = *it;
+        }
     }
-    else
-    {
-        // no connected server instance: defer to server_pool to create one
-        schedule_request(
-            boost::bind(&peer_set::on_forwarded_request,
-                boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-                _1, _2, rstate),
-            best_peer.partition->get_server_uuid());
-    }
+
+    schedule_request(
+        boost::bind(&peer_set::on_forwarded_request,
+            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
+            _1, _2, rstate),
+        best_peer_uuid);
 }
 
 void peer_set::on_forwarded_request(
     const boost::system::error_code & ec,
     samoa::client::server_request_interface & iface,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
+    request::client_state & client_state = rstate->get_client_state();
+
     if(ec)
     {
-        rstate->send_client_error(500, ec);
+        client_state.send_error(500, ec);
         return;
     }
 
-    iface.get_message().CopyFrom(rstate->get_samoa_request());
+    iface.get_message().CopyFrom(client_state.get_samoa_request());
     iface.get_message().clear_data_block_length();
 
-    for(auto it = rstate->get_request_data_blocks().begin();
-        it != rstate->get_request_data_blocks().end(); ++it)
+    for(auto it = client_state.get_request_data_blocks().begin();
+        it != client_state.get_request_data_blocks().end(); ++it)
     {
         iface.add_data_block(*it);
     }
@@ -280,24 +283,26 @@ void peer_set::on_forwarded_request(
 void peer_set::on_forwarded_response(
     const boost::system::error_code & ec,
     samoa::client::server_response_interface & iface,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
+    request::client_state & client_state = rstate->get_client_state();
+
     if(ec)
     {
-        rstate->send_client_error(500, ec);
+        client_state.send_error(500, ec);
         return;
     }
 
-    rstate->get_samoa_response().CopyFrom(iface.get_message());
-    rstate->get_samoa_response().clear_data_block_length();
+    client_state.get_samoa_response().CopyFrom(iface.get_message());
+    client_state.get_samoa_response().clear_data_block_length();
 
     for(auto it = iface.get_response_data_blocks().begin();
         it != iface.get_response_data_blocks().end(); ++it)
     {
-        rstate->add_response_data_block(*it);
+        client_state.add_response_data_block(*it);
     }
 
-    rstate->flush_client_response();
+    client_state.flush_response();
     iface.finish_response();
 }
 

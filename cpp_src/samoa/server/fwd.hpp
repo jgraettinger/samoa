@@ -50,9 +50,6 @@ typedef boost::shared_ptr<remote_partition> remote_partition_ptr_t;
 class peer_discovery;
 typedef boost::shared_ptr<peer_discovery> peer_discovery_ptr_t;
 
-class request_state;
-typedef boost::shared_ptr<request_state> request_state_ptr_t;
-
 }
 }
 

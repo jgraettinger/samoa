@@ -2,8 +2,8 @@
 #include "samoa/server/client.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/protocol.hpp"
-#include "samoa/server/request_state.hpp"
 #include "samoa/server/command_handler.hpp"
+#include "samoa/request/request_state.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -144,14 +144,18 @@ void client::on_request_body(const boost::system::error_code & ec,
         return;
     }
 
-    request_state::ptr_t rstate = boost::make_shared<request_state>(
-        shared_from_this());
+    request::state::ptr_t rstate = boost::make_shared<request::state>();
+    request::client_state & client_state = rstate->get_client_state();
+
+    client_state.load_client_state(shared_from_this());
 
     core::zero_copy_input_adapter zci_adapter(read_body);
-    if(!rstate->get_samoa_request().ParseFromZeroCopyStream(&zci_adapter))
+    if(!client_state._samoa_request.ParseFromZeroCopyStream(&zci_adapter))
     {
-        rstate->send_client_error(400, "protobuf parse error");
+        client_state.send_error(400, "protobuf parse error");
         // our transport is corrupted: don't begin a new read
+        //  this client will be destroyed when remaining responses
+        //  complete, & the connection will close
         return;
     }
 
@@ -161,7 +165,7 @@ void client::on_request_body(const boost::system::error_code & ec,
 
 void client::on_request_data_block(const boost::system::error_code & ec,
     unsigned ind, const core::buffer_regions_t & data,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
     if(ec)
     {
@@ -170,9 +174,11 @@ void client::on_request_data_block(const boost::system::error_code & ec,
         return;
     }
 
-    spb::SamoaRequest & samoa_request = rstate->get_samoa_request();
+    request::client_state & client_state = rstate->get_client_state();
+
+    spb::SamoaRequest & samoa_request = client_state._samoa_request;
     std::vector<core::buffer_regions_t> & data_blocks = \
-        rstate->get_request_data_blocks();
+        client_state._request_data_blocks;
 
     if(ind < data_blocks.size())
     {
@@ -193,7 +199,7 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 
         if(block_len > MAX_DATA_BLOCK_LENGTH)
         {
-            rstate->send_client_error(400, "data block too large");
+            client_state.send_error(400, "data block too large");
             // our transport is corrupted: don't begin a new read
             return;
         }
@@ -212,23 +218,30 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     get_io_service()->post(boost::bind(
         &client::on_next_request, shared_from_this()));
 
-    if(rstate->load_from_samoa_request(get_context()))
-    {
+    // load essential states
+
+    try {
+        rstate->get_io_service_state().load_io_service_state(get_io_service());
+        rstate->get_context_state().load_context_state(get_context());
+
+        rstate->parse_from_protobuf_request();
+
         command_handler::ptr_t handler = _protocol->get_command_handler(
             samoa_request.type());
 
-        if(!handler)
-        {
-            rstate->send_client_error(501, "unknown operation type");
-        }
-        else
+        if(handler)
         {
             handler->handle(rstate);
         }
+        else
+        {
+            client_state.send_error(501, "unknown operation type");
+        }
     }
-    // else, an error has already been sent to the client
-
-    return;
+    catch(const state::state_exception & ex)
+    {
+        client_state.send_error(ex.get_code(), ex.get_message());
+    }
 }
 
 void client::on_next_response(bool is_write_complete,

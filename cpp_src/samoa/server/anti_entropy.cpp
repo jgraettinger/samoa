@@ -1,4 +1,4 @@
-
+/*
 #include "samoa/server/anti_entropy.hpp"
 #include "samoa/server/local_partition.hpp"
 #include "samoa/persistence/persister.hpp"
@@ -102,4 +102,4 @@ void anti_entropy::on_iterate(const record * raw_record)
 
 }
 }
-
+*/

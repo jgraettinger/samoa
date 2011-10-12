@@ -1,14 +1,17 @@
 
-#include "samoa/server/state/client_state.hpp"
-#include "samoa/server/state/samoa_state.hpp"
+#include "samoa/request/client_state.hpp"
+#include "samoa/request/request_state.hpp"
 #include "samoa/server/client.hpp"
+#include <boost/bind.hpp>
 
 namespace samoa {
-namespace server {
-namespace state {
+namespace request {
 
-client_state()
+client_state::client_state()
  : _flush_response_called(false)
+{ }
+
+client_state::~client_state()
 { }
 
 void client_state::add_response_data_block(
@@ -40,20 +43,22 @@ void client_state::add_response_data_block(const core::buffer_regions_t & bs)
     _response_data.insert(_response_data.end(), bs.begin(), bs.end());
 }
 
-void client_state::flush_client_response()
+void client_state::flush_response()
 {
     SAMOA_ASSERT(!_flush_response_called);
     _flush_response_called = true;
 
-    samoa_state * samoa_state = dynamic_cast<samoa_state *>(this);
-    SAMOA_ASSERT(samoa_state);
+    request::state * rstate = dynamic_cast<request::state *>(this);
+    SAMOA_ASSERT(rstate);
 
     _client->schedule_response(
-        boost::bind(&client_state::on_client_response,
-            samoa_state->shared_from_this(), _1));
+        // pass this as argument to binder, but also pass a new
+        //  reference to guard the lifetime of the request_state
+        boost::bind(&client_state::on_response, this,
+            _1, rstate->shared_from_this()));
 }
 
-void client_state::send_client_error(unsigned err_code,
+void client_state::send_error(unsigned err_code,
     const std::string & err_msg)
 {
     _samoa_response.Clear();
@@ -63,16 +68,21 @@ void client_state::send_client_error(unsigned err_code,
     _samoa_response.mutable_error()->set_code(err_code);
     _samoa_response.mutable_error()->set_message(err_msg);
 
-    flush_client_response();
+    flush_response();
 }
 
-void client_state::send_client_error(unsigned err_code,
+void client_state::send_error(unsigned err_code,
     const boost::system::error_code & ec)
 {
     std::stringstream tmp;
     tmp << ec << " (" << ec.message() << ")";
 
-    send_client_error(err_code, tmp.str());
+    send_error(err_code, tmp.str());
+}
+
+void client_state::load_client_state(const server::client::ptr_t & client)
+{
+    _client = client;
 }
 
 void client_state::reset_client_state()
@@ -85,7 +95,8 @@ void client_state::reset_client_state()
     _flush_response_called = false;
 }
 
-void client_state::on_client_response(client::response_interface iface)
+void client_state::on_response(server::client::response_interface iface,
+    const request::state::ptr_t & guard)
 {
     // set the response request_id to that of the request
     _samoa_response.set_request_id(_samoa_request.request_id());
@@ -110,7 +121,6 @@ void client_state::on_client_response(client::response_interface iface)
     iface.finish_response();
 }
 
-}
 }
 }
 

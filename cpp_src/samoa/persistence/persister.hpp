@@ -84,7 +84,6 @@ public:
      */ 
     bool iterate(iterate_callback_t &&, unsigned ticket);
 
-
     size_t get_layer_count() const
     { return _layers.size(); }
 

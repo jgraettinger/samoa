@@ -28,12 +28,6 @@ struct partition_order_cmp
         return lhs.ring_position() == rhs.ring_position() && \
             lhs.uuid() < rhs.uuid();
     }
-
-    bool operator()(const partition::ptr_t & lhs, unsigned rhs) const
-    { return lhs->get_ring_position() < rhs; }
-
-    bool operator()(unsigned lhs, const partition::ptr_t & rhs) const
-    { return lhs < rhs->get_ring_position(); }
 };
 
 table::table(const spb::ClusterState::Table & ptable,
@@ -163,57 +157,6 @@ const datamodel::merge_func_t & table::get_consistent_merge() const
 uint64_t table::ring_position(const std::string & key) const
 {
     return boost::hash<std::string>()(key);
-}
-
-void table::route_ring_position(
-    uint64_t ring_position,
-    const peer_set::ptr_t & peer_set,
-    local_partition::ptr_t & primary_partition,
-    partition_peers_t & partition_peers) const
-{
-    partition_peers.clear();
-
-    // As per the Chord protocol, a ring position is mapped onto the R
-    //  partitions which immediately succeed it, where R is the
-    //  minimum of the table replication factor and table partition count
-
-    ring_t::const_iterator it = std::lower_bound(
-        _ring.begin(), _ring.end(), ring_position, partition_order_cmp());
-
-    for(unsigned count = 0; count != _replication_factor; ++count, ++it)
-    {
-        if(it == _ring.end())
-            it = _ring.begin();
-
-        // pick the first local partition as primary
-        if(!primary_partition)
-        {
-            primary_partition = \
-                boost::dynamic_pointer_cast<local_partition>(*it);
-
-            if(primary_partition)
-                continue;
-        }
-
-        samoa::client::server::ptr_t srv = peer_set->get_server(
-            (*it)->get_server_uuid()); 
-
-        partition_peers.push_back(
-            partition_peer(*it, peer_set->get_server((*it)->get_server_uuid())));
-    }
-
-    partition_peers.sort(
-        [](const partition_peer & lhs,
-           const partition_peer & rhs) -> bool
-        {
-            if(!lhs.server)
-                return false;
-            if(!rhs.server)
-                return true;
-
-            return false;
-            //return lhs.server->get_latency_ms() < rhs.server->get_latency_ms();
-        });
 }
 
 void table::spawn_tasklets(const context::ptr_t & context)

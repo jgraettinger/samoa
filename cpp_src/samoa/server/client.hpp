@@ -2,6 +2,7 @@
 #define SAMOA_SERVER_CLIENT_HPP
 
 #include "samoa/server/fwd.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
@@ -119,7 +120,7 @@ private:
         const core::buffer_regions_t &);
 
     /*
-     * Allocates a request_state; parses SamoaRequest; enters on_request_data_block
+     * Allocates a request::state; parses SamoaRequest; enters on_request_data_block
      */
     void on_request_body(const boost::system::error_code &,
         const core::buffer_regions_t &);
@@ -127,12 +128,12 @@ private:
     /*
      * Re-entrant: reads request data blocks.
      *
-     * When the last data-block is read, dispatches the request_state
+     * When the last data-block is read, dispatches the request::state
      *  to the appropriate handler, and posts to on_next_request()
      */
     void on_request_data_block(const boost::system::error_code &,
         unsigned, const core::buffer_regions_t &,
-        const request_state_ptr_t &);
+        const request::state_ptr_t &);
 
     /*
      * Response scheduling workhorse.

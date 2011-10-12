@@ -93,11 +93,11 @@ void persister::drop(
             boost::ref(precord)));
 }
 
-size_t persister::begin_iteration()
+unsigned persister::begin_iteration()
 {
     spinlock::guard guard(_iterators_lock);
 
-    size_t i = 0;
+    unsigned i = 0;
     for(; i != _iterators.size(); ++i)
     {
         if(_iterators[i].state == iterator::DEAD)
@@ -117,9 +117,7 @@ size_t persister::begin_iteration()
     return i;
 }
 
-bool persister::iterate(
-    iterate_callback_t && callback,
-    size_t ticket)
+bool persister::iterate(iterate_callback_t && callback, unsigned ticket)
 {
     spinlock::guard guard(_iterators_lock);
 

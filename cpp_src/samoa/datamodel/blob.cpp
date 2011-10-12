@@ -1,24 +1,18 @@
 
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/datamodel/clock_util.hpp"
-#include "samoa/server/request_state.hpp"
-#include "samoa/server/client.hpp"
-#include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/iostreams/device/array.hpp>
-#include <boost/iostreams/stream.hpp>
 
 namespace samoa {
 namespace datamodel {
 
-namespace bio = boost::iostreams;
 namespace spb = samoa::core::protobuf;
 
-void blob::send_blob_value(const server::request_state::ptr_t & rstate,
+void blob::send_blob_value(request::client_state & client_state,
     const spb::PersistedRecord & record)
 {
-    spb::SamoaResponse & samoa_response = rstate->get_samoa_response();
+    spb::SamoaResponse & samoa_response = client_state.get_samoa_response();
 
     samoa_response.mutable_cluster_clock()->CopyFrom(
         record.cluster_clock());
@@ -26,10 +20,10 @@ void blob::send_blob_value(const server::request_state::ptr_t & rstate,
     for(auto val_it = record.blob_value().begin();
         val_it != record.blob_value().end(); ++val_it)
     {
-        rstate->add_response_data_block(val_it->begin(), val_it->end());
+        client_state.add_response_data_block(val_it->begin(), val_it->end());
     }
 
-    rstate->flush_client_response();
+    client_state.flush_response();
 }
 
 merge_result blob::consistent_merge(

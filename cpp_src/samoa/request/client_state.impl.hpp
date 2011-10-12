@@ -1,12 +1,11 @@
-#ifndef SAMOA_SERVER_STATE_CLIENT_STATE_IMPL_HPP
-#define SAMOA_SERVER_STATE_CLIENT_STATE_IMPL_HPP
+#ifndef SAMOA_REQUEST_CLIENT_STATE_IMPL_HPP
+#define SAMOA_REQUEST_CLIENT_STATE_IMPL_HPP
 
-#include "samoa/server/state/client_state.hpp"
+#include "samoa/request/client_state.hpp"
 #include "samoa/error.hpp"
 
 namespace samoa {
-namespace server {
-namespace state {
+namespace request {
 
 template<typename Iterator>
 void client_state::add_response_data_block(
@@ -24,7 +23,6 @@ void client_state::add_response_data_block(
     _w_ring.consumed(length);
 }
 
-}
 }
 }
 

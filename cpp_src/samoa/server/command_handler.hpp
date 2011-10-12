@@ -1,7 +1,7 @@
 #ifndef SAMOA_SERVER_COMMAND_HANDLER_HPP
 #define SAMOA_SERVER_COMMAND_HANDLER_HPP
 
-#include "samoa/server/fwd.hpp"
+#include "samoa/request/fwd.hpp"
 #include <boost/noncopyable.hpp>
 
 namespace samoa {
@@ -19,7 +19,7 @@ public:
     virtual ~command_handler()
     { }
 
-    virtual void handle(const request_state_ptr_t &) = 0;
+    virtual void handle(const request::state_ptr_t &) = 0;
 };
 
 }
