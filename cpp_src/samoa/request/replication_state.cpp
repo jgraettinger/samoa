@@ -6,7 +6,7 @@ namespace samoa {
 namespace request {
 
 replication_state::replication_state()
- :  _peer_count(0),
+ :  _replication_factor(0),
     _quorum_count(0),
     _error_count(0),
     _success_count(0)
@@ -31,7 +31,7 @@ bool replication_state::peer_replication_failure()
     }
 
     // is this the last outstanding replication?
-    return _error_count + _success_count == _peer_count;
+    return _error_count + _success_count == _replication_factor;
 }
 
 bool replication_state::peer_replication_success()
@@ -42,32 +42,32 @@ bool replication_state::peer_replication_success()
     }
 
     // is this the last outstanding replication?
-    return _error_count + _success_count == _peer_count;
+    return _error_count + _success_count == _replication_factor;
 }
 
-bool replication_state::is_client_quorum_met() const
+bool replication_state::is_replication_finished() const
 {
     return _success_count >= _quorum_count ||
-        _error_count + _success_count == _peer_count;
+        _error_count + _success_count == _replication_factor;
 }
 
-void replication_state::load_replication_state(unsigned peer_count)
+void replication_state::load_replication_state(unsigned replication_factor)
 {
-    if(_quorum_count > peer_count)
+    if(_quorum_count > replication_factor)
     {
         throw state_exception(400, "quorum too large");
     }
     if(_quorum_count == 0)
     {
-        _quorum_count = peer_count;
+        _quorum_count = replication_factor;
     }
 
-    _peer_count = peer_count;
+    _replication_factor = replication_factor;
 }
 
 void replication_state::reset_replication_state()
 {
-    _peer_count = 0;
+    _replication_factor = 0;
     _quorum_count = 0;
     _error_count = 0;
     _success_count = 0;

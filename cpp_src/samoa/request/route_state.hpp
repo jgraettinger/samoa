@@ -18,6 +18,13 @@ public:
     virtual ~route_state();
 
     /*!
+     * Sets the key which is being routed.
+     *
+     * Must be set prior to load_route_state()
+     */
+    void set_key(std::string && key);
+
+    /*!
      * Retrieves explicitly-configured route key
      */
     const std::string & get_key() const
@@ -30,6 +37,13 @@ public:
      */
     uint64_t get_ring_position() const
     { return _ring_position; }
+
+    /*!
+     * Sets the primary (local) partition of this route.
+     *
+     * Must be set prior to load_route_state()
+     */
+    void set_primary_partition_uuid(const core::uuid &);
 
     /*! 
      * Retrives whether a primary-partition uuid is set on this route.
@@ -56,6 +70,17 @@ public:
      */
     const server::local_partition_ptr_t & get_primary_partition() const
     { return _primary_partition; }
+
+    /*!
+     * Adds a peer-partition of this route
+     *
+     * Requires that a primary-partition uuid is set.
+     * All calls must be made prior to load_route_state()
+     *
+     * If any peer partition-uuid's are added, all uuids
+     *  of the key's route must be added.
+     */
+    void add_peer_partition_uuid(const core::uuid &);
 
     /*!
      * Retrieves whether peer-partition uuids are set on this route.
@@ -93,31 +118,6 @@ public:
      */
     const std::vector<server::partition_ptr_t> & get_peer_partitions() const
     { return _peer_partitions; }
-
-    /*!
-     * Sets the key which is being routed.
-     *
-     * Must be set prior to load_route_state()
-     */
-    void set_key(std::string && key);
-
-    /*!
-     * Sets the primary (local) partition of this route.
-     *
-     * Must be set prior to load_route_state()
-     */
-    void set_primary_partition_uuid(const core::uuid &);
-
-    /*!
-     * Adds a peer-partition of this route
-     *
-     * Requires that a primary-partition uuid is set.
-     * All calls must be made prior to load_route_state()
-     *
-     * If any peer partition-uuid's are added, all uuids
-     *  of the key's route must be added.
-     */
-    void add_peer_partition_uuid(const core::uuid &);
 
     void load_route_state(const server::table_ptr_t &);
 

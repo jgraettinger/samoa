@@ -4,6 +4,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/datamodel/merge_func.hpp"
+#include "samoa/request/fwd.hpp"
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/shared_ptr.hpp>
@@ -25,15 +26,15 @@ public:
     replicate_handler()
     { }
 
-    void handle(const request_state_ptr_t &);
+    void handle(const request::state_ptr_t &);
 
 protected:
 
     void on_write(const boost::system::error_code &,
-        const datamodel::merge_result &, const request_state_ptr_t &);
+        const datamodel::merge_result &, const request::state_ptr_t &);
 
     void on_read(const boost::system::error_code &,
-        bool, const request_state_ptr_t &);
+        bool, const request::state_ptr_t &);
 
     void on_reverse_replication();
 };

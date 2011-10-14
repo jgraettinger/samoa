@@ -1,6 +1,7 @@
 #ifndef SAMOA_SERVER_COMMAND_HANDLER_HPP
 #define SAMOA_SERVER_COMMAND_HANDLER_HPP
 
+#include "samoa/server/fwd.hpp"
 #include "samoa/request/fwd.hpp"
 #include <boost/noncopyable.hpp>
 

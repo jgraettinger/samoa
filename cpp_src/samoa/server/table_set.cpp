@@ -17,7 +17,7 @@ table_set::table_set(const spb::ClusterState & state,
     auto it = state.table().begin();
     auto last_it = it;
 
-    core::uuid local_uuid = core::uuid_from_hex(state.local_uuid());
+    core::uuid local_uuid = core::parse_uuid(state.local_uuid());
 
     for(; it != state.table().end(); ++it)
     {
@@ -30,7 +30,7 @@ table_set::table_set(const spb::ClusterState & state,
             continue;
         }
 
-        core::uuid uuid = core::uuid_from_hex(it->uuid());
+        core::uuid uuid = core::parse_uuid(it->uuid());
 
         table::ptr_t tbl, old_tbl;
 
@@ -91,7 +91,7 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
 {
     bool dirty = false;
 
-    core::uuid local_uuid = core::uuid_from_hex(local.local_uuid());
+    core::uuid local_uuid = core::parse_uuid(local.local_uuid());
 
     typedef google::protobuf::RepeatedPtrField<
         spb::ClusterState::Table> p_tables_t;
@@ -182,7 +182,7 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
                 // local & peer tables are both live;  pass down to
                 //   table instance to continue merging
                 uuid_index_t::const_iterator uuid_it = \
-                    _uuid_index.find(core::uuid_from_hex(l_it->uuid()));
+                    _uuid_index.find(core::parse_uuid(l_it->uuid()));
 
                 SAMOA_ASSERT(uuid_it != _uuid_index.end());
 

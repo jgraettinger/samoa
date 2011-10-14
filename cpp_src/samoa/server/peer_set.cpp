@@ -24,7 +24,7 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
         SAMOA_ASSERT(it == last_it || last_it->uuid() < it->uuid());
         last_it = it;
 
-        core::uuid uuid = core::uuid_from_hex(it->uuid());
+        core::uuid uuid = core::parse_uuid(it->uuid());
 
         set_server_address(uuid, it->hostname(), it->port());
 
@@ -41,7 +41,7 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
     }
 
     // also set the loop-back server address
-    core::uuid local_uuid = core::uuid_from_hex(state.local_uuid());
+    core::uuid local_uuid = core::parse_uuid(state.local_uuid());
     set_server_address(local_uuid, "localhost", state.local_port());
 
     if(current && current->has_server(local_uuid))
@@ -83,12 +83,11 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
                 continue;
 
             required_peers.insert(
-                core::uuid_from_hex(p_it->server_uuid()));
+                core::parse_uuid(p_it->server_uuid()));
         }
     }
 
-    required_peers.erase(
-        core::uuid_from_hex(local.local_uuid()));
+    required_peers.erase(core::parse_uuid(local.local_uuid()));
 
     auto p_it = peer.peer().begin();
     auto l_it = local.peer().begin();
@@ -138,7 +137,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         if(l_it == local.peer().end() || p_it->uuid() < l_it->uuid())
         {
             // we don't know of this peer-record
-            if(required_peers.find(core::uuid_from_hex(
+            if(required_peers.find(core::parse_uuid(
                 p_it->uuid())) != required_peers.end())
             {
                 LOG_INFO("discovered peer " << p_it->uuid());
@@ -156,7 +155,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         else if(l_it->uuid() < p_it->uuid())
         {
             // peer doesn't know of this peer-record
-            if(required_peers.find(core::uuid_from_hex(
+            if(required_peers.find(core::parse_uuid(
                 l_it->uuid())) == required_peers.end())
             {
                 LOG_INFO("dropped peer " << l_it->uuid());
@@ -169,7 +168,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         {
             // l_it & p_it reference the same peer-record
             if(!l_it->seed() && 
-                required_peers.find(core::uuid_from_hex(
+                required_peers.find(core::parse_uuid(
                     l_it->uuid())) == required_peers.end())
             {
                 LOG_INFO("dropped peer " << l_it->uuid());
@@ -183,7 +182,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
     }
     while(l_it != local.peer().end())
     {
-        if(required_peers.find(core::uuid_from_hex(
+        if(required_peers.find(core::parse_uuid(
             l_it->uuid())) == required_peers.end())
         {
             LOG_INFO("dropped peer " << l_it->uuid());
@@ -194,7 +193,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
     }
 
     // should we have a record for the peer itself?
-    if(required_peers.find(core::uuid_from_hex(
+    if(required_peers.find(core::parse_uuid(
         peer.local_uuid())) != required_peers.end())
     {
         // identify where the record should be located
@@ -222,21 +221,18 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
 
 void peer_set::forward_request(const request::state::ptr_t & rstate)
 {
-    request::route_state & route_state = rstate->get_route_state();
-    request::client_state & client_state = rstate->get_client_state();
+    SAMOA_ASSERT(!rstate->get_primary_partition());
 
-    SAMOA_ASSERT(!route_state.get_primary_partition());
-
-    if(!route_state.has_peer_partition_uuids())
+    if(!rstate->has_peer_partition_uuids())
     {
-        client_state.send_error(404, "no partitions for forwarding");
+        rstate->send_error(404, "no partitions for forwarding");
         return;
     }
 
     core::uuid best_peer_uuid = boost::uuids::nil_uuid();
 
-    for(auto it = route_state.get_peer_partition_uuids().begin();
-        it != route_state.get_peer_partition_uuids().end(); ++it)
+    for(auto it = rstate->get_peer_partition_uuids().begin();
+        it != rstate->get_peer_partition_uuids().end(); ++it)
     {
         // TODO(johng): factor peer latency into this selection
         if(best_peer_uuid.is_nil())
@@ -257,19 +253,17 @@ void peer_set::on_forwarded_request(
     samoa::client::server_request_interface & iface,
     const request::state::ptr_t & rstate)
 {
-    request::client_state & client_state = rstate->get_client_state();
-
     if(ec)
     {
-        client_state.send_error(500, ec);
+        rstate->send_error(500, ec);
         return;
     }
 
-    iface.get_message().CopyFrom(client_state.get_samoa_request());
+    iface.get_message().CopyFrom(rstate->get_samoa_request());
     iface.get_message().clear_data_block_length();
 
-    for(auto it = client_state.get_request_data_blocks().begin();
-        it != client_state.get_request_data_blocks().end(); ++it)
+    for(auto it = rstate->get_request_data_blocks().begin();
+        it != rstate->get_request_data_blocks().end(); ++it)
     {
         iface.add_data_block(*it);
     }
@@ -285,24 +279,22 @@ void peer_set::on_forwarded_response(
     samoa::client::server_response_interface & iface,
     const request::state::ptr_t & rstate)
 {
-    request::client_state & client_state = rstate->get_client_state();
-
     if(ec)
     {
-        client_state.send_error(500, ec);
+        rstate->send_error(500, ec);
         return;
     }
 
-    client_state.get_samoa_response().CopyFrom(iface.get_message());
-    client_state.get_samoa_response().clear_data_block_length();
+    rstate->get_samoa_response().CopyFrom(iface.get_message());
+    rstate->get_samoa_response().clear_data_block_length();
 
     for(auto it = iface.get_response_data_blocks().begin();
         it != iface.get_response_data_blocks().end(); ++it)
     {
-        client_state.add_response_data_block(*it);
+        rstate->add_response_data_block(*it);
     }
 
-    client_state.flush_response();
+    rstate->flush_response();
     iface.finish_response();
 }
 

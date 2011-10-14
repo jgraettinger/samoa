@@ -11,7 +11,10 @@ namespace core {
 
 typedef boost::uuids::uuid uuid;
 
-bool parse_uuid(const std::string & bytes, uuid & out);
+// Returns nil uuid on failure
+uuid try_parse_uuid(const std::string & bytes) throw();
+
+uuid parse_uuid(const std::string & bytes);
 
 inline std::string to_hex(const uuid & uuid)
 { return boost::uuids::to_string(uuid); }

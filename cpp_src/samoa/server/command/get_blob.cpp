@@ -5,9 +5,10 @@
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/local_partition.hpp"
-#include "samoa/server/request_state.hpp"
 #include "samoa/server/replication.hpp"
 #include "samoa/persistence/persister.hpp"
+#include "samoa/request/request_state.hpp"
+#include "samoa/request/state_exception.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/datamodel/blob.hpp"
@@ -19,27 +20,32 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-void get_blob_handler::handle(const request_state::ptr_t & rstate)
+void get_blob_handler::handle(const request::state::ptr_t & rstate)
 {
-    if(!rstate->get_table())
+    try {
+        rstate->load_table_state();
+        rstate->load_route_state();
+        rstate->load_replication_state();
+    }
+    catch (const request::state_exception & ex)
     {
-        rstate->send_client_error(400, "expected table name or UUID");
+        rstate->send_error(ex.get_code(), ex.what());
         return;
     }
-    if(rstate->get_key().empty())
-    {
-        rstate->send_client_error(400, "expected key");
-        return;
-    }
+
     if(!rstate->get_primary_partition())
     {
+        // no primary partition; forward to a better peer
         rstate->get_peer_set()->forward_request(rstate);
         return;
     }
 
-    if(rstate->get_client_quorum())
+    if(rstate->get_quorum_count() > 1)
     {
-        // quorum read: spawn replication-read requests to peers
+        // optimistically assume local read will succeed
+        rstate->peer_replication_success();
+
+        // spawn replicated read requests to remaining peers
         replication::replicated_read(
             boost::bind(&get_blob_handler::on_replicated_read,
                 shared_from_this(), rstate),
@@ -56,8 +62,10 @@ void get_blob_handler::handle(const request_state::ptr_t & rstate)
     }
 }
 
-void get_blob_handler::on_replicated_read(const request_state::ptr_t & rstate)
+void get_blob_handler::on_replicated_read(
+    const request::state::ptr_t & rstate)
 {
+    // did the replicated read return anything?
     if(rstate->get_remote_record().has_cluster_clock() ||
        rstate->get_remote_record().blob_value_size())
     {
@@ -74,7 +82,7 @@ void get_blob_handler::on_replicated_read(const request_state::ptr_t & rstate)
     }
     else
     {
-        // no peer records exist; fall back to a persister read
+        // no populated peer records exist; fall back to a persister read
         rstate->get_primary_partition()->get_persister()->get(
             boost::bind(&get_blob_handler::on_retrieve,
                 shared_from_this(), _1, rstate),
@@ -85,21 +93,18 @@ void get_blob_handler::on_replicated_read(const request_state::ptr_t & rstate)
 
 void get_blob_handler::on_retrieve(
     const boost::system::error_code & ec,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
     if(ec)
     {
-        rstate->send_client_error(504, ec);
+        rstate->send_error(504, ec);
         return;
     }
 
-    if(rstate->get_samoa_request().has_requested_quorum())
-    {
-        rstate->get_samoa_response().set_replication_success(
-            rstate->get_peer_success_count() + 1 /* for local read */);
-        rstate->get_samoa_response().set_replication_failure(
-            rstate->get_peer_error_count());
-    }
+    rstate->get_samoa_response().set_replication_success(
+        rstate->get_peer_success_count());
+    rstate->get_samoa_response().set_replication_failure(
+        rstate->get_peer_error_count());
 
     datamodel::blob::send_blob_value(rstate,
         rstate->get_local_record());

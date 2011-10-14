@@ -13,7 +13,7 @@ namespace samoa {
 namespace server {
 
 context::context(const spb::ClusterState & state)
- : _uuid(core::uuid_from_hex(state.local_uuid())),
+ : _uuid(core::parse_uuid(state.local_uuid())),
    _hostname(state.local_hostname()),
    _port(state.local_port()),
    _proactor(core::proactor::get_proactor()),

@@ -6,8 +6,9 @@
 #include "samoa/server/partition.hpp"
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/replication.hpp"
-#include "samoa/server/request_state.hpp"
 #include "samoa/persistence/persister.hpp"
+#include "samoa/request/request_state.hpp"
+#include "samoa/request/state_exception.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/datamodel/blob.hpp"
@@ -21,26 +22,23 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-void set_blob_handler::handle(const request_state::ptr_t & rstate)
+void set_blob_handler::handle(const request::state::ptr_t & rstate)
 {
-    if(!rstate->get_table())
+    try {
+        rstate->load_table_state();
+        rstate->load_route_state();
+        rstate->load_replication_state();
+    }
+    catch (const request::state_exception & ex)
     {
-        rstate->send_client_error(400, "expected table name or UUID");
+        rstate->send_error(ex.get_code(), ex.what());
         return;
     }
-    if(rstate->get_key().empty())
-    {
-        rstate->send_client_error(400, "expected key");
-        return;
-    }
+
     if(!rstate->get_primary_partition())
     {
+        // no primary partition; forward to a better peer
         rstate->get_peer_set()->forward_request(rstate);
-        return;
-    }
-    if(rstate->get_request_data_blocks().size() != 1)
-    {
-        rstate->send_client_error(400, "expected exactly one data block");
         return;
     }
 
@@ -48,7 +46,7 @@ void set_blob_handler::handle(const request_state::ptr_t & rstate)
 
     // assume the key doesn't exist; initial clock tick for first write
     datamodel::clock_util::tick(*record.mutable_cluster_clock(),
-        rstate->get_primary_partition()->get_uuid());
+        rstate->get_primary_partition_uuid());
 
     // assign client's value
     record.add_blob_value()->assign(
@@ -68,7 +66,7 @@ void set_blob_handler::handle(const request_state::ptr_t & rstate)
 datamodel::merge_result set_blob_handler::on_merge(
     spb::PersistedRecord & local_record,
     const spb::PersistedRecord & remote_record,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
     datamodel::merge_result result;
     result.local_was_updated = false;
@@ -92,7 +90,7 @@ datamodel::merge_result set_blob_handler::on_merge(
     //   tick the local clock to reflect this operation
 
     datamodel::clock_util::tick(*local_record.mutable_cluster_clock(),
-        rstate->get_primary_partition()->get_uuid());
+        rstate->get_primary_partition_uuid());
 
     datamodel::clock_util::prune_record(local_record,
         rstate->get_table()->get_consistency_horizon());
@@ -107,11 +105,11 @@ datamodel::merge_result set_blob_handler::on_merge(
 void set_blob_handler::on_put(
     const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
     if(ec)
     {
-        rstate->send_client_error(500, ec);
+        rstate->send_error(500, ec);
         return;
     }
 
@@ -125,33 +123,31 @@ void set_blob_handler::on_put(
 
     rstate->get_samoa_response().set_success(true);
 
-    if(!rstate->get_client_quorum())
+    // local write was a success
+    if(rstate->peer_replication_success())
     {
-        rstate->flush_client_response();
+        // no further replication required
+        //   (replication factor of 1)
+        rstate->flush_response();
     }
-
-    replication::replicated_write(
-        boost::bind(&set_blob_handler::on_replicated_write,
-            shared_from_this(), rstate),
-        rstate);
+    else
+    {
+        replication::replicated_write(
+            boost::bind(&set_blob_handler::on_replicated_write,
+                shared_from_this(), rstate),
+            rstate);
+    }
 }
 
-void set_blob_handler::on_replicated_write(const request_state::ptr_t & rstate)
+void set_blob_handler::on_replicated_write(
+    const request::state::ptr_t & rstate)
 {
-    if(!rstate->get_client())
-    {
-        return;
-    }
+    rstate->get_samoa_response().set_replication_success(
+        rstate->get_peer_success_count());
+    rstate->get_samoa_response().set_replication_failure(
+        rstate->get_peer_error_count());
 
-    if(rstate->get_samoa_request().has_requested_quorum())
-    {
-        rstate->get_samoa_response().set_replication_success(
-            rstate->get_peer_success_count() + 1 /* for local write */);
-        rstate->get_samoa_response().set_replication_failure(
-            rstate->get_peer_error_count());
-    }
-
-    rstate->flush_client_response();
+    rstate->flush_response();
 }
 
 }

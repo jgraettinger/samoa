@@ -31,10 +31,8 @@ void replication::replicated_op(
     const request::state::ptr_t & rstate,
     bool write_request)
 {
-    request::route_state & route_state = rstate->get_route_state();
-
-    for(auto it = route_state.get_peer_partitions().begin();
-            it != route_state.get_peer_partitions().end(); ++it)
+    for(auto it = rstate->get_peer_partitions().begin();
+            it != rstate->get_peer_partitions().end(); ++it)
     {
         rstate->get_peer_set()->schedule_request(
             // wrap with request's io-service to synchronize callbacks
@@ -53,22 +51,18 @@ void replication::on_peer_request(
     const partition::ptr_t & peer_part,
     bool write_request)
 {
-    request::route_state & route_state = rstate->get_route_state();
-    request::replication_state & repl_state = rstate->get_replication_state();
-    request::record_state & record_state = rstate->get_record_state();
-
     if(ec)
     {
         LOG_WARN(ec.message());
 
-        if(repl_state.peer_replication_failure())
+        if(rstate->peer_replication_failure())
         {
             callback();
         }
         return;
     }
 
-    if(!write_request && repl_state.is_client_quorum_met())
+    if(!write_request && rstate->is_replication_finished())
     {
         // this read-replication request no longer needs to be made
         iface.abort_request();
@@ -78,7 +72,7 @@ void replication::on_peer_request(
     spb::SamoaRequest & samoa_request = iface.get_message();
 
     samoa_request.set_type(spb::REPLICATE);
-    samoa_request.set_key(route_state.get_key());
+    samoa_request.set_key(rstate->get_key());
 
     samoa_request.mutable_table_uuid()->assign(
         rstate->get_table_uuid().begin(),
@@ -91,12 +85,12 @@ void replication::on_peer_request(
 
     // assign our local partition as a peer_partition_uuid
     samoa_request.add_peer_partition_uuid()->assign(
-        route_state.get_primary_partition_uuid().begin(),
-        route_state.get_primary_partition_uuid().end());
+        rstate->get_primary_partition_uuid().begin(),
+        rstate->get_primary_partition_uuid().end());
 
     // assign _other_ remote partitions as peer_partition_uuid
-    for(auto it = route_state.get_peer_partition_uuids().begin();
-            it != route_state.get_peer_partition_uuids().end(); ++it)
+    for(auto it = rstate->get_peer_partition_uuids().begin();
+            it != rstate->get_peer_partition_uuids().end(); ++it)
     {
         if(*it != peer_part->get_uuid())
         {
@@ -110,7 +104,7 @@ void replication::on_peer_request(
     {
         core::zero_copy_output_adapter zco_adapter;
 
-        record_state.get_local_record().SerializeToZeroCopyStream(&zco_adapter);
+        rstate->get_local_record().SerializeToZeroCopyStream(&zco_adapter);
         iface.add_data_block(zco_adapter.output_regions());
     }
 
@@ -128,9 +122,6 @@ void replication::on_peer_response(
     const request::state::ptr_t & rstate,
     bool write_request)
 {
-    request::replication_state & repl_state = rstate->get_replication_state();
-    request::record_state & record_state = rstate->get_record_state();
-
     if(ec || iface.get_error_code())
     {
         if(ec)
@@ -145,7 +136,7 @@ void replication::on_peer_response(
             iface.finish_response();
         }
 
-        if(repl_state.peer_replication_failure())
+        if(rstate->peer_replication_failure())
         {
             callback();
         }
@@ -154,7 +145,7 @@ void replication::on_peer_response(
 
     // is this a non-empty response to a still-needed replicated read?
     if(!write_request &&
-       !repl_state.is_client_quorum_met() &&
+       !rstate->is_replication_finished() &&
        !iface.get_response_data_blocks().empty())
     {
         // parse into local-record (used here as scratch space)
@@ -163,17 +154,17 @@ void replication::on_peer_response(
         core::zero_copy_input_adapter zci_adapter(
             iface.get_response_data_blocks()[0]);
 
-        SAMOA_ASSERT(record_state.get_local_record().ParseFromZeroCopyStream(
+        SAMOA_ASSERT(rstate->get_local_record().ParseFromZeroCopyStream(
             &zci_adapter));
 
         // merge local-record into remote-record
         rstate->get_table()->get_consistent_merge()(
-            record_state.get_remote_record(), record_state.get_local_record());
+            rstate->get_remote_record(), rstate->get_local_record());
     }
 
     iface.finish_response();
 
-    if(repl_state.peer_replication_success())
+    if(rstate->peer_replication_success())
     {
         callback();
     }

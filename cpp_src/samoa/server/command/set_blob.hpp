@@ -7,6 +7,7 @@
 #include "samoa/server/table.hpp"
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/datamodel/merge_func.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/uuid.hpp"
 #include <boost/system/error_code.hpp>
@@ -30,17 +31,17 @@ public:
     set_blob_handler()
     { }
 
-    void handle(const request_state_ptr_t &);
+    void handle(const request::state_ptr_t &);
 
 private:
 
     datamodel::merge_result on_merge(spb::PersistedRecord &,
-        const spb::PersistedRecord &, const request_state_ptr_t &);
+        const spb::PersistedRecord &, const request::state_ptr_t &);
 
     void on_put(const boost::system::error_code &,
-        const datamodel::merge_result &, const request_state_ptr_t &);
+        const datamodel::merge_result &, const request::state_ptr_t &);
 
-    void on_replicated_write(const request_state_ptr_t &);
+    void on_replicated_write(const request::state_ptr_t &);
 };
 
 }

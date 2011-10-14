@@ -1,6 +1,7 @@
 
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/datamodel/clock_util.hpp"
+#include "samoa/request/request_state.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 
@@ -9,21 +10,19 @@ namespace datamodel {
 
 namespace spb = samoa::core::protobuf;
 
-void blob::send_blob_value(request::client_state & client_state,
+void blob::send_blob_value(const request::state::ptr_t & rstate,
     const spb::PersistedRecord & record)
 {
-    spb::SamoaResponse & samoa_response = client_state.get_samoa_response();
-
-    samoa_response.mutable_cluster_clock()->CopyFrom(
+    rstate->get_samoa_response().mutable_cluster_clock()->CopyFrom(
         record.cluster_clock());
 
     for(auto val_it = record.blob_value().begin();
         val_it != record.blob_value().end(); ++val_it)
     {
-        client_state.add_response_data_block(val_it->begin(), val_it->end());
+        rstate->add_response_data_block(val_it->begin(), val_it->end());
     }
 
-    client_state.flush_response();
+    rstate->flush_response();
 }
 
 merge_result blob::consistent_merge(

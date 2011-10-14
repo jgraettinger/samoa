@@ -3,6 +3,7 @@
 
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
@@ -23,14 +24,14 @@ public:
     get_blob_handler()
     { }
 
-    void handle(const request_state_ptr_t &);
+    void handle(const request::state_ptr_t &);
 
 private:
 
-    void on_replicated_read(const request_state_ptr_t &);
+    void on_replicated_read(const request::state_ptr_t &);
 
     void on_retrieve(const boost::system::error_code & ec,
-        const request_state_ptr_t &);
+        const request::state_ptr_t &);
 };
 
 }

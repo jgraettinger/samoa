@@ -1,7 +1,7 @@
 
 #include <boost/python.hpp>
 #include "samoa/server/command_handler.hpp"
-#include "samoa/server/request_state.hpp"
+#include "samoa/request/request_state.hpp"
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
@@ -19,7 +19,7 @@ public:
 
     typedef boost::shared_ptr<py_command_handler> ptr_t;
 
-    void handle(const request_state::ptr_t & rstate)
+    void handle(const request::state::ptr_t & rstate)
     {
         pysamoa::python_scoped_lock block;
 

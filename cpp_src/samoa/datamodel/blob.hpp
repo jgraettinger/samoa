@@ -1,8 +1,8 @@
 #ifndef SAMOA_DATAMODEL_BLOB_HPP
 #define SAMOA_DATAMODEL_BLOB_HPP
 
-#include "samoa/request/client_state.hpp"
 #include "samoa/datamodel/merge_func.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include <string>
 
@@ -15,7 +15,7 @@ class blob
 {
 public:
 
-    static void send_blob_value(request::client_state &,
+    static void send_blob_value(const request::state_ptr_t &,
         const samoa::core::protobuf::PersistedRecord &);
 
     static merge_result consistent_merge(

@@ -4,6 +4,7 @@
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/request/request_state.hpp"
+#include "samoa/request/state_exception.hpp"
 #include "samoa/core/stream_protocol.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -145,14 +146,15 @@ void client::on_request_body(const boost::system::error_code & ec,
     }
 
     request::state::ptr_t rstate = boost::make_shared<request::state>();
-    request::client_state & client_state = rstate->get_client_state();
 
-    client_state.load_client_state(shared_from_this());
+    request::client_state & client_state = \
+        rstate->initialize_from_client(shared_from_this());
 
     core::zero_copy_input_adapter zci_adapter(read_body);
-    if(!client_state._samoa_request.ParseFromZeroCopyStream(&zci_adapter))
+    if(!client_state.mutable_samoa_request(
+        ).ParseFromZeroCopyStream(&zci_adapter))
     {
-        client_state.send_error(400, "protobuf parse error");
+        rstate->send_error(400, "protobuf parse error");
         // our transport is corrupted: don't begin a new read
         //  this client will be destroyed when remaining responses
         //  complete, & the connection will close
@@ -160,12 +162,14 @@ void client::on_request_body(const boost::system::error_code & ec,
     }
 
     on_request_data_block(boost::system::error_code(),
-        0, core::buffer_regions_t(), rstate);
+        0, core::buffer_regions_t(), rstate,
+        client_state.mutable_request_data_blocks());
 }
 
 void client::on_request_data_block(const boost::system::error_code & ec,
     unsigned ind, const core::buffer_regions_t & data,
-    const request::state::ptr_t & rstate)
+    const request::state::ptr_t & rstate,
+    std::vector<core::buffer_regions_t> & data_blocks)
 {
     if(ec)
     {
@@ -174,11 +178,7 @@ void client::on_request_data_block(const boost::system::error_code & ec,
         return;
     }
 
-    request::client_state & client_state = rstate->get_client_state();
-
-    spb::SamoaRequest & samoa_request = client_state._samoa_request;
-    std::vector<core::buffer_regions_t> & data_blocks = \
-        client_state._request_data_blocks;
+    const spb::SamoaRequest & samoa_request = rstate->get_samoa_request();
 
     if(ind < data_blocks.size())
     {
@@ -199,13 +199,15 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 
         if(block_len > MAX_DATA_BLOCK_LENGTH)
         {
-            client_state.send_error(400, "data block too large");
+            rstate->send_error(400, "data block too large");
             // our transport is corrupted: don't begin a new read
             return;
         }
 
-        read_data(boost::bind(&client::on_request_data_block,
-            shared_from_this(), _1, ind, _3, rstate), block_len);
+        read_data(
+            boost::bind(&client::on_request_data_block, shared_from_this(),
+                _1, ind, _3, rstate, boost::ref(data_blocks)),
+            block_len);
         return;
     }
 
@@ -218,29 +220,16 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     get_io_service()->post(boost::bind(
         &client::on_next_request, shared_from_this()));
 
-    // load essential states
+    command_handler::ptr_t handler = _protocol->get_command_handler(
+        samoa_request.type());
 
-    try {
-        rstate->get_io_service_state().load_io_service_state(get_io_service());
-        rstate->get_context_state().load_context_state(get_context());
-
-        rstate->parse_from_protobuf_request();
-
-        command_handler::ptr_t handler = _protocol->get_command_handler(
-            samoa_request.type());
-
-        if(handler)
-        {
-            handler->handle(rstate);
-        }
-        else
-        {
-            client_state.send_error(501, "unknown operation type");
-        }
-    }
-    catch(const state::state_exception & ex)
+    if(handler)
     {
-        client_state.send_error(ex.get_code(), ex.get_message());
+        handler->handle(rstate);
+    }
+    else
+    {
+        rstate->send_error(501, "unknown operation type");
     }
 }
 

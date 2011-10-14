@@ -4,7 +4,9 @@
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/replication.hpp"
-#include "samoa/server/request_state.hpp"
+#include "samoa/server/peer_set.hpp"
+#include "samoa/request/request_state.hpp"
+#include "samoa/request/state_exception.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
@@ -19,26 +21,23 @@ namespace command {
 
 namespace spb = samoa::core::protobuf;
 
-void replicate_handler::handle(const request_state::ptr_t & rstate)
+void replicate_handler::handle(const request::state::ptr_t & rstate)
 {
-    if(!rstate->get_table())
+    try {
+        rstate->load_table_state();
+        rstate->load_route_state();
+        rstate->load_replication_state();
+    }
+    catch (const request::state_exception & ex)
     {
-        rstate->send_client_error(400, "expected table name or UUID");
+        rstate->send_error(ex.get_code(), ex.what());
         return;
     }
+
     if(!rstate->get_primary_partition())
     {
+        // no primary partition; forward to a better peer
         rstate->get_peer_set()->forward_request(rstate);
-        return;
-    }
-    if(rstate->get_partition_peers().empty())
-    {
-        rstate->send_client_error(400, "expected peer partition UUIDs");
-        return;
-    }
-    if(rstate->get_key().empty())
-    {
-        rstate->send_client_error(400, "expected key");
         return;
     }
 
@@ -48,7 +47,7 @@ void replicate_handler::handle(const request_state::ptr_t & rstate)
     {
         if(rstate->get_request_data_blocks().size() != 1)
         {
-            rstate->send_client_error(400, "expected just one data block");
+            rstate->send_error(400, "expected just one data block");
             return;
         }
 
@@ -79,17 +78,17 @@ void replicate_handler::handle(const request_state::ptr_t & rstate)
 
 void replicate_handler::on_write(const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
-    const request_state::ptr_t & rstate)
+    const request::state::ptr_t & rstate)
 {
     if(ec)
     {
         LOG_WARN(ec.message());
-        rstate->send_client_error(500, ec);
+        rstate->send_error(500, ec);
         return;
     }
 
     // write is committed; notify client
-    rstate->flush_client_response();
+    rstate->flush_response();
 
     if(merge_result.remote_is_stale)
     {
@@ -102,12 +101,12 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
 }
 
 void replicate_handler::on_read(const boost::system::error_code & ec,
-    bool found, const request_state::ptr_t & rstate)
+    bool found, const request::state::ptr_t & rstate)
 {
     if(ec)
     {
         LOG_WARN(ec.message());
-        rstate->send_client_error(500, ec);
+        rstate->send_error(500, ec);
         return;
     }
 
@@ -120,7 +119,7 @@ void replicate_handler::on_read(const boost::system::error_code & ec,
         rstate->add_response_data_block(zco_adapter.output_regions());
     }
 
-    rstate->flush_client_response();
+    rstate->flush_response();
 }
 
 void replicate_handler::on_reverse_replication()

@@ -48,7 +48,7 @@ void client_state::flush_response()
     SAMOA_ASSERT(!_flush_response_called);
     _flush_response_called = true;
 
-    request::state * rstate = dynamic_cast<request::state *>(this);
+    request::state * rstate = static_cast<request::state *>(this);
     SAMOA_ASSERT(rstate);
 
     _client->schedule_response(
@@ -82,6 +82,7 @@ void client_state::send_error(unsigned err_code,
 
 void client_state::load_client_state(const server::client::ptr_t & client)
 {
+    SAMOA_ASSERT(!_client);
     _client = client;
 }
 
@@ -100,6 +101,12 @@ void client_state::on_response(server::client::response_interface iface,
 {
     // set the response request_id to that of the request
     _samoa_response.set_request_id(_samoa_request.request_id());
+
+    // if the response has no type, set it to that of the request
+    if(!_samoa_response.has_type())
+    {
+        _samoa_response.set_type(_samoa_request.type());
+    }
 
     // serlialize & queue core::protobuf::SamoaResponse for writing
     core::zero_copy_output_adapter zco_adapter;

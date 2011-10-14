@@ -133,7 +133,8 @@ private:
      */
     void on_request_data_block(const boost::system::error_code &,
         unsigned, const core::buffer_regions_t &,
-        const request::state_ptr_t &);
+        const request::state_ptr_t &,
+        std::vector<core::buffer_regions_t> &);
 
     /*
      * Response scheduling workhorse.

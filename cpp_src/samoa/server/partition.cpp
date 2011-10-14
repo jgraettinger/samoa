@@ -8,8 +8,8 @@ namespace server {
 partition::partition(
     const spb::ClusterState::Table::Partition & part,
     uint64_t range_begin, uint64_t range_end)
- : _uuid(core::uuid_from_hex(part.uuid())),
-   _server_uuid(core::uuid_from_hex(part.server_uuid())),
+ : _uuid(core::parse_uuid(part.uuid())),
+   _server_uuid(core::parse_uuid(part.server_uuid())),
    _ring_position(part.ring_position()),
    _range_begin(range_begin),
    _range_end(range_end),

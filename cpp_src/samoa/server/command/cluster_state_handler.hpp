@@ -3,6 +3,7 @@
 
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
@@ -22,14 +23,14 @@ public:
     cluster_state_handler()
     { }
 
-    void handle(const request_state_ptr_t &);
+    void handle(const request::state_ptr_t &);
 
 private:
 
     bool on_state_transaction(core::protobuf::ClusterState &,
-        const request_state_ptr_t &);
+        const request::state_ptr_t &);
     
-    void on_complete(const request_state_ptr_t &);
+    void on_complete(const request::state_ptr_t &);
 };
 
 }

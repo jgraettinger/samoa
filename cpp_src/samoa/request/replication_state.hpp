@@ -13,6 +13,17 @@ public:
     virtual ~replication_state();
 
     /*!
+     * Sets the target quorum size of the replication.
+     *
+     * If quorum_count is 0, the quorum-count is implicitly all peers.
+     *
+     * Samoa will wait for successful replication responses from
+     *  quorum-count peers, or all replication responses (successful
+     *  or not) before responding to the client.
+     */
+    void set_quorum_count(unsigned quorum_count);
+
+    /*!
      * Retrieves the requested quorum-count.
      *
      * If the set quorum-count was 0, the true quorum-count
@@ -30,15 +41,11 @@ public:
     { return _error_count; }
 
     /*!
-     * Sets the target quorum size of the replication.
-     *
-     * If quorum_count is 0, the quorum-count is implicitly all peers.
-     *
-     * Samoa will wait for successful replication responses from
-     *  quorum-count peers, or all replication responses (successful
-     *  or not) before responding to the client.
+     * Indicates whether one of peer_replication_failure() or
+     * peer_replication_success() have returned True, and the
+     * quorum has already been met (or failed).
      */
-    void set_quorum_count(unsigned quorum_count);
+    bool is_replication_finished() const;
 
     /*!
      * \brief To be called on failed peer replication.
@@ -69,25 +76,18 @@ public:
     bool peer_replication_success();
 
     /*!
-     * Indicates whether one of peer_replication_failure() or
-     * peer_replication_success() have returned True, and the
-     * quorum has already been met (or failed).
-     */
-    bool is_client_quorum_met() const;
-
-    /*!
      * Initializes replication_state for a replication operation.
      *
-     * \param peer_count The number of partition peers which will
-     *  be replicated to.
+     * \param replication_factor The _effective_ replication-factor
+     *   of the table.
      */
-    void load_replication_state(unsigned peer_count);
+    void load_replication_state(unsigned replication_factor);
 
     void reset_replication_state();
 
 private:
 
-    unsigned _peer_count;
+    unsigned _replication_factor;
     unsigned _quorum_count;
 
     unsigned _error_count;

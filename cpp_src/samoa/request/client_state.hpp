@@ -25,12 +25,21 @@ public:
     const server::client_ptr_t & get_client() const
     { return _client; }
 
-    const spb::SamoaRequest & get_samoa_request()
+    const spb::SamoaRequest & get_samoa_request() const
     { return _samoa_request; }
 
-    const std::vector<core::buffer_regions_t> & get_request_data_blocks()
+    spb::SamoaRequest mutable_samoa_request()
+    { return _samoa_request; }
+
+    const std::vector<core::buffer_regions_t> & get_request_data_blocks() const
     { return _request_data_blocks; }
 
+    std::vector<core::buffer_regions_t> & mutable_request_data_blocks()
+    { return _request_data_blocks; }
+
+    /// Retrieves the (mutable) SamoaResponse, which will be sent to the client
+    // Note: SamoaResponse is modified everywhere; const-protection
+    //   here just gets in the way.
     spb::SamoaResponse & get_samoa_response()
     { return _samoa_response; }
 

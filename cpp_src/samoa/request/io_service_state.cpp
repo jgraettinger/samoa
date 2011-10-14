@@ -3,6 +3,9 @@
 namespace samoa {
 namespace request {
 
+io_service_state::io_service_state()
+{ }
+
 io_service_state::~io_service_state()
 { }
 

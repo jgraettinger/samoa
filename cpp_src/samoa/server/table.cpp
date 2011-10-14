@@ -33,7 +33,7 @@ struct partition_order_cmp
 table::table(const spb::ClusterState::Table & ptable,
     const core::uuid & server_uuid,
     const ptr_t & current)
- : _uuid(core::uuid_from_hex(ptable.uuid())),
+ : _uuid(core::parse_uuid(ptable.uuid())),
    _server_uuid(server_uuid),
    _data_type(datamodel::data_type_from_string(ptable.data_type())),
    _name(ptable.name()),
@@ -55,7 +55,7 @@ table::table(const spb::ClusterState::Table & ptable,
         {
             // index w/ nullptr, to enforce uuid uniqueness
             SAMOA_ASSERT(_index.insert(std::make_pair(
-                core::uuid_from_hex(it->uuid()), partition::ptr_t())).second);
+                core::parse_uuid(it->uuid()), partition::ptr_t())).second);
         }
         else
             tmp_ring.push_back(&(*it));
@@ -69,8 +69,8 @@ table::table(const spb::ClusterState::Table & ptable,
     {
         const spb::ClusterState::Table::Partition & ppart = *tmp_ring[i];
 
-        core::uuid p_uuid = core::uuid_from_hex(ppart.uuid());
-        core::uuid p_server_uuid = core::uuid_from_hex(ppart.server_uuid());
+        core::uuid p_uuid = core::parse_uuid(ppart.uuid());
+        core::uuid p_server_uuid = core::parse_uuid(ppart.server_uuid());
 
         partition::ptr_t part, old_part;
 
@@ -225,7 +225,7 @@ bool table::merge_table(
             else
             {
                 // check that peer isn't trying to tell us of our own partition
-                core::uuid server_uuid = core::uuid_from_hex(p_it->server_uuid());
+                core::uuid server_uuid = core::parse_uuid(p_it->server_uuid());
                 SAMOA_ASSERT(server_uuid != _server_uuid);
 
                 LOG_INFO("discovered partition " << p_it->uuid());
@@ -281,7 +281,7 @@ bool table::merge_table(
                 // local & peer partitions are both live; pass down to
                 //   partition instance to continue merging
                 uuid_index_t::const_iterator uuid_it = \
-                    _index.find(core::uuid_from_hex(l_it->uuid()));
+                    _index.find(core::parse_uuid(l_it->uuid()));
 
                 SAMOA_ASSERT(uuid_it != _index.end());
 

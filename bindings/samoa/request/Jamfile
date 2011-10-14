@@ -1,0 +1,11 @@
+
+python-extension _request :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _request : <location>$(INSTALL)/samoa/request ;
+

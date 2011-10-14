@@ -30,45 +30,60 @@ public:
     typedef boost::shared_ptr<state> ptr_t;
 
     state();
+    virtual ~state();
 
-    io_service_state & get_io_service_state()
-    { return *this; }
-
-    context_state & get_context_state()
-    { return *this; }
-
-    client_state & get_client_state()
-    { return *this; }
-
-    table_state & get_table_state()
-    { return *this; }
-
-    route_state & get_route_state()
-    { return *this; }
-
-    record_state & get_record_state()
-    { return *this; }
-
-    replication_state & get_replication_state()
-    { return *this; }
-
-    // expose a subset of methods, which pop up again & again
     using io_service_state::get_io_service;
+
+    using context_state::get_context;
+    using context_state::get_cluster_state;
     using context_state::get_peer_set;
+    using context_state::get_table_set;
+
+    using client_state::get_client;
+    using client_state::get_samoa_request;
+    using client_state::get_request_data_blocks;
+    using client_state::get_samoa_response;
+    using client_state::add_response_data_block;
+    using client_state::flush_response;
+    using client_state::send_error;
+
+    void load_table_state();
 
     using table_state::get_table_uuid;
+    using table_state::get_table_name;
     using table_state::get_table;
 
-    /*!
-     * Parses the protobuf SamoaRequest captured by
-     *  client_state::get_samoa_request(), and sets attributes of
-     *  other composed member states as directed by the request.
-     */
-    void parse_from_protobuf_request();
+    void load_route_state();
+
+    using route_state::get_key;
+    using route_state::get_ring_position;
+    using route_state::has_primary_partition_uuid;
+    using route_state::get_primary_partition_uuid;
+    using route_state::get_primary_partition;
+    using route_state::has_peer_partition_uuids;
+    using route_state::get_peer_partition_uuids;
+    using route_state::get_peer_partitions;
+
+    using record_state::get_local_record;
+    using record_state::get_remote_record;
+
+    void load_replication_state();
+
+    using replication_state::get_quorum_count;
+    using replication_state::get_peer_success_count;
+    using replication_state::get_peer_error_count;
+    using replication_state::is_replication_finished;
+    using replication_state::peer_replication_success;
+    using replication_state::peer_replication_failure;
 
     /*!
-     * Delegates a reset to all member states.
+     * Loads io_service_state, context_state, and client_state.
+     *
+     * Returns a reference to the (private) client_state,
+     *  for use by samoa::server::client in populated the request
      */
+    client_state & initialize_from_client(const server::client_ptr_t &);
+
     void reset_state();
 };
 
