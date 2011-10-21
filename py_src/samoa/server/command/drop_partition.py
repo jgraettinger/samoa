@@ -7,6 +7,7 @@ import getty
 from samoa.core import protobuf
 from samoa.core.uuid import UUID
 from samoa.server.command_handler import CommandHandler
+from samoa.request.state_exception import StateException
 
 class DropPartitionHandler(CommandHandler):
 
@@ -18,19 +19,28 @@ class DropPartitionHandler(CommandHandler):
     def _transaction(self, rstate, local_state):
 
         table_uuid = rstate.get_table().get_uuid()
-        part_uuid = rstate.get_primary_partition().get_uuid()
-        
+
+        part_uuid_bytes = rstate.get_samoa_request().partition_uuid
+
+        if not part_uuid_bytes:
+            raise StateException(400, 'expected partition UUID')
+
+        part_uuid = UUID.from_bytes(part_uuid_bytes)
+
+        if part_uuid.is_nil():
+            raise StateException(400, 'invalid UUID %r' % part_uuid_bytes)
+
         pb_table = protobuf.find_table(local_state, table_uuid)
 
         if not pb_table:
             # race condition check
-            raise KeyError('table %s' % table_uuid)
+            raise StateError(404, "table already dropped")
 
         pb_part = protobuf.find_partition(pb_table, part_uuid)
 
         if not pb_part:
             # race condition check
-            raise KeyError('partition %s' % part_uuid)
+            raise StateError(404, "partition already dropped")
 
         ring_pos = pb_part.ring_position
 
@@ -42,30 +52,22 @@ class DropPartitionHandler(CommandHandler):
 
         self.log.info('dropped partition %s (table %s)' % (
             part_uuid, table_uuid))
-
         return True
 
     def handle(self, rstate):
 
-        if not rstate.get_table():
-            rstate.send_client_error(400, 'expected table name / UUID')
-            yield
-
-        if not rstate.get_primary_partition():
-            rstate.send_client_error(400, 'expected partition UUID')
-            yield
-
         try:
-            commit = yield rstate.get_context().cluster_state_transaction(
+
+            rstate.load_table_state()
+
+            yield rstate.get_context().cluster_state_transaction(
                 functools.partial(self._transaction, rstate))
-        except KeyError, exc:
-            rstate.send_client_error(404, exc.message)
+
+            # TODO: notify peers of change
+            rstate.flush_response()
             yield
 
-        if commit:
-            # TODO: notify peers of change
-            pass
-
-        rstate.flush_client_response()
-        yield
+        except StateException, e:
+            rstate.send_error(e.code, e.message)
+            yield
 

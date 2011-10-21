@@ -4,7 +4,6 @@ import unittest
 from samoa.core import protobuf as pb
 from samoa.core.uuid import UUID
 from samoa.server.table import Table
-from samoa.server.peer_set import PeerSet
 
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
@@ -230,7 +229,7 @@ class TestTable(unittest.TestCase):
             self.assertTrue(last_key is None or last_key < key)
             last_key = key
 
-    def test_route_ring_position(self):
+    def test_runtime_partition_ranges(self):
 
         self.state.set_replication_factor(3)
 
@@ -255,43 +254,4 @@ class TestTable(unittest.TestCase):
         self.assertEquals(ring[3].get_range_end(), (1<<64) - 1)
         self.assertEquals(ring[4].get_range_begin(), 3000)
         self.assertEquals(ring[4].get_range_end(), 999)
-
-        # route several ring position fixtures, and validate results
-        peer_set = PeerSet(self.gen.state, None)
-
-        # position 500 is mapped onto ring starting at 1000
-        primary_partition, secondary_partitions = \
-            table.route_ring_position(500, peer_set)
-
-        # local partition returned as primary
-        self.assertEquals(primary_partition.get_ring_position(), 3000)
-
-        # replication factor of 3 => 1000, 2000 also returned
-        self.assertEquals([part_peer.partition.get_ring_position() \
-                for part_peer in secondary_partitions],
-            [1000, 2000])
-
-        # position 3500 is mapped onto ring starting at 4000, and wrapping
-        primary_partition, secondary_partitions = \
-            table.route_ring_position(3500, peer_set)
-
-        # no primary partition
-        self.assertFalse(primary_partition)
-
-        # validate secondary partitions
-        self.assertEquals([part_peer.partition.get_ring_position() \
-                for part_peer in secondary_partitions],
-            [4000, 0, 1000])
-
-        # position 4500 is mapped onto the ring starting at 0
-        primary_partition, secondary_partitions = \
-            table.route_ring_position(4500, peer_set)
-
-        # no primary partition
-        self.assertFalse(primary_partition)
-
-        # validate secondary partitions
-        self.assertEquals([part_peer.partition.get_ring_position() \
-                for part_peer in secondary_partitions],
-            [0, 1000, 2000])
 

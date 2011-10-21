@@ -13,6 +13,22 @@ state::state()
 state::~state()
 { }
 
+void state::flush_response()
+{
+    client_state::flush_response(shared_from_this());
+}
+
+void state::send_error(unsigned err_code, const std::string & err_msg)
+{
+    client_state::send_error(shared_from_this(), err_code, err_msg);
+}
+
+void state::send_error(unsigned err_code,
+    const boost::system::error_code & err_msg)
+{
+    client_state::send_error(shared_from_this(), err_code, err_msg);
+}
+
 void state::load_table_state()
 {
     const spb::SamoaRequest & request = get_samoa_request();

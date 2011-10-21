@@ -11,10 +11,7 @@ class state_exception :
 {
 public:
 
-    state_exception(unsigned code, const std::string & err)
-     : std::runtime_error(err),
-       _code(code)
-    { }
+    state_exception(unsigned code, const std::string & err);
 
     unsigned get_code() const
     { return _code; }

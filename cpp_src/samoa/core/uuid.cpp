@@ -1,6 +1,5 @@
 
 #include "samoa/core/uuid.hpp"
-#include "samoa/error.hpp"
 #include <boost/uuid/string_generator.hpp>
 
 namespace samoa {
@@ -32,7 +31,10 @@ uuid try_parse_uuid(const std::string & bytes) throw()
 uuid parse_uuid(const std::string & bytes)
 {
     uuid out = try_parse_uuid(bytes);
-    SAMOA_ASSERT(!out.is_nil());
+    if(out.is_nil())
+    {
+        throw std::runtime_error("failed to parse UUID from bytes " + bytes);
+    }
     return out;
 }
 

@@ -59,7 +59,7 @@ void table_state::load_table_state(const server::table_set::ptr_t & table_set)
     }
     else
     {
-        throw state_exception(404, "expected table-uuid or table-name");
+        throw state_exception(400, "expected table-uuid or table-name");
     }
 }
 

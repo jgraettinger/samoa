@@ -159,8 +159,8 @@ unsigned py_get_quorum_count(state & s)
 unsigned py_get_peer_success_count(state & s)
 { return s.get_peer_success_count(); }
 
-unsigned py_get_peer_error_count(state & s)
-{ return s.get_peer_error_count(); }
+unsigned py_get_peer_failure_count(state & s)
+{ return s.get_peer_failure_count(); }
 
 bool py_is_replication_finished(state & s)
 { return s.is_replication_finished(); }
@@ -175,7 +175,7 @@ bool py_peer_replication_success(state & s)
 
 void make_state_bindings()
 {
-    bpl::class_<state, boost::noncopyable>(
+    bpl::class_<state, state::ptr_t, boost::noncopyable>(
             "RequestState", bpl::init<>())
 
         // io_service_state
@@ -229,7 +229,7 @@ void make_state_bindings()
 
         .def("get_quorum_count", &py_get_quorum_count)
         .def("get_peer_success_count", &py_get_peer_success_count)
-        .def("get_peer_error_count", &py_get_peer_error_count)
+        .def("get_peer_failure_count", &py_get_peer_failure_count)
         .def("is_replication_finished", &py_is_replication_finished)
         .def("peer_replication_failure", &py_peer_replication_failure)
         .def("peer_replication_success", &py_peer_replication_success)

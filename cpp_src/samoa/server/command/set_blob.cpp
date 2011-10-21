@@ -25,20 +25,27 @@ namespace spb = samoa::core::protobuf;
 void set_blob_handler::handle(const request::state::ptr_t & rstate)
 {
     try {
+        if(rstate->get_request_data_blocks().empty())
+        {
+            throw request::state_exception(400,
+                "expected exactly one data block");
+        }
+
         rstate->load_table_state();
         rstate->load_route_state();
+
+        if(!rstate->get_primary_partition())
+        {
+            // no primary partition; forward to a better peer
+            rstate->get_peer_set()->forward_request(rstate);
+            return;
+        }
+
         rstate->load_replication_state();
     }
     catch (const request::state_exception & ex)
     {
         rstate->send_error(ex.get_code(), ex.what());
-        return;
-    }
-
-    if(!rstate->get_primary_partition())
-    {
-        // no primary partition; forward to a better peer
-        rstate->get_peer_set()->forward_request(rstate);
         return;
     }
 
@@ -145,7 +152,7 @@ void set_blob_handler::on_replicated_write(
     rstate->get_samoa_response().set_replication_success(
         rstate->get_peer_success_count());
     rstate->get_samoa_response().set_replication_failure(
-        rstate->get_peer_error_count());
+        rstate->get_peer_failure_count());
 
     rstate->flush_response();
 }

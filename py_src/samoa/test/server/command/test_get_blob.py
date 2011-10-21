@@ -97,6 +97,7 @@ class TestGetBlob(unittest.TestCase):
             response = yield request.flush_request()
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
+
             self.assertEquals(samoa_response.replication_success, 3)
             self.assertEquals(samoa_response.replication_failure, 1)
 

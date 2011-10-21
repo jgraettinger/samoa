@@ -37,8 +37,8 @@ public:
     { return _success_count; }
 
     /// Retrieves the number of failed peer replications
-    unsigned get_peer_error_count() const
-    { return _error_count; }
+    unsigned get_peer_failure_count() const
+    { return _failure_count; }
 
     /*!
      * Indicates whether one of peer_replication_failure() or
@@ -50,7 +50,7 @@ public:
     /*!
      * \brief To be called on failed peer replication.
      *
-     * Increments peer_error_count, and returns true iff the client should be
+     * Increments peer_failure_count, and returns true iff the client should be
      * responded to as a result of this specific completion. Eg, because we
      * haven't yet responded, and this completion was the last remaining
      * replication.
@@ -90,7 +90,7 @@ private:
     unsigned _replication_factor;
     unsigned _quorum_count;
 
-    unsigned _error_count;
+    unsigned _failure_count;
     unsigned _success_count;
 };
 

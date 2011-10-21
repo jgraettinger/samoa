@@ -16,8 +16,6 @@ class client_state
 {
 public:
 
-    typedef boost::shared_ptr<client_state> ptr_t;
-
     client_state();
 
     virtual ~client_state();
@@ -28,7 +26,7 @@ public:
     const spb::SamoaRequest & get_samoa_request() const
     { return _samoa_request; }
 
-    spb::SamoaRequest mutable_samoa_request()
+    spb::SamoaRequest & mutable_samoa_request()
     { return _samoa_request; }
 
     const std::vector<core::buffer_regions_t> & get_request_data_blocks() const
@@ -72,8 +70,10 @@ public:
      * Postcondition note: After invoking flush_response(),
      *  it is an error to call add_response_data_block(), or to
      *  mutate the SamoaResponse
+     *
+     * @param guard Smart-ptr to maintain request::state reference
      */
-    void flush_response();
+    void flush_response(const state_ptr_t & guard);
 
     /*!
      * \brief Helper for sending an error response to the client
@@ -83,10 +83,12 @@ public:
      *
      * Postcondition: same requirements as flush_response()
      *
+     * @param guard Smart-ptr to maintain request::state reference
      * @param err_code Code to set on response error
      * @param err_msg Accompanying message
      */
-    void send_error(unsigned err_code, const std::string & err_msg);
+    void send_error(const state_ptr_t & guard, unsigned err_code,
+        const std::string & err_msg);
 
     /*!
      * \brief Helper for sending an error response to the client
@@ -96,10 +98,11 @@ public:
      *
      * Postcondition: same requirements as flush_response()
      *
+     * @param guard Smart-ptr to maintain request::state reference
      * @param err_code Code to set on response error
      * @param err_msg boost error code, which will be converted to a message
      */
-    void send_error(unsigned err_code,
+    void send_error(const state_ptr_t & guard, unsigned err_code,
         const boost::system::error_code & err_msg);
 
     void load_client_state(const server::client_ptr_t & client);
@@ -111,7 +114,7 @@ private:
     friend class samoa::server::client;
 
     void on_response(server::client::response_interface,
-        const request::state_ptr_t & guard);
+        const state_ptr_t & guard);
 
     server::client_ptr_t _client;
 

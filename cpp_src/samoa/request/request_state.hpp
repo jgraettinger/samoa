@@ -44,8 +44,13 @@ public:
     using client_state::get_request_data_blocks;
     using client_state::get_samoa_response;
     using client_state::add_response_data_block;
-    using client_state::flush_response;
-    using client_state::send_error;
+    /// Smart-ptr wrapper around client_state::flush_response
+    void flush_response();
+    /// Smart-ptr wrapper around client_state::send_error
+    void send_error(unsigned err_code, const std::string & err_msg);
+    /// Smart-ptr wrapper around client_state::send_error
+    void send_error(unsigned err_code,
+        const boost::system::error_code & err_msg);
 
     void load_table_state();
 
@@ -71,7 +76,7 @@ public:
 
     using replication_state::get_quorum_count;
     using replication_state::get_peer_success_count;
-    using replication_state::get_peer_error_count;
+    using replication_state::get_peer_failure_count;
     using replication_state::is_replication_finished;
     using replication_state::peer_replication_success;
     using replication_state::peer_replication_failure;
@@ -80,7 +85,7 @@ public:
      * Loads io_service_state, context_state, and client_state.
      *
      * Returns a reference to the (private) client_state,
-     *  for use by samoa::server::client in populated the request
+     *  for use by samoa::server::client in populating the request
      */
     client_state & initialize_from_client(const server::client_ptr_t &);
 

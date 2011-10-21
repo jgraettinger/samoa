@@ -42,24 +42,24 @@ class CreateTableHandler(CommandHandler):
         tbl_req = rstate.get_samoa_request().create_table
 
         if not tbl_req:
-            rstate.send_client_error(400, 'create_table missing')
+            rstate.send_error(400, 'create_table missing')
             yield
 
         if tbl_req.data_type not in DataType.names:
-            rstate.send_client_error(406, 'invalid data type %s' % tbl_req.data_type)
+            rstate.send_error(406, 'invalid data type %s' % tbl_req.data_type)
             yield
 
         try:
             commit = yield rstate.get_context().cluster_state_transaction(
                 functools.partial(self._transaction, rstate))
         except NameError, exc:
-            rstate.send_client_error(409, exc.message)
+            rstate.send_error(409, exc.message)
             yield
 
         if commit:
             # TODO: notify peers of change
             pass
 
-        rstate.flush_client_response()
+        rstate.flush_response()
         yield
 

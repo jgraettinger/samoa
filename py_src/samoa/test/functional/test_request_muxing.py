@@ -28,7 +28,7 @@ class MuxTestHandler(CommandHandler):
 
         # send responses for the marked requests
         for mux_id in mux_ids[1:]:
-            self.pending[mux_id].flush_client_response()
+            self.pending[mux_id].flush_response()
             del self.pending[mux_id]
 
         yield
@@ -128,7 +128,7 @@ class TestRequestMuxing(unittest.TestCase):
                 Client.max_request_concurrency)
 
             # manually release the first request
-            self.handler.pending[0].flush_client_response()
+            self.handler.pending[0].flush_response()
             del self.handler.pending[0]
 
             # Assert request 0 was released

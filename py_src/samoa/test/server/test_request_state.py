@@ -115,80 +115,6 @@ class TestRequestState(unittest.TestCase):
         # three peer partitions are also returned
         self.assertEquals(len(rstate.get_partition_peers()), 3)
 
-    def test_replication_operation_counts(self):
-
-        context = Context(self.fixture.state)
-
-        # Test peer_replication_failure() is no-op after quorum met
-
-        rstate = RequestState(None)
-        rstate.get_samoa_request().CopyFrom(self.test_request)
-        rstate.get_samoa_request().set_requested_quorum(3)
-
-        rstate.load_from_samoa_request(context)
-
-        # peer success
-        self.assertFalse(rstate.peer_replication_success())
-        self.assertFalse(rstate.is_client_quorum_met())
-
-        # peer success - quorum met
-        self.assertTrue(rstate.peer_replication_success())
-        self.assertTrue(rstate.is_client_quorum_met())
-
-        # peer failure - false, as quorum already met
-        self.assertFalse(rstate.peer_replication_failure())
-        self.assertTrue(rstate.is_client_quorum_met())
-
-        # Test peer_replication_success() fires when quorum can't be met
-
-        rstate = RequestState(None)
-        rstate.get_samoa_request().CopyFrom(self.test_request)
-        rstate.get_samoa_request().set_requested_quorum(3)
-
-        rstate.load_from_samoa_request(context)
-
-        # peer failure
-        self.assertFalse(rstate.peer_replication_failure())
-        self.assertFalse(rstate.is_client_quorum_met())
-
-        # peer failure
-        self.assertFalse(rstate.peer_replication_failure())
-        self.assertFalse(rstate.is_client_quorum_met())
-
-        # peer success - all responses receieved
-        self.assertTrue(rstate.peer_replication_success())
-        self.assertTrue(rstate.is_client_quorum_met())
-
-        # Test peer_replication_failure() fires when quorum can't be met
-
-        rstate = RequestState(None)
-        rstate.get_samoa_request().CopyFrom(self.test_request)
-        rstate.get_samoa_request().set_requested_quorum(3)
-
-        rstate.load_from_samoa_request(context)
-
-        # peer failure
-        self.assertFalse(rstate.peer_replication_failure())
-        self.assertFalse(rstate.is_client_quorum_met())
-
-        # peer success
-        self.assertFalse(rstate.peer_replication_success())
-        self.assertFalse(rstate.is_client_quorum_met())
-
-        # peer failure - all responses receieved
-        self.assertTrue(rstate.peer_replication_failure())
-        self.assertTrue(rstate.is_client_quorum_met())
-
-        # Test requested_quorum of 0 is interpreted as "all"
-
-        rstate = RequestState(None)
-        rstate.get_samoa_request().CopyFrom(self.test_request)
-        rstate.get_samoa_request().set_requested_quorum(0)
-
-        rstate.load_from_samoa_request(context)
-
-        self.assertEquals(rstate.get_client_quorum(), 3)
-
     def test_bad_table(self):
 
         context = Context(self.fixture.state)
@@ -298,18 +224,6 @@ class TestRequestState(unittest.TestCase):
         with self.assertRaisesRegexp(RuntimeError, 'code 410'):
             rstate.load_from_samoa_request(context)
 
-    def test_invalid_quorum(self):
-
-        context = Context(self.fixture.state)
-
-        rstate = RequestState(None)
-        rstate.get_samoa_request().CopyFrom(self.test_request)
-
-        # quorum larger than available partitions
-        rstate.get_samoa_request().set_requested_quorum(5)
-
-        with self.assertRaisesRegexp(RuntimeError, 'code 400'):
-            rstate.load_from_samoa_request(context)
 
     def test_invalid_cluster_clock(self):
 

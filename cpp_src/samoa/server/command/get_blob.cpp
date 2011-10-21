@@ -25,6 +25,14 @@ void get_blob_handler::handle(const request::state::ptr_t & rstate)
     try {
         rstate->load_table_state();
         rstate->load_route_state();
+
+        if(!rstate->get_primary_partition())
+        {
+            // no primary partition; forward to a better peer
+            rstate->get_peer_set()->forward_request(rstate);
+            return;
+        }
+
         rstate->load_replication_state();
     }
     catch (const request::state_exception & ex)
@@ -33,18 +41,11 @@ void get_blob_handler::handle(const request::state::ptr_t & rstate)
         return;
     }
 
-    if(!rstate->get_primary_partition())
-    {
-        // no primary partition; forward to a better peer
-        rstate->get_peer_set()->forward_request(rstate);
-        return;
-    }
+    // optimistically assume local read will succeed
+    rstate->peer_replication_success();
 
     if(rstate->get_quorum_count() > 1)
     {
-        // optimistically assume local read will succeed
-        rstate->peer_replication_success();
-
         // spawn replicated read requests to remaining peers
         replication::replicated_read(
             boost::bind(&get_blob_handler::on_replicated_read,
@@ -104,7 +105,7 @@ void get_blob_handler::on_retrieve(
     rstate->get_samoa_response().set_replication_success(
         rstate->get_peer_success_count());
     rstate->get_samoa_response().set_replication_failure(
-        rstate->get_peer_error_count());
+        rstate->get_peer_failure_count());
 
     datamodel::blob::send_blob_value(rstate,
         rstate->get_local_record());

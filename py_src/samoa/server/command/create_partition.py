@@ -6,6 +6,7 @@ import getty
 from samoa.core import protobuf
 from samoa.core.uuid import UUID
 from samoa.server.command_handler import CommandHandler
+from samoa.request.state_exception import StateException
 
 class CreatePartitionHandler(CommandHandler):
 
@@ -22,8 +23,8 @@ class CreatePartitionHandler(CommandHandler):
         pb_table = protobuf.find_table(local_state, table_uuid)
 
         if not pb_table:
-            # subtle race condition here
-            raise KeyError('table %s' % req.table_uuid)
+            # race condition check
+            raise StateException(404, 'table already dropped')
 
         part = protobuf.add_partition(pb_table,
             UUID.from_random(), req.ring_position)
@@ -47,29 +48,26 @@ class CreatePartitionHandler(CommandHandler):
 
     def handle(self, rstate):
 
-        if not rstate.get_table():
-            rstate.send_client_error(400, "expected table name or UUID")
-            yield
-
-        if not rstate.get_samoa_request().create_partition:
-            rstate.send_client_error(400, "create_partition missing")
-            yield
-
-        if not len(rstate.get_samoa_request().create_partition.ring_layer):
-            rstate.send_client_error(400, 'ring_layer missing')
-            yield
-
         try:
-            commit = yield rstate.get_context().cluster_state_transaction(
+
+            rstate.load_table_state()
+
+            create_partition = rstate.get_samoa_request().create_partition
+
+            if not create_partition:
+                raise StateException(400, "create_partition missing")
+
+            if not len(create_partition.ring_layer):
+                raise StateException(400, 'ring_layer missing')
+
+            yield rstate.get_context().cluster_state_transaction(
                 functools.partial(self._transaction, rstate))
-        except KeyError, exc:
-            rstate.send_client_error(404, exc.message)
+
+            # TODO: notify peers of change
+            rstate.flush_response()
             yield
 
-        if commit:
-            # TODO: notify peers of change
-            pass
-
-        rstate.flush_client_response()
-        yield
+        except StateException, e:
+            rstate.send_error(e.code, e.message)
+            yield
 

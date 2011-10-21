@@ -17,7 +17,7 @@ public:
     virtual ~table_state();
 
     bool has_table_uuid() const
-    { return _table_uuid.is_nil(); }
+    { return !_table_uuid.is_nil(); }
 
     const core::uuid & get_table_uuid() const
     { return _table_uuid; }

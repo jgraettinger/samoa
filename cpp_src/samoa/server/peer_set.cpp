@@ -223,21 +223,31 @@ void peer_set::forward_request(const request::state::ptr_t & rstate)
 {
     SAMOA_ASSERT(!rstate->get_primary_partition());
 
-    if(!rstate->has_peer_partition_uuids())
+    if(rstate->get_peer_partitions().empty())
     {
         rstate->send_error(404, "no partitions for forwarding");
         return;
     }
 
+    unsigned best_peer_latency = std::numeric_limits<unsigned>::max();
     core::uuid best_peer_uuid = boost::uuids::nil_uuid();
 
-    for(auto it = rstate->get_peer_partition_uuids().begin();
-        it != rstate->get_peer_partition_uuids().end(); ++it)
+    for(auto it = rstate->get_peer_partitions().begin();
+        it != rstate->get_peer_partitions().end(); ++it)
     {
-        // TODO(johng): factor peer latency into this selection
-        if(best_peer_uuid.is_nil())
+        unsigned peer_latency = std::numeric_limits<unsigned>::max();
+        core::uuid peer_uuid = (*it)->get_server_uuid();
+
+        // TODO(johng): factor actual latency into this selection
+        samoa::client::server::ptr_t server = get_server(peer_uuid);
+        if(server)
         {
-            best_peer_uuid = *it;
+            peer_latency = 0;
+        }
+
+        if(peer_latency < best_peer_latency)
+        {
+            best_peer_uuid = peer_uuid;
         }
     }
 

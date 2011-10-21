@@ -44,6 +44,7 @@ void make_route_state_bindings()
         .def("set_key", &py_set_key)
         .def("get_key", &route_state::get_key,
             bpl::return_value_policy<bpl::copy_const_reference>())
+        .def("set_ring_position", &route_state::set_ring_position)
         .def("get_ring_position", &route_state::get_ring_position)
         .def("set_primary_partition_uuid",
             &route_state::set_primary_partition_uuid)

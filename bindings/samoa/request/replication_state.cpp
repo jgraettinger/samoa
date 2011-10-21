@@ -15,8 +15,8 @@ void make_replication_state_bindings()
         .def("get_quorum_count", &replication_state::get_quorum_count)
         .def("get_peer_success_count",
             &replication_state::get_peer_success_count)
-        .def("get_peer_error_count",
-            &replication_state::get_peer_error_count)
+        .def("get_peer_failure_count",
+            &replication_state::get_peer_failure_count)
         .def("is_replication_finished",
             &replication_state::is_replication_finished)
         .def("peer_replication_failure",

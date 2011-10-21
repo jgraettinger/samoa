@@ -28,6 +28,8 @@ class TestPing(unittest.TestCase):
             # make a ping request to server
             request = yield server.schedule_request()
             request.get_message().set_type(CommandType.PING)
+            request.get_message().set_key('test-key')
+            request.add_data_block('hello, world')
 
             # receive ping response
             response = yield request.flush_request()

@@ -19,21 +19,28 @@ public:
 
     /*!
      * Sets the key which is being routed.
-     *
-     * Must be set prior to load_route_state()
+     * May only be called prior to load_route_state()
      */
     void set_key(std::string && key);
 
     /*!
-     * Retrieves explicitly-configured route key
+     * Retrieves the route key
      */
     const std::string & get_key() const
     { return _key; }
 
     /*!
+     * Sets the ring position being routed.
+     *
+     * May only be called prior to load_route_state()
+     * If a key is also set, the key will override this value
+     */
+    void set_ring_position(uint64_t);
+
+    /*!
      * Retrieves the key's position in the table's ring continuum.
      *
-     * Note: Only available after load_route_state()
+     * May not be available until after load_route_state()
      */
     uint64_t get_ring_position() const
     { return _ring_position; }
@@ -52,7 +59,7 @@ public:
      *  set by load_route_state()
      */
     bool has_primary_partition_uuid() const
-    { return _primary_partition_uuid.is_nil(); }
+    { return !_primary_partition_uuid.is_nil(); }
 
     /*!
      * Retrieves the primary-partition uuid set on this route, or
@@ -74,7 +81,6 @@ public:
     /*!
      * Adds a peer-partition of this route
      *
-     * Requires that a primary-partition uuid is set.
      * All calls must be made prior to load_route_state()
      *
      * If any peer partition-uuid's are added, all uuids
@@ -99,7 +105,7 @@ public:
      *
      * Invariant: uuids are always returned in sorted order.
      */
-    const std::vector<core::uuid> get_peer_partition_uuids() const
+    const std::vector<core::uuid> & get_peer_partition_uuids() const
     { return _peer_partition_uuids; }
 
     /*!
@@ -133,6 +139,8 @@ private:
 
     server::local_partition_ptr_t _primary_partition;
     std::vector<server::partition_ptr_t> _peer_partitions;
+
+    bool _loaded;
 };
 
 }

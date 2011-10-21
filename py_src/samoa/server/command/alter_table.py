@@ -6,6 +6,7 @@ import getty
 from samoa.core import protobuf
 from samoa.core.uuid import UUID
 from samoa.server.command_handler import CommandHandler
+from samoa.request.state_exception import StateException
 
 class AlterTableHandler(CommandHandler):
 
@@ -23,7 +24,7 @@ class AlterTableHandler(CommandHandler):
 
         if not pb_table:
             # subtle race condition here
-            raise KeyError('table %s' % table_uuid)
+            raise StateException(404, "table already dropped")
 
         modified = False
 
@@ -64,25 +65,24 @@ class AlterTableHandler(CommandHandler):
 
     def handle(self, rstate):
 
-        if not rstate.get_samoa_request().alter_table:
-            rstate.send_client_error(400, 'alter_table missing')
-            yield
-
-        if not rstate.get_table():
-            rstate.send_client_error(400, 'expected table name or UUID')
-            yield
-
         try:
+
+            rstate.load_table_state()
+
+            if not rstate.get_samoa_request().alter_table:
+                raise StateException(400, 'alter_table missing')
+
             commit = yield rstate.get_context().cluster_state_transaction(
                 functools.partial(self._transaction, rstate))
-        except KeyError, exc:
-            rstate.send_client_error(404, exc.message)
+
+            if commit:
+                # TODO: notify peers of change
+                pass
+
+            rstate.flush_response()
             yield
 
-        if commit:
-            # TODO: notify peers of change
-            pass
-
-        rstate.flush_client_response()
-        yield
+        except StateException, e:
+            rstate.send_error(e.code, e.message)
+            yield
 
