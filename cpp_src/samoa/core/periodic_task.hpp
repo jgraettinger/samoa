@@ -27,11 +27,11 @@ protected:
      */
     
     /*!
-     * Notifies periodic_task that the cycle has finished
+     * Notifies periodic_task of when the next cyle should begin
      *
      * @param delay Target interval until next cycle
      */
-    void end_cycle(const boost::posix_time::time_duration & interval);
+    void next_cycle(const boost::posix_time::time_duration & interval);
 
 private:
 

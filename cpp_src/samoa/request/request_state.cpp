@@ -1,5 +1,6 @@
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
+#include "samoa/datamodel/clock_util.hpp"
 #include "samoa/server/table.hpp"
 
 namespace samoa {
@@ -31,45 +32,12 @@ void state::send_error(unsigned err_code,
 
 void state::load_table_state()
 {
-    const spb::SamoaRequest & request = get_samoa_request();
-
-    if(request.has_table_uuid())
-    {
-        table_state::set_table_uuid(core::parse_uuid(request.table_uuid()));
-    }
-
-    if(request.has_table_name())
-    {
-        table_state::set_table_name(request.table_name());
-    }
-
     table_state::load_table_state(get_table_set());
 }
 
 void state::load_route_state()
 {
     SAMOA_ASSERT(table_state::get_table());
-
-    const spb::SamoaRequest & request = get_samoa_request();
-
-    if(request.has_key())
-    {
-        route_state::set_key(std::string(request.key()));
-    }
-
-    if(request.has_partition_uuid())
-    {
-        route_state::set_primary_partition_uuid(
-            core::parse_uuid(request.partition_uuid()));
-    }
-
-    for(auto it = request.peer_partition_uuid().begin();
-        it != request.peer_partition_uuid().end(); ++it)
-    {
-        route_state::add_peer_partition_uuid(
-            core::parse_uuid(*it));
-    }
-
     route_state::load_route_state(get_table());
 }
 
@@ -78,10 +46,6 @@ void state::load_replication_state()
     SAMOA_ASSERT(route_state::get_primary_partition());
     SAMOA_ASSERT(route_state::get_peer_partitions().size() + 1 == \
         get_table()->get_replication_factor());
-
-    const spb::SamoaRequest & request = get_samoa_request();
-
-    replication_state::set_quorum_count(request.requested_quorum());
 
     replication_state::load_replication_state(
         get_table()->get_replication_factor());
@@ -95,6 +59,75 @@ client_state & state::initialize_from_client(
     load_client_state(client);
 
     return *this;
+}
+
+void state::parse_samoa_request()
+{
+    const spb::SamoaRequest & request = client_state::get_samoa_request();
+
+    // table_state
+    if(request.has_table_uuid())
+    {
+        core::uuid tmp = core::try_parse_uuid(request.table_uuid());
+
+        if(tmp.is_nil())
+        {
+            std::stringstream err;
+            err << "malformed table-uuid " << request.table_uuid();
+            throw state_exception(400, err.str());
+        }
+        table_state::set_table_uuid(tmp);
+    }
+
+    if(request.has_table_name())
+    {
+        table_state::set_table_name(request.table_name());
+    }
+
+    // route_state
+    if(request.has_key())
+    {
+        route_state::set_key(std::string(request.key()));
+    }
+
+    if(request.has_partition_uuid())
+    {
+        core::uuid tmp = core::try_parse_uuid(request.partition_uuid());
+
+        if(tmp.is_nil())
+        {
+            std::stringstream err;
+            err << "malformed partition-uuid " << request.partition_uuid();
+            throw state_exception(400, err.str());
+        }
+        route_state::set_primary_partition_uuid(tmp);
+    }
+
+    for(auto it = request.peer_partition_uuid().begin();
+        it != request.peer_partition_uuid().end(); ++it)
+    {
+        core::uuid tmp = core::try_parse_uuid(*it);
+
+        if(tmp.is_nil())
+        {
+            std::stringstream err;
+            err << "malformed peer-partition-uuid " << *it;
+            throw state_exception(400, err.str());
+        }
+        route_state::add_peer_partition_uuid(tmp);
+    }
+
+    // replication_state
+    replication_state::set_quorum_count(request.requested_quorum());
+
+    // cluster-clock
+    if(request.has_cluster_clock() &&
+       !datamodel::clock_util::validate(request.cluster_clock()))
+    {
+        std::stringstream err;
+        err << "malformed cluster-clock";
+        throw state_exception(400, err.str());
+    }
 }
 
 void state::reset_state()

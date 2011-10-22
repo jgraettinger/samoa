@@ -41,30 +41,29 @@ public:
 
     using client_state::get_client;
     using client_state::get_samoa_request;
-    using client_state::validate_samoa_request_syntax;
     using client_state::get_request_data_blocks;
     using client_state::get_samoa_response;
     using client_state::add_response_data_block;
-    /// Smart-ptr wrapper around client_state::flush_response
     void flush_response();
-    /// Smart-ptr wrapper around client_state::send_error
     void send_error(unsigned err_code, const std::string & err_msg);
-    /// Smart-ptr wrapper around client_state::send_error
     void send_error(unsigned err_code,
         const boost::system::error_code & err_msg);
 
     void load_table_state();
 
     using table_state::get_table_uuid;
+    using table_state::set_table_uuid;
     using table_state::get_table_name;
     using table_state::get_table;
 
     void load_route_state();
 
     using route_state::get_key;
+    using route_state::set_key;
     using route_state::get_ring_position;
     using route_state::has_primary_partition_uuid;
     using route_state::get_primary_partition_uuid;
+    using route_state::set_primary_partition_uuid;
     using route_state::get_primary_partition;
     using route_state::has_peer_partition_uuids;
     using route_state::get_peer_partition_uuids;
@@ -76,6 +75,7 @@ public:
     void load_replication_state();
 
     using replication_state::get_quorum_count;
+    using replication_state::set_quorum_count;
     using replication_state::get_peer_success_count;
     using replication_state::get_peer_failure_count;
     using replication_state::is_replication_finished;
@@ -89,6 +89,13 @@ public:
      *  for use by samoa::server::client in populating the request
      */
     client_state & initialize_from_client(const server::client_ptr_t &);
+
+    /*!
+     * Validates and parses the protobuf SamoaRequest of the request::state
+     *
+     * Details of the request are loaded into the appropriate sub-states
+     */
+    void parse_samoa_request();    
 
     void reset_state();
 };

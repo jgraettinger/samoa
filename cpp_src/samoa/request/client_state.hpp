@@ -40,14 +40,6 @@ public:
     { return _samoa_request; }
 
     /*!
-     * Validates the syntax of the SamoaRequest; specifically:
-     *
-     *  - asserts that all UUID fields are parseable
-     *  - asserts the ClusterClock (if set) is valid
-     */
-    void validate_samoa_request_syntax();
-
-    /*!
      * Retrives the (const) data-blocks which accompany the client's request
      */
     const std::vector<core::buffer_regions_t> & get_request_data_blocks() const

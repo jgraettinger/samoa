@@ -44,7 +44,7 @@ void peer_discovery::begin_cycle()
     if(!context->get_cluster_state()->get_peer_set()->has_server(_peer_uuid))
     {
         LOG_ERR("peer is unknown: " << _peer_uuid);
-        end_cycle(period);
+        next_cycle(period);
         return;
     }
 
@@ -62,7 +62,7 @@ void peer_discovery::on_request(
     if(ec)
     {
         LOG_ERR(ec.message());
-        end_cycle(period);
+        next_cycle(period);
         return;
     }
 
@@ -87,7 +87,7 @@ void peer_discovery::on_response(
     if(ec)
     {
         LOG_ERR(ec.message());
-        end_cycle(period);
+        next_cycle(period);
         return;
     }
 
@@ -97,7 +97,7 @@ void peer_discovery::on_response(
             iface.get_message().error().ShortDebugString());
 
         iface.finish_response();
-        end_cycle(period);
+        next_cycle(period);
         return;
     }
 
@@ -123,12 +123,12 @@ bool peer_discovery::on_state_transaction(spb::ClusterState & local_state,
         bool result = context->get_cluster_state()->merge_cluster_state(
             _remote_state, local_state);
 
-        end_cycle(period);
+        next_cycle(period);
         return result;
     }
     catch(...)
     {
-        end_cycle(period);
+        next_cycle(period);
         throw;
     }
 }

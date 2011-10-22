@@ -2,7 +2,6 @@
 
 namespace samoa {
 namespace request {
-    void make_client_state_bindings();
     void make_table_state_bindings();
     void make_route_state_bindings();
     void make_record_state_bindings();
@@ -14,7 +13,6 @@ namespace request {
 
 BOOST_PYTHON_MODULE(_request)
 {
-    samoa::request::make_client_state_bindings();
     samoa::request::make_table_state_bindings();
     samoa::request::make_route_state_bindings();
     samoa::request::make_record_state_bindings();

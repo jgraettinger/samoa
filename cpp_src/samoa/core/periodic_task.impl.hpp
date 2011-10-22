@@ -14,7 +14,7 @@ periodic_task<Derived>::periodic_task()
 { }
 
 template<typename Derived>
-void periodic_task<Derived>::end_cycle(
+void periodic_task<Derived>::next_cycle(
     const boost::posix_time::time_duration & interval_delay)
 {
     if(!_halted)

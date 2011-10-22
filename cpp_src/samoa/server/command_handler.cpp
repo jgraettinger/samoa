@@ -9,7 +9,7 @@ void command_handler::checked_handle(const request::state::ptr_t & rstate)
 {
     try
     {
-        rstate->validate_samoa_request_syntax();
+        rstate->parse_samoa_request();
         handle(rstate);
     }
     catch(const request::state_exception & e)

@@ -24,10 +24,10 @@ public:
      * Dispatches command handler.
      *
      * In particular, checked_handle:
-     *  - invokes request::state::validate_samoa_request_syntax()
+     *  - invokes request::state::parse_samoa_request()
      *  - invokes virtual handle()
      *
-     * If request::state_exception is thrown by handle(),
+     * If request::state_exception is thrown by either,
      *  it's caught within checked_handle and resent to
      *  the client via request::state::send_error.
      *

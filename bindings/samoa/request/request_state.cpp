@@ -99,6 +99,9 @@ void py_send_error(state & s, unsigned code, const std::string & msg)
 core::uuid py_get_table_uuid(state & s)
 { return s.get_table_uuid(); }
 
+void py_set_table_uuid(state & s, const core::uuid & u)
+{ s.set_table_uuid(u); }
+
 std::string py_get_table_name(state & s)
 { return s.get_table_name(); }
 
@@ -108,6 +111,9 @@ server::table_ptr_t py_get_table(state & s)
 std::string py_get_key(state & s)
 { return s.get_key(); }
 
+void py_set_key(state & s, std::string key)
+{ s.set_key(std::move(key)); }
+
 uint64_t py_get_ring_position(state & s)
 { return s.get_ring_position(); }
 
@@ -116,6 +122,9 @@ bool py_has_primary_partition_uuid(state & s)
 
 core::uuid py_get_primary_partition_uuid(state & s)
 { return s.get_primary_partition_uuid(); }
+
+void py_set_primary_partition_uuid(state & s, const core::uuid & u)
+{ s.set_primary_partition_uuid(u); }
 
 server::local_partition_ptr_t py_get_primary_partition(state & s)
 { return s.get_primary_partition(); }
@@ -203,6 +212,7 @@ void make_state_bindings()
         .def("load_table_state", &state::load_table_state)
 
         .def("get_table_uuid", &py_get_table_uuid)
+        .def("set_table_uuid", &py_set_table_uuid)
         .def("get_table_name", &py_get_table_name)
         .def("get_table", &py_get_table)
 
@@ -210,9 +220,11 @@ void make_state_bindings()
         .def("load_route_state", &state::load_route_state)
 
         .def("get_key", &py_get_key)
+        .def("set_key", &py_set_key)
         .def("get_ring_position", &py_get_ring_position)
         .def("has_primary_partition_uuid", &py_has_primary_partition_uuid)
         .def("get_primary_partition_uuid", &py_get_primary_partition_uuid)
+        .def("set_primary_partition_uuid", &py_set_primary_partition_uuid)
         .def("get_primary_partition", &py_get_primary_partition)
         .def("has_peer_partition_uuids", &py_has_peer_partition_uuids)
         .def("get_peer_partition_uuids", &py_get_peer_partition_uuids)
@@ -234,6 +246,7 @@ void make_state_bindings()
         .def("peer_replication_failure", &py_peer_replication_failure)
         .def("peer_replication_success", &py_peer_replication_success)
 
+        .def("parse_samoa_request", &state::parse_samoa_request)
         .def("reset_state", &state::reset_state)
         ;
 }

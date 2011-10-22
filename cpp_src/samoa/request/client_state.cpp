@@ -2,7 +2,6 @@
 #include "samoa/request/client_state.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
-#include "samoa/datamodel/clock_util.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/uuid.hpp"
 #include <boost/bind.hpp>
@@ -16,46 +15,6 @@ client_state::client_state()
 
 client_state::~client_state()
 { }
-
-void client_state::validate_samoa_request_syntax()
-{
-    const spb::SamoaRequest & request = get_samoa_request();
-
-    if(request.has_table_uuid() &&
-       core::try_parse_uuid(request.table_uuid()).is_nil())
-    {
-        std::stringstream err;
-        err << "malformed table-uuid " << request.table_uuid();
-        throw state_exception(400, err.str());
-    }
-
-    if(request.has_partition_uuid() &&
-        core::try_parse_uuid(request.partition_uuid()).is_nil())
-    {
-        std::stringstream err;
-        err << "malformed partition-uuid " << request.partition_uuid();
-        throw state_exception(400, err.str());
-    }
-
-    for(auto it = request.peer_partition_uuid().begin();
-        it != request.peer_partition_uuid().end(); ++it)
-    {
-        if(core::try_parse_uuid(*it).is_nil())
-        {
-            std::stringstream err;
-            err << "malformed peer-partition-uuid " << *it;
-            throw state_exception(400, err.str());
-        }
-    }
-
-    if(request.has_cluster_clock() &&
-       !datamodel::clock_util::validate(request.cluster_clock()))
-    {
-        std::stringstream err;
-        err << "malformed cluster-clock";
-        throw state_exception(400, err.str());
-    }
-}
 
 void client_state::add_response_data_block(
     const core::const_buffer_regions_t & bs)
