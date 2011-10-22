@@ -2,7 +2,7 @@
 import unittest
 
 from samoa.core.uuid import UUID
-from samoa.server.table import Table
+from samoa.server.table_set import TableSet
 from samoa.request.table_state import TableState
 from samoa.request.state_exception import StateException
 
@@ -16,18 +16,75 @@ class TestTableState(unittest.TestCase):
         self.table_uuid = UUID.from_random()
 
         fixture = ClusterStateFixture()
-        fixture.add_table(name = 'table', uuid = tbl)
-        fixture.state.table[0].set_replication_factor(3)
+        fixture.add_table(name = 'test_table', uuid = self.table_uuid)
+        fixture.add_table(name = 'other_table')
 
+        self.table_set = TableSet(fixture.state, None)
 
-        self.p0 = UUID(p0.uuid)
-        self.p1 = UUID(p1.uuid)
-        self.p2 = UUID(p2.uuid)
-        self.p3 = UUID(p3.uuid)
-        self.p4 = UUID(p4.uuid)
-        self.p5 = UUID(p5.uuid)
+    def test_lookups(self):
 
-        self.table = Table(fixture.state.table[0], fixture.server_uuid, None)
+        table = TableState()
 
-    def testFoo(self):
-        self.assertFalse(True)
+        # lookup by UUID
+        table.set_table_uuid(self.table_uuid)
+        table.load_table_state(self.table_set)
+
+        self.assertEquals(table.get_table_name(), 'test_table')
+        self.assertEquals(table.get_table_uuid(), self.table_uuid)
+        self.assertEquals(table.get_table().get_uuid(), self.table_uuid)
+
+        table.reset_table_state()
+
+        # lookup by name
+        table.set_table_name('test_table')
+        table.load_table_state(self.table_set)
+
+        self.assertEquals(table.get_table_name(), 'test_table')
+        self.assertEquals(table.get_table_uuid(), self.table_uuid)
+        self.assertEquals(table.get_table().get_uuid(), self.table_uuid)
+
+        table.reset_table_state()
+
+        # both set; UUID is used
+        table.set_table_uuid(self.table_uuid)
+        table.set_table_name('other_table')
+        table.load_table_state(self.table_set)
+
+        self.assertEquals(table.get_table_name(), 'test_table')
+        self.assertEquals(table.get_table_uuid(), self.table_uuid)
+        self.assertEquals(table.get_table().get_uuid(), self.table_uuid)
+
+    def test_error_cases(self):
+
+        table = TableState()
+
+        # neither UUID or name
+        with self.assertRaises(StateException):
+            table.load_table_state(self.table_set)
+
+        table.reset_table_state() 
+
+        # invalid table name
+        with self.assertRaises(StateException):
+            table.set_table_name('')
+
+        table.reset_table_state()
+
+        # invalid table uuid
+        with self.assertRaises(StateException):
+            table.set_table_uuid(UUID.from_nil())
+
+        table.reset_table_state()
+
+        # unknown UUID
+        table.set_table_uuid(UUID.from_random())
+        with self.assertRaisesRegexp(StateException, 'table-uuid.*not found'):
+            table.load_table_state(self.table_set)
+
+        table.reset_table_state()
+
+        # unknown name
+        table.set_table_name('unknown_name')
+        with self.assertRaisesRegexp(StateException, 'table-name.*not found'):
+            table.load_table_state(self.table_set)
+

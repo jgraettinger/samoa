@@ -41,6 +41,7 @@ public:
 
     using client_state::get_client;
     using client_state::get_samoa_request;
+    using client_state::validate_samoa_request_syntax;
     using client_state::get_request_data_blocks;
     using client_state::get_samoa_response;
     using client_state::add_response_data_block;

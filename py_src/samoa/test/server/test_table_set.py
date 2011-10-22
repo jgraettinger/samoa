@@ -49,9 +49,9 @@ class TestTableSet(unittest.TestCase):
         table_set = TableSet(tst_state, None)
 
         self.assertEquals(table_set.get_table(
-            UUID.from_hex(tst_state.table[0].uuid)).get_name(), 'tbl')
+            UUID(tst_state.table[0].uuid)).get_name(), 'tbl')
         self.assertEquals(table_set.get_table(
-            UUID.from_hex(tst_state.table[1].uuid)).get_name(), 'tbl')
+            UUID(tst_state.table[1].uuid)).get_name(), 'tbl')
 
         # ... but we can't query tables by name
         self.assertFalse(table_set.get_table_by_name('tbl'))

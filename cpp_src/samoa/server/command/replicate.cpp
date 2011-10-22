@@ -23,16 +23,9 @@ namespace spb = samoa::core::protobuf;
 
 void replicate_handler::handle(const request::state::ptr_t & rstate)
 {
-    try {
-        rstate->load_table_state();
-        rstate->load_route_state();
-        rstate->load_replication_state();
-    }
-    catch (const request::state_exception & ex)
-    {
-        rstate->send_error(ex.get_code(), ex.what());
-        return;
-    }
+    rstate->load_table_state();
+    rstate->load_route_state();
+    rstate->load_replication_state();
 
     if(!rstate->get_primary_partition())
     {

@@ -2,6 +2,7 @@
 #include "samoa/request/state_exception.hpp"
 #include "samoa/server/table_set.hpp"
 #include "samoa/server/table.hpp"
+#include "samoa/error.hpp"
 #include <sstream>
 
 namespace samoa {
@@ -16,21 +17,30 @@ table_state::~table_state()
 
 void table_state::set_table_uuid(const core::uuid & uuid)
 {
+    SAMOA_ASSERT(!_table);
+
+    if(uuid.is_nil())
+    {
+        throw state_exception(400, "expected a non-nil table uuid");
+    }
     _table_uuid = uuid;
 }
 
 void table_state::set_table_name(const std::string & name)
 {
+    SAMOA_ASSERT(!_table);
+
     if(name.empty())
     {
         throw state_exception(400, "expected a non-empty table name");
     }
-
     _table_name = name;
 }
 
 void table_state::load_table_state(const server::table_set::ptr_t & table_set)
 {
+    SAMOA_ASSERT(!_table);
+
     if(has_table_uuid())
     {
         _table = table_set->get_table(_table_uuid);
@@ -38,7 +48,7 @@ void table_state::load_table_state(const server::table_set::ptr_t & table_set)
         if(!_table)
         {
             std::stringstream err;
-            err << "table-uuid " << _table_uuid;
+            err << "table-uuid " << _table_uuid << " not found";
             throw state_exception(404, err.str());
         }
 
@@ -51,7 +61,7 @@ void table_state::load_table_state(const server::table_set::ptr_t & table_set)
         if(!_table)
         {
             std::stringstream err;
-            err << "table-name " << _table_name;
+            err << "table-name " << _table_name << " not found";
             throw state_exception(404, err.str());
         }
 

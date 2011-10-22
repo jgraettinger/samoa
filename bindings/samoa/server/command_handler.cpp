@@ -58,7 +58,7 @@ void make_command_handler_bindings()
 {
     bpl::class_<py_command_handler, py_command_handler::ptr_t,
         boost::noncopyable>("CommandHandler")
-        .def("handle", &command_handler::handle);
+        .def("checked_handle", &command_handler::checked_handle);
 }
 
 }

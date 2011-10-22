@@ -22,24 +22,17 @@ namespace spb = samoa::core::protobuf;
 
 void get_blob_handler::handle(const request::state::ptr_t & rstate)
 {
-    try {
-        rstate->load_table_state();
-        rstate->load_route_state();
+    rstate->load_table_state();
+    rstate->load_route_state();
 
-        if(!rstate->get_primary_partition())
-        {
-            // no primary partition; forward to a better peer
-            rstate->get_peer_set()->forward_request(rstate);
-            return;
-        }
-
-        rstate->load_replication_state();
-    }
-    catch (const request::state_exception & ex)
+    if(!rstate->get_primary_partition())
     {
-        rstate->send_error(ex.get_code(), ex.what());
+        // no primary partition; forward to a better peer
+        rstate->get_peer_set()->forward_request(rstate);
         return;
     }
+
+    rstate->load_replication_state();
 
     // optimistically assume local read will succeed
     rstate->peer_replication_success();

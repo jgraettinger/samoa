@@ -225,7 +225,7 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 
     if(handler)
     {
-        handler->handle(rstate);
+        handler->checked_handle(rstate);
     }
     else
     {

@@ -20,24 +20,51 @@ public:
 
     virtual ~client_state();
 
+    /*!
+     * Retrives the client of the request
+     */
     const server::client_ptr_t & get_client() const
     { return _client; }
 
+    /*!
+     * Retrieves the const protobuf SamoaRequest
+     */
     const spb::SamoaRequest & get_samoa_request() const
     { return _samoa_request; }
 
+    /*!
+     * Retrieves the non-const protobuf SamoaRequest;
+     *  For use in filling out the description
+     */
     spb::SamoaRequest & mutable_samoa_request()
     { return _samoa_request; }
 
+    /*!
+     * Validates the syntax of the SamoaRequest; specifically:
+     *
+     *  - asserts that all UUID fields are parseable
+     *  - asserts the ClusterClock (if set) is valid
+     */
+    void validate_samoa_request_syntax();
+
+    /*!
+     * Retrives the (const) data-blocks which accompany the client's request
+     */
     const std::vector<core::buffer_regions_t> & get_request_data_blocks() const
     { return _request_data_blocks; }
 
+    /*!
+     * Retrives the (mutable) data-blocks; for use in fillout out the container
+     */
     std::vector<core::buffer_regions_t> & mutable_request_data_blocks()
     { return _request_data_blocks; }
 
-    /// Retrieves the (mutable) SamoaResponse, which will be sent to the client
-    // Note: SamoaResponse is modified everywhere; const-protection
-    //   here just gets in the way.
+    /*!
+     * Retrieves the (mutable) protobuf SamoaResponse
+     *
+     * Note: As SamoaResponse is modified everywhere, a const-protected
+     *   accessor is not provided.
+     */
     spb::SamoaResponse & get_samoa_response()
     { return _samoa_response; }
 
