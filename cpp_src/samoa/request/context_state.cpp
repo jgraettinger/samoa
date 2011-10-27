@@ -13,6 +13,8 @@ context_state::~context_state()
 void context_state::load_context_state(const server::context::ptr_t & context)
 {
     SAMOA_ASSERT(!_context);
+    SAMOA_ASSERT(context);
+
     _context = context;
     _cluster_state = _context->get_cluster_state();
 }

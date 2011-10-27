@@ -33,11 +33,13 @@ public:
     virtual ~state();
 
     using io_service_state::get_io_service;
+    using io_service_state::load_io_service_state;
 
     using context_state::get_context;
     using context_state::get_cluster_state;
     using context_state::get_peer_set;
     using context_state::get_table_set;
+    using context_state::load_context_state;
 
     using client_state::get_client;
     using client_state::get_samoa_request;

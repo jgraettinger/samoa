@@ -159,10 +159,10 @@ void persister::on_get(
         SAMOA_ASSERT(precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
-        callback(boost::system::error_code(), true);
+        callback(true);
         return;
     }
-    callback(boost::system::error_code(), false);
+    callback(false);
 }
 
 void persister::on_put(
@@ -267,7 +267,7 @@ void persister::on_put(
 }
 
 void persister::on_drop(
-    const get_callback_t & callback,
+    const drop_callback_t & callback,
     const std::string & key,
     spb::PersistedRecord & precord)
 {
@@ -282,13 +282,14 @@ void persister::on_drop(
         SAMOA_ASSERT(precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
-        layer.mark_for_deletion(key.begin(), key.end(), hint);
-        make_room(0, 0, 0, 0, 0);
-
-        callback(boost::system::error_code(), true);
+        if(callback(true))
+        {
+            layer.mark_for_deletion(key.begin(), key.end(), hint);
+            make_room(0, 0, 0, 0, 0);
+        }
         return;
     }
-    callback(boost::system::error_code(), false);
+    callback(false);
 }
 
 void persister::on_iterate(
