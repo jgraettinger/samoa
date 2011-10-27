@@ -1,6 +1,8 @@
 
 
-hash_ring::locator hash_ring::locate_key(const std::string & key) const
+template<typename KeyIterator>
+hash_ring::locator hash_ring::locate_key(
+    const KeyIterator & key_begin, const KeyIterator & key_end) const
 {
     locator loc = {0, nullptr, nullptr};
 
@@ -159,18 +161,81 @@ void hash_ring::reclaim_head()
     }
 }
 
+template<typename KeyIterator>
+packet_t * hash_ring::assign_key(packet_t * packet,
+    uint32_t key_length, KeyIterator key_it)
+{
+    while(key_length)
+    {
+        uint32_t cur_length = std::min(key_length,
+            packet->get_available_capacity());
+
+        char * cur_it = packet->set_key(cur_length);
+        char * end_it = cur_it + cur_length;
+
+        key_length -= cur_length;
+
+        while(cur_it != end_it)
+        {
+            *(cur_it++) = *(key_it++);
+        }
+
+        if(key_length)
+        {
+            packet = next_packet(packet);
+        }
+    }
+    return packet;
+}
+
+template<typename ValueIterator>
+packet_t * hash_ring::assign_value(packet_t * packet,
+    uint32_t value_length, ValueIterator value_it)
+{
+    while(value_length)
+    {
+        uint32_t cur_length = std::min(value_length,
+            packet->get_available_capacity());
+
+        char * cur_it = packet->set_value(cur_length);
+        char * end_it = cur_it + cur_length;
+
+        value_length -= cur_length;
+
+        while(cur_it != end_it)
+        {
+            *(cur_it++) = *(value_it++);
+        }
+
+        if(value_length)
+        {
+            packet = next_packet(packet);
+        }
+    }
+    return packet;
+}
+
 void hash_ring::rotate_head()
 {
-    packet_t * packet = head();
-    SAMOA_ASSERT(packet && !packet->is_dead());
-
     element_t element(this, head());
+    uint32_t key_length = element.get_key_length();
+    uint32_t value_length = element.get_value_length();
 
     // attempt to allocate new packets for a direct copy
-    locator new_loc = allocate_packets(
-        element.get_key_length() + element.get_value_length());
+    packet_t * packet = allocate_packets(key_length + value_length);
 
-    if(!new_loc.element_head)
+    if(packet)
+    {
+        element_t new_element(this, packet);
+
+        new_element.assign_key(key_length, element.key_begin());
+        new_element.assign_value(value_length, element.value_begin());
+        new_element.compute_checksum();
+
+        element.mark_as_dead();
+        reclaim_head();
+    }
+    else
     {
         // full condition: allocation failed
 
@@ -181,20 +246,28 @@ void hash_ring::rotate_head()
         core::buffer_regions_t key_buffers;
         core::buffer_regions_t value_buffers;
 
-        buffer_ring.produce_range(element.key_begin(), element.key_end());
+        buffer_ring.produce_range(
+            element.key_begin(), element.key_end());
         buffer_ring.get_read_regions(key_buffers);
         buffer_ring.consumed(_buffer_ring.available_read());
 
-        buffer_ring.produce_range(element.value_begin(), element.value_end());
+        buffer_ring.produce_range(
+            element.value_begin(), element.value_end());
         buffer_ring.get_read_regions(value_buffers);
         buffer_ring.consumed(_buffer_ring.available_read());
 
         element.mark_as_dead();
         reclaim_head();
 
-        new_loc = allocate_packets(
-    
-    
+        tmp = packet = allocate_packets(key_length + value_length);
+        SAMOA_ASSERT(packet);
+
+        tmp = assign_key(tmp, key_length,
+            asio::buffers_iterator::begin(key_buffers));
+        tmp = assign_value(tmp, value_length,
+            asio::buffers_iterator::begin(value_buffers));
+
+        SAMOA_ASSERT(tmp->completes_sequence());
     }
     
 
