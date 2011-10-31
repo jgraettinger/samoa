@@ -21,6 +21,8 @@ public:
     using core::periodic_task<peer_discovery>::ptr_t;
     using core::periodic_task<peer_discovery>::weak_ptr_t;
 
+    static boost::posix_time::time_duration period;
+
     peer_discovery(const context_ptr_t &, const core::uuid & peer_uuid);
 
     void begin_cycle();

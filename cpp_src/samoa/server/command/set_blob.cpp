@@ -121,22 +121,20 @@ void set_blob_handler::on_put(
         return;
     }
 
+    // local write was a success
     rstate->get_samoa_response().set_success(true);
 
-    // local write was a success
+    // count the local write, and respond to client if quorum is met
     if(rstate->peer_replication_success())
     {
-        // no further replication required
-        //   (replication factor of 1)
-        rstate->flush_response();
+        on_replicated_write(rstate);
     }
-    else
-    {
-        replication::replicated_write(
-            boost::bind(&set_blob_handler::on_replicated_write,
-                shared_from_this(), rstate),
-            rstate);
-    }
+
+    // replicate the update to peers
+    replication::replicated_write(
+        boost::bind(&set_blob_handler::on_replicated_write,
+            shared_from_this(), rstate),
+        rstate);
 }
 
 void set_blob_handler::on_replicated_write(

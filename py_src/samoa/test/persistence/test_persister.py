@@ -23,17 +23,17 @@ class TestPersister(unittest.TestCase):
             expected = PersistedRecord()
             expected.add_blob_value('bar')
 
-            def merge1(local_record, remote_record):
-                # should not be called
+            def merge_not_called(local_record, remote_record):
                 self.assertFalse(True)
 
+            # Putting a new key succeeds w/o merge callback
             self.assertTrue(
-                (yield self.persister.put(merge1, 'foo', expected)))
+                (yield self.persister.put(merge_not_called, 'foo', expected)))
 
             self.assertEquals('bar',
                 (yield self.persister.get('foo')).blob_value[0])
 
-            def merge2(local_record, remote_record):
+            def merge_called(local_record, remote_record):
                 self.assertEquals(local_record.blob_value[0], 'bar')
                 self.assertEquals(remote_record.blob_value[0], 'baz')
 
@@ -43,12 +43,43 @@ class TestPersister(unittest.TestCase):
                     local_was_updated = True,
                     remote_is_stale = False)
 
+            # Putting an update invokes the merge callback
             expected.blob_value[0] = 'baz'
             self.assertTrue(
-                (yield self.persister.put(merge2, 'foo', expected)))
+                (yield self.persister.put(merge_called, 'foo', expected)))
 
             self.assertEquals('baz',
                 (yield self.persister.get('foo')).blob_value[0])
+
+            def drop_not_called(local_record):
+                self.assertFalse(True)
+
+            # Attempt to drop an unknown key returns None
+            self.assertEquals(None,
+                (yield self.persister.drop(drop_not_called, 'bar')))
+
+            def drop_rollback(local_record):
+                self.assertEquals(local_record.blob_value[0], 'baz')
+                return False
+
+            # Attempt to drop 'foo', but don't commit; returns None
+            self.assertEquals(None,
+                (yield self.persister.drop(drop_rollback, 'foo')))
+
+            # Key / value are still present
+            self.assertEquals('baz',
+                (yield self.persister.get('foo')).blob_value[0])
+
+            def drop_commit(local_record):
+                self.assertEquals(local_record.blob_value[0], 'baz')
+                return True
+
+            # This time, record is dropped & returned
+            result = yield self.persister.drop(drop_commit, 'foo')
+            self.assertEquals('baz', result.blob_value[0])
+
+            # Key / value are no longer present
+            self.assertFalse((yield self.persister.get('foo')))
 
             yield        
 
@@ -81,6 +112,9 @@ class TestPersister(unittest.TestCase):
                         local_was_updated = True,
                         remote_is_stale = False)
 
+                def drop(local_record):
+                    return True
+
                 if choice == 'put':
 
                     new_rec = PersistedRecord()
@@ -92,7 +126,7 @@ class TestPersister(unittest.TestCase):
 
                 elif choice == 'drop':
 
-                    dropped_rec = yield self.persister.drop(key)
+                    dropped_rec = yield self.persister.drop(drop, key)
 
                     if value is None:
                         self.assertEquals(dropped_rec, None)

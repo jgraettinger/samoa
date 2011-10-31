@@ -17,7 +17,8 @@ namespace server {
 namespace spb = samoa::core::protobuf;
 
 // default period of 1 minute
-boost::posix_time::time_duration period = boost::posix_time::minutes(1);
+boost::posix_time::time_duration peer_discovery::period = \
+    boost::posix_time::minutes(1);
 
 peer_discovery::peer_discovery(const context::ptr_t & context,
     const core::uuid & peer_uuid)

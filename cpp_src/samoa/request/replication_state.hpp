@@ -41,13 +41,6 @@ public:
     { return _failure_count; }
 
     /*!
-     * Indicates whether one of peer_replication_failure() or
-     * peer_replication_success() have returned True, and the
-     * quorum has already been met (or failed).
-     */
-    bool is_replication_finished() const;
-
-    /*!
      * \brief To be called on failed peer replication.
      *
      * Increments peer_failure_count, and returns true iff the client should be
@@ -76,6 +69,20 @@ public:
     bool peer_replication_success();
 
     /*!
+     * Indicates whether one of peer_replication_failure() or
+     * peer_replication_success() have returned True, and the
+     * quorum has already been met (or failed).
+     */
+    bool is_replication_finished() const;
+
+    //! Returns whether a replicated read returned content
+    bool had_peer_read_hit()
+    { return _peer_read_hit; }
+
+    //! Marks that a replicated read returned content
+    void set_peer_read_hit();
+
+    /*!
      * Initializes replication_state for a replication operation.
      *
      * \param replication_factor The _effective_ replication-factor
@@ -92,6 +99,8 @@ private:
 
     unsigned _failure_count;
     unsigned _success_count;
+
+    bool _peer_read_hit;
 };
 
 }

@@ -26,6 +26,14 @@ public:
     void merge_peer_set(const spb::ClusterState & peer,
         spb::ClusterState & local) const;
 
+    /*!
+     * Heuristically selects a 'best' peer from amoung the
+     *   request's routed peer partitions.
+     *
+     * Generally this is the peer with lowest observed latency.
+     */
+    core::uuid select_best_peer(const request::state_ptr_t &);
+
     /*! \brief Forwards the client request to a peer server
     */
     void forward_request(const request::state_ptr_t &);

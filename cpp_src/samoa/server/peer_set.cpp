@@ -219,24 +219,17 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
     }
 }
 
-void peer_set::forward_request(const request::state::ptr_t & rstate)
+core::uuid peer_set::select_best_peer(const request::state::ptr_t & rstate)
 {
-    SAMOA_ASSERT(!rstate->get_primary_partition());
-
-    if(rstate->get_peer_partitions().empty())
-    {
-        rstate->send_error(404, "no partitions for forwarding");
-        return;
-    }
+    SAMOA_ASSERT(rstate->has_peer_partition_uuids());
 
     unsigned best_peer_latency = std::numeric_limits<unsigned>::max();
     core::uuid best_peer_uuid = boost::uuids::nil_uuid();
 
-    for(auto it = rstate->get_peer_partitions().begin();
-        it != rstate->get_peer_partitions().end(); ++it)
+    for(const partition::ptr_t & partition : rstate->get_peer_partitions())
     {
         unsigned peer_latency = std::numeric_limits<unsigned>::max();
-        core::uuid peer_uuid = (*it)->get_server_uuid();
+        core::uuid peer_uuid = partition->get_server_uuid();
 
         // TODO(johng): factor actual latency into this selection
         samoa::client::server::ptr_t server = get_server(peer_uuid);
@@ -250,6 +243,20 @@ void peer_set::forward_request(const request::state::ptr_t & rstate)
             best_peer_uuid = peer_uuid;
         }
     }
+    return best_peer_uuid;
+}
+
+void peer_set::forward_request(const request::state::ptr_t & rstate)
+{
+    SAMOA_ASSERT(!rstate->get_primary_partition());
+
+    if(rstate->get_peer_partitions().empty())
+    {
+        rstate->send_error(404, "no partitions for forwarding");
+        return;
+    }
+
+    core::uuid best_peer_uuid = select_best_peer(rstate);
 
     schedule_request(
         boost::bind(&peer_set::on_forwarded_request,

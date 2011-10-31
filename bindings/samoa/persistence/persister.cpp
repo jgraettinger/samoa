@@ -19,20 +19,13 @@ typedef boost::shared_ptr<spb::PersistedRecord> prec_ptr_t;
 
 /////////// get support
 
-void py_on_get_drop(
+void py_on_get(
     const future::ptr_t & future,
-    const boost::system::error_code & ec,
     bool found,
     const str_ptr_t & key,
     const prec_ptr_t & record)
 {
     python_scoped_lock block;
-
-    if(ec)
-    {
-        future->on_error(ec);
-        return;
-    }
 
     if(found)
     {
@@ -56,7 +49,7 @@ future::ptr_t py_get(
 
     prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
 
-    p.get(boost::bind(py_on_get_drop, f, _1, _2, key, local_record),
+    p.get(boost::bind(py_on_get, f, _1, key, local_record),
         *key, *local_record);
     return f; 
 }
@@ -133,11 +126,44 @@ future::ptr_t py_put(
 
 /////////// drop support
 
+bool py_on_drop(
+    const future::ptr_t & future,
+    const bpl::object & drop_callable,
+    const str_ptr_t & key,
+    const prec_ptr_t & record,
+    bool found)
+{
+    pysamoa::python_scoped_lock block;
+
+    if(found && bpl::extract<bool>(drop_callable(record))())
+    {
+        // the record is to be dropped
+        // set the record instance as the yielded result,
+        // and return true to the persister
+        future->on_result(bpl::object(record));
+        return true;
+    }
+
+    // yield None, and return false to the persister
+    //   (record won't be dropped)
+    future->on_result(bpl::object(prec_ptr_t()));
+    return false;
+}
+
 future::ptr_t py_drop(
     persister & p,
+    const bpl::object & drop_callable,
     const bpl::str & py_key)
 {
+    if(!PyCallable_Check(drop_callable.ptr()))
+    {
+        throw std::invalid_argument(
+            "persister::drop(drop_callback, key): "\
+            "argument 'drop_callback' isn't a callable");
+    }
+
     future::ptr_t f(boost::make_shared<future>());
+    f->set_reenter_via_post();
 
     const char * buf = PyString_AS_STRING(py_key.ptr());
     str_ptr_t key = boost::make_shared<std::string>(
@@ -145,8 +171,10 @@ future::ptr_t py_drop(
 
     prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
 
-    p.drop(boost::bind(&py_on_get_drop, f, _1, _2, key, local_record),
+    p.drop(
+        boost::bind(&py_on_drop, f, drop_callable, key, local_record, _1),
         *key, *local_record);
+
     return f; 
 }
 

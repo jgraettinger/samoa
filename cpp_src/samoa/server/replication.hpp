@@ -11,49 +11,64 @@
 namespace samoa {
 namespace server {
 
-class replication :
-    public boost::enable_shared_from_this<replication>
+class replication
 {
 public:
 
-    typedef boost::shared_ptr<replication> ptr_t;
+    typedef boost::function<void(
+        const boost::system::error_code &, bool)> read_callback_t;
 
-    typedef boost::function<void()> callback_t;
-
-    static void replicated_read(
-        const callback_t &,
+    static void repaired_read(
+        const read_callback_t &,
         const request::state_ptr_t &); 
 
-    static void replicated_write(
-        const callback_t &,
-        const request::state_ptr_t &);
+    typedef boost::function<void()> write_callback_t;
 
-    static void forwarded_write(
-        const callback_t &,
-        const request::state_ptr_t &,
-        const partition_ptr_t &); 
+    static void replicated_write(
+        const write_callback_t &,
+        const request::state_ptr_t &);
 
 private:
 
-    static void replicated_op(
-        const callback_t &,
+    static void build_peer_request(
+        samoa::client::server_request_interface &,
         const request::state_ptr_t &,
-        bool write_request);
+        const partition_ptr_t &);
 
-    static void on_peer_request(
-        const boost::system::error_code & ec,
-        samoa::client::server_request_interface server,
-        const callback_t &,
-        const request::state_ptr_t &,
-        const partition_ptr_t &,
-        bool write_request);
+    static void peer_reads_finished(
+        const read_callback_t &,
+        const request::state_ptr_t &);
 
-    static void on_peer_response(
+    static void on_peer_read_request(
         const boost::system::error_code & ec,
-        samoa::client::server_response_interface server,
-        const callback_t &,
+        samoa::client::server_request_interface,
+        const read_callback_t &,
         const request::state_ptr_t &,
-        bool write_request);
+        const partition_ptr_t &);
+
+    static void on_peer_read_response(
+        const boost::system::error_code & ec,
+        samoa::client::server_response_interface,
+        const read_callback_t &,
+        const request::state_ptr_t &);
+
+    static void on_local_read_repair(
+        const boost::system::error_code & ec,
+        bool, const read_callback_t &);
+
+    static void on_peer_write_request(
+        const boost::system::error_code & ec,
+        samoa::client::server_request_interface,
+        const write_callback_t &,
+        const request::state_ptr_t &,
+        const partition_ptr_t &);
+
+    static void on_peer_write_response(
+        const boost::system::error_code & ec,
+        samoa::client::server_response_interface,
+        const write_callback_t &,
+        const request::state_ptr_t &);
+
 };
 
 }

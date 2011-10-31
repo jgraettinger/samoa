@@ -36,7 +36,7 @@ protected:
     void on_read(const boost::system::error_code &,
         bool, const request::state_ptr_t &);
 
-    void on_reverse_replication();
+    void on_flush(const request::state_ptr_t &);
 };
 
 }

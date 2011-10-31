@@ -34,58 +34,13 @@ void get_blob_handler::handle(const request::state::ptr_t & rstate)
 
     rstate->load_replication_state();
 
-    // optimistically assume local read will succeed
-    rstate->peer_replication_success();
-
-    if(rstate->get_quorum_count() > 1)
-    {
-        // spawn replicated read requests to remaining peers
-        replication::replicated_read(
-            boost::bind(&get_blob_handler::on_replicated_read,
-                shared_from_this(), rstate),
-            rstate);
-    }
-    else
-    {
-        // simple case: start a persister read into local-record
-        rstate->get_primary_partition()->get_persister()->get(
-            boost::bind(&get_blob_handler::on_retrieve,
-                shared_from_this(), _1, rstate),
-            rstate->get_key(),
-            rstate->get_local_record());
-    }
+    replication::repaired_read(
+        boost::bind(&get_blob_handler::on_repaired_read,
+            shared_from_this(), _1, rstate),
+        rstate);
 }
 
-void get_blob_handler::on_replicated_read(
-    const request::state::ptr_t & rstate)
-{
-    // did the replicated read return anything?
-    if(rstate->get_remote_record().has_cluster_clock() ||
-       rstate->get_remote_record().blob_value_size())
-    {
-        // speculatively write the merged remote record; as a side-effect,
-        //  local-record will be populated with the merged result
-        rstate->get_primary_partition()->get_persister()->put(
-            boost::bind(&get_blob_handler::on_retrieve,
-                shared_from_this(), _1, rstate),
-            datamodel::merge_func_t(
-                rstate->get_table()->get_consistent_merge()),
-            rstate->get_key(),
-            rstate->get_remote_record(),
-            rstate->get_local_record());
-    }
-    else
-    {
-        // no populated peer records exist; fall back to a persister read
-        rstate->get_primary_partition()->get_persister()->get(
-            boost::bind(&get_blob_handler::on_retrieve,
-                shared_from_this(), _1, rstate),
-            rstate->get_key(),
-            rstate->get_local_record());
-    }
-}
-
-void get_blob_handler::on_retrieve(
+void get_blob_handler::on_repaired_read(
     const boost::system::error_code & ec,
     const request::state::ptr_t & rstate)
 {

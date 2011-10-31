@@ -61,11 +61,11 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
     }
     else
     {
-        rstate->get_primary_partition()->get_persister()->get(
+        // kick off a (possibly replicated) read
+        replication::repaired_read(
             boost::bind(&replicate_handler::on_read,
                 shared_from_this(), _1, _2, rstate),
-            rstate->get_key(),
-            rstate->get_local_record());
+            rstate);
     }
 }
 
@@ -80,17 +80,23 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
         return;
     }
 
-    // write is committed; notify client
-    rstate->flush_response();
-
-    if(merge_result.remote_is_stale)
+    // local write is committed
+    if(rstate->peer_replication_success())
     {
-        // start a reverse replication, to synchronize remote peer
-        replication::replicated_write(
-            boost::bind(&replicate_handler::on_reverse_replication,
-                shared_from_this()),
-            rstate);
+        on_flush(rstate);
+
+        if(!merge_result.remote_is_stale)
+        {
+            // remote is up to date => no further work
+            return;
+        }
     }
+
+    // quorum isn't met or a peer is out of date; start a reverse replication
+    replication::replicated_write(
+        boost::bind(&replicate_handler::on_flush,
+            shared_from_this(), rstate),
+        rstate);
 }
 
 void replicate_handler::on_read(const boost::system::error_code & ec,
@@ -112,11 +118,18 @@ void replicate_handler::on_read(const boost::system::error_code & ec,
         rstate->add_response_data_block(zco_adapter.output_regions());
     }
 
-    rstate->flush_response();
+    on_flush(rstate);
 }
 
-void replicate_handler::on_reverse_replication()
-{ }
+void replicate_handler::on_flush(const request::state::ptr_t & rstate)
+{
+    rstate->get_samoa_response().set_replication_success(
+        rstate->get_peer_success_count());
+    rstate->get_samoa_response().set_replication_failure(
+        rstate->get_peer_failure_count());
+
+    rstate->flush_response();
+}
 
 }
 }

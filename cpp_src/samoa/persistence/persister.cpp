@@ -81,7 +81,7 @@ void persister::put(
 }
 
 void persister::drop(
-    get_callback_t && callback,
+    drop_callback_t && callback,
     const std::string & key,
     spb::PersistedRecord & precord)
 {

@@ -1,6 +1,7 @@
 
 #include "samoa/request/replication_state.hpp"
 #include "samoa/request/state_exception.hpp"
+#include "samoa/error.hpp"
 
 namespace samoa {
 namespace request {
@@ -58,6 +59,12 @@ bool replication_state::is_replication_finished() const
         _failure_count + _success_count == _replication_factor;
 }
 
+void replication_state::set_peer_read_hit()
+{
+    SAMOA_ASSERT(!is_replication_finished());
+    _peer_read_hit = true;
+}
+
 void replication_state::load_replication_state(unsigned replication_factor)
 {
     if(_quorum_count > replication_factor)
@@ -78,6 +85,7 @@ void replication_state::reset_replication_state()
     _quorum_count = 0;
     _failure_count = 0;
     _success_count = 0;
+    _peer_read_hit = false;
 }
 
 }

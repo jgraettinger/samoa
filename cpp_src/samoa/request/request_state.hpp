@@ -70,6 +70,7 @@ public:
     using route_state::has_peer_partition_uuids;
     using route_state::get_peer_partition_uuids;
     using route_state::get_peer_partitions;
+    using route_state::reset_route_state;
 
     using record_state::get_local_record;
     using record_state::get_remote_record;
@@ -80,9 +81,11 @@ public:
     using replication_state::set_quorum_count;
     using replication_state::get_peer_success_count;
     using replication_state::get_peer_failure_count;
-    using replication_state::is_replication_finished;
     using replication_state::peer_replication_success;
     using replication_state::peer_replication_failure;
+    using replication_state::is_replication_finished;
+    using replication_state::had_peer_read_hit;
+    using replication_state::set_peer_read_hit;
 
     /*!
      * Loads io_service_state, context_state, and client_state.
