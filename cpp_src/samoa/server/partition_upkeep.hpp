@@ -27,7 +27,14 @@ public:
 
     void begin_cycle();
 
+    static bool is_enabled()
+    { return _enabled; }
+
+    static void set_enabled(bool);
+
 protected:
+
+    static bool _enabled;
 
     void on_iterate(
         const persistence::persister_ptr_t &,

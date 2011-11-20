@@ -61,10 +61,10 @@ class TestSetBlob(unittest.TestCase):
                     ).get_persister(
                     ).get_layer(0)
 
-        self.key = 'test-key' #common_fixture.generate_bytes()
-        self.value = 'test-value' #common_fixture.generate_bytes()
-        self.preset_A = 'preset-A' #common_fixture.generate_bytes()
-        self.preset_B = 'preset-B' #common_fixture.generate_bytes()
+        self.key = common_fixture.generate_bytes()
+        self.value = common_fixture.generate_bytes()
+        self.preset_A = common_fixture.generate_bytes()
+        self.preset_B = common_fixture.generate_bytes()
 
         # set test key/value under peer A & B
         for (srv_name, test_value) in [

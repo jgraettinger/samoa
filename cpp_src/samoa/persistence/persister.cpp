@@ -342,6 +342,8 @@ bool persister::make_room(size_t key_length, size_t val_length,
 
     size_t cur_rotation = 0;
 
+    // tests whether shifting this layer's head node would invalidate
+    //  either of the hints, and sets 'invalid' if so
     auto invalidates_check = [&](size_t layer)
     {
         if(layer == 0 && _layers[0]->head_invalidates(root_hint))
@@ -486,6 +488,54 @@ bool persister::make_room(size_t key_length, size_t val_length,
 
     return invalid;
 }
+
+
+void persister::compact_leaf()
+{
+    rolling_hash & layer = *_layers.back();
+    const record * head = layer.head();
+
+    invalidates_check(_layers.size() - 1);
+    iterator_step(layer, head);
+
+    if(head->is_dead())
+    {
+        layer.reclaim_head();
+    }
+    else
+    {
+        request::state::ptr_t rstate = boost::make_shared<request::state>();
+
+        // set key & parsed protobuf record value
+        rstate->set_key(std::string(head->key_begin(), head->key_end()));
+        SAMOA_ASSERT(rstate->get_local_record().ParseFromArray(
+            head->value_begin(), head->value_length()));
+
+        if(!_record_upkeep(rstate))
+        {
+            // head record should be discarded
+            layer.mark_for_deletion(head->key_begin(), head->key_end());
+            layer.reclaim_head();
+        }
+        else
+        {
+            // the compacted record should be rotated to the layer tail
+        
+            // updated values must be at least as short as the original
+            //  otherwise, we can't guarantee the rotation will always fit
+            new_value_length = rstate->get_local_record().ByteSize();
+            SAMOA_ASSERT(new_value_length <= head->value_length());
+
+            // rotate head to layer tail, and write updated value
+            record * tail = layer.rotate_head(new_value_length);
+
+            rstate->get_local_record().SerializeWithCachedSizesToArray(
+                reinterpret_cast<google::protobuf::uint8*>(
+                    tail->value_begin()));
+        }
+    }
+}
+
 
 }
 }

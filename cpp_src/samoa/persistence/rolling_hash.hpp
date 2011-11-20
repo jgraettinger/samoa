@@ -1,7 +1,7 @@
 #ifndef SAMOA_PERSISTENCE_ROLLING_HASH_HPP
 #define SAMOA_PERSISTENCE_ROLLING_HASH_HPP
 
-#include "samoa/persistence/record.hpp"
+#include "samoa/persistence/rolling_hash_packet.hpp"
 #include <boost/functional/hash.hpp>
 #include <stdexcept>
 
@@ -12,27 +12,20 @@ class rolling_hash
 {
 public:
 
-    typedef record::offset_t offset_t;
+    typedef packet::offset_t offset_t;
+
+    typedef rolling_hash_element_proxy element_proxy_t;
+    typedef rolling_hash_value_output_stream value_output_stream_t;
+
+    struct value_output_stream;
+    struct value_input_stream;
 
     rolling_hash(void * region_ptr, offset_t region_size, offset_t index_size);
 
     virtual ~rolling_hash();
 
-    /*
-    Preconditions:
-     - range(key_begin, key_end) is a potential table key
-     - hint is a writable offset_t pointer or nullptr
 
-    Postconditions:
-     - If key is part of the hash, it's active record is returned
-     - If hint != nullptr, it's updated with a 'hint' to improve
-       efficiency of subsequent updates to this record
-    */
-    template<typename KeyIterator>
-    const record * get(
-        const KeyIterator & key_begin,
-        const KeyIterator & key_end,
-        offset_t * hint = 0);
+    element_proxy_t get(const std::string & key);
 
     /*
     Preconditions:
@@ -52,28 +45,8 @@ public:
        is a semantic rollback of the previously-prepared record
      - the previously-prepared record is invalidated after such a call
     */
-    template<typename KeyIterator>
-    record * prepare_record(
-        const KeyIterator & key_begin,
-        const KeyIterator & key_end,
-        unsigned value_length);
-
-    /*
-    Preconditions:
-     - prepare_record() has been called, and the returned record's
-        value has been filled out
-     - actual_value_length <= record->value_length()
-     - hint is 0, or was returned by a previous get() for this key
-
-    Postconditions:
-     - prepared record is committed to the ring
-     - a previous record stored under key is marked for deletion
-
-    Notes:
-     - optional hint is used to avoid extra lookup to locate
-       a previous record stored under this key
-    */
-    void commit_record(offset_t hint = 0);
+    value_output_stream_t put(const std::string & key, unsigned value_length,
+        element_proxy_t * hint = 0);
 
     /*
     Preconditions:
@@ -90,11 +63,15 @@ public:
      - optional hint is used to avoid extra lookup to locate
        a record stored under this key
     */
-    template<typename KeyIterator>
-    bool mark_for_deletion(
-        const KeyIterator & key_begin,
-        const KeyIterator & key_end,
+    bool drop(const std::string & key,
         offset_t hint = 0);
+
+
+    iterator begin() const;
+    iterator end() const;
+
+
+
 
     /*
     Preconditions:
@@ -110,10 +87,13 @@ public:
     /*
     Preconditions:
      - head()->is_dead() is false; eg the ring head is a live record
+     - new_value_length is 0 (semantically 'use the current length'),
+       or is less-than-equal-to the current value_length
 
     Postconditions:
      - the ring head is rotated to the ring tail
      - step(previous_head) is no longer valid
+     - the new ring tail is returned, and it's value may be written into
 
     rotate_head() can be used to compact the table, by rotating
     live records to the ring tail and uncovering reclaimable records.
