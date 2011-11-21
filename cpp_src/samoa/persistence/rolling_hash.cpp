@@ -1,6 +1,5 @@
 
 #include "samoa/persistence/rolling_hash.hpp"
-#include "samoa/error.hpp"
 #include <string.h>
 
 namespace samoa {
@@ -132,7 +131,7 @@ void rolling_hash::reclaim_head()
     }
 
     _tbl.begin += rec_len;
-    SAMOA_ASSERT(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
+    assert(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
 
     if(_tbl.begin == _tbl.wrap)
     {
@@ -142,35 +141,34 @@ void rolling_hash::reclaim_head()
     _tbl.total_record_count -= 1;
 }
 
-record * rolling_hash::rotate_head(unsigned new_val_len /* = 0*/)
+void rolling_hash::rotate_head()
 {
     // empty?
     if(!_tbl.wrap && _tbl.begin == _tbl.end)
         throw std::underflow_error("rolling_hash::rotate_head(): empty");
 
     record * rec = (record*)(_region_ptr + _tbl.begin);
-    SAMOA_ASSERT(!rec->is_dead());
 
-    if(!new_val_len)
+    if(rec->is_dead())
     {
-        new_val_len = rec->value_length();
+        throw std::runtime_error("rolling_hash::rotate_head(): "
+            "head is marked for deletion");
     }
-    SAMOA_ASSERT(new_val_len <= rec->value_length());
 
     // locate record within hash-chain
     offset_t rec_ptr_ptr;
     get(rec->key_begin(), rec->key_end(), &rec_ptr_ptr);
 
-    SAMOA_ASSERT(rec_ptr_ptr);
+    assert(rec_ptr_ptr);
 
     // rotate ring indices, dropping head & immediately re-allocating it
     offset_t rec_begin = _tbl.begin;
     offset_t rec_len = record::allocated_size(
-        rec->key_length(), new_val_len);
+        rec->key_length(), rec->value_length());
 
     // rotate ring indices, dropping head
     _tbl.begin += rec_len;
-    SAMOA_ASSERT(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
+    assert(!_tbl.wrap || _tbl.begin <= _tbl.wrap);
 
     if(_tbl.end + rec_len > _tbl.region_size)
     {
@@ -185,15 +183,13 @@ record * rolling_hash::rotate_head(unsigned new_val_len /* = 0*/)
         _tbl.begin = records_offset();
     }
 
-    // Re-allocate at tail, by copying raw bytes from old to new location
-    // 
-    // * If new value length is less than the old, the value is truncated
-    //
-    // * We're quite possibly overwriting the old record as we write
-    //   the new one. This is only safely done by copy-backward
+    // re-allocate it at ring tail
+
+    // copy raw bytes of record from old to new location
+    // Big Fat Note: we're quite possibly overwriting the old record as
+    // we write the new one. This is only safely done by copying-forward
     if(rec_begin != _tbl.end)
     {
-        // TODO: word-sized copy
         std::copy(
             _region_ptr + rec_begin,
             _region_ptr + rec_begin + rec_len,
@@ -206,7 +202,6 @@ record * rolling_hash::rotate_head(unsigned new_val_len /* = 0*/)
     *(offset_t*)(_region_ptr + rec_ptr_ptr) = _tbl.end;
 
     _tbl.end += rec_len;
-    return (record *)(_region_ptr + rec_begin);
 }
 
 

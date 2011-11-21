@@ -1,0 +1,11 @@
+
+python-extension _rolling_hash :
+    [ glob *.cpp ]
+    /samoa//libsamoa
+    /pysamoa//libpysamoa
+    /root//boost_system
+    /root//boost_python
+;
+
+install dist : _rolling_hash : <location>$(INSTALL)/samoa/persistence/rolling_hash ;
+

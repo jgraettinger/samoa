@@ -1,19 +1,20 @@
+#ifndef SAMOA_PERSISTENCE_ROLLING_HASH_HASH_RING_HPP
+#define SAMOA_PERSISTENCE_ROLLING_HASH_HASH_RING_HPP
 
+#include "samoa/persistence/rolling_hash/fwd.hpp"
+#include <string>
+#include <cstdint>
 
 namespace samoa {
 namespace persistence {
 namespace rolling_hash {
 
-
 class hash_ring
 {
 public:
 
-    typedef hash_ring_packet packet_t;
-    typedef hash_ring_element element_t;
-
     /// packet bulkheads every 1 << 19 = 524288 bytes
-    const uint32_t bulkhead_shift = 19;
+    static const uint32_t bulkhead_shift = 19;
 
     struct locator
     {
@@ -23,48 +24,58 @@ public:
         packet * element_head;
     };
 
-    hash_ring(void * region_ptr, uint32_t region_size, uint32_t index_size);
+    hash_ring(uint8_t * region_ptr, uint32_t region_size, uint32_t index_size);
 
     virtual ~hash_ring();
 
+    template<typename KeyIterator>
+    locator locate_key(const KeyIterator & begin, const KeyIterator & end) const;
 
     locator locate_key(const std::string &) const;
 
-
-    locator allocate_packets(uint32_t capacity) const;
-
+    packet * allocate_packets(uint32_t capacity);
 
     void reclaim_head();
 
     void rotate_head();
 
+    void update_hash_chain(const locator & loc, uint32_t new_offset);
 
-    packet_t * head() const;
+    packet * head() const;
 
-    packet_t * next_packet(const packet_t *) const;
+    packet * next_packet(const packet *) const;
 
-    uint32_t index_offset() const;
+    uint32_t packet_offset(const packet *) const;
 
-    uint32_t packet_offset() const;
+    uint32_t region_size() const
+    { return _region_size; }
 
-    uint32_t total_region_size() const;
+    uint32_t index_size() const
+    { return _index_size; }
 
-    uint32_t used_region_size() const;
+    uint32_t index_region_offset() const
+    { return sizeof(table_header); }
 
-    uint32_t total_index_size() const;
+    uint32_t ring_region_offset() const
+    { return index_region_offset() + index_size() * sizeof(uint32_t); }
 
-    uint32_t used_index_size() const;
+    uint32_t begin_offset() const
+    { return _tbl.begin; }
 
-    uint32_t ring_begin_offset() const;
+    uint32_t end_offset() const
+    { return _tbl.end; }
 
-    uint32_t ring_end_offset() const;
+    bool is_wrapped() const
+    { return _tbl.is_wrapped; }
 
 protected:
 
     uint8_t * _region_ptr;
     uint32_t _region_size;
+    uint32_t _index_size;
 
     enum persistence_state_enum {
+        NEW = 0,
         FROZEN = 0xf0f0f0f0,
         ACTIVE = FROZEN + 1
     };
@@ -72,8 +83,6 @@ protected:
     struct table_header {
 
         uint32_t persistence_state;
-        uint32_t total_record_count;
-        uint32_t live_record_count;
 
         // offset of first packet
         uint32_t begin;
@@ -91,8 +100,7 @@ protected:
 
 }
 }
-
-#include "samoa/persistence/rolling_hash.impl.hpp"
+}
 
 #endif
 

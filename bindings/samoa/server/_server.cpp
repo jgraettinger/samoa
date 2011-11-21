@@ -33,6 +33,6 @@ BOOST_PYTHON_MODULE(_server)
     samoa::server::make_partition_bindings();
     samoa::server::make_local_partition_bindings();
     samoa::server::make_remote_partition_bindings();
-    samao::server::make_partition_upkeep_bindings();
+    samoa::server::make_partition_upkeep_bindings();
 }
 

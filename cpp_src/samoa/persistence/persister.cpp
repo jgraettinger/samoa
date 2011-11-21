@@ -81,7 +81,7 @@ void persister::put(
 }
 
 void persister::drop(
-    drop_callback_t && callback,
+    get_callback_t && callback,
     const std::string & key,
     spb::PersistedRecord & precord)
 {
@@ -159,10 +159,10 @@ void persister::on_get(
         SAMOA_ASSERT(precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
-        callback(true);
+        callback(boost::system::error_code(), true);
         return;
     }
-    callback(false);
+    callback(boost::system::error_code(), false);
 }
 
 void persister::on_put(
@@ -267,7 +267,7 @@ void persister::on_put(
 }
 
 void persister::on_drop(
-    const drop_callback_t & callback,
+    const get_callback_t & callback,
     const std::string & key,
     spb::PersistedRecord & precord)
 {
@@ -282,14 +282,13 @@ void persister::on_drop(
         SAMOA_ASSERT(precord.ParseFromArray(
             rec->value_begin(), rec->value_length()));
 
-        if(callback(true))
-        {
-            layer.mark_for_deletion(key.begin(), key.end(), hint);
-            make_room(0, 0, 0, 0, 0);
-        }
+        layer.mark_for_deletion(key.begin(), key.end(), hint);
+        make_room(0, 0, 0, 0, 0);
+
+        callback(boost::system::error_code(), true);
         return;
     }
-    callback(false);
+    callback(boost::system::error_code(), false);
 }
 
 void persister::on_iterate(
@@ -489,7 +488,7 @@ bool persister::make_room(size_t key_length, size_t val_length,
     return invalid;
 }
 
-
+/*
 void persister::compact_leaf()
 {
     rolling_hash & layer = *_layers.back();
@@ -535,7 +534,7 @@ void persister::compact_leaf()
         }
     }
 }
-
+*/
 
 }
 }

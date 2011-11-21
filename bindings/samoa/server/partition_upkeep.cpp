@@ -8,6 +8,8 @@
 namespace samoa {
 namespace server {
 
+namespace bpl = boost::python;
+
 void make_partition_upkeep_bindings()
 {
     bpl::class_<partition_upkeep, partition_upkeep::ptr_t, boost::noncopyable>(

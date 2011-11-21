@@ -24,7 +24,9 @@ public:
 
     typedef persister_ptr_t ptr_t;
 
-    typedef boost::function<void(bool) // found
+    typedef boost::function<void(
+        const boost::system::error_code &,
+        bool) // found
     > get_callback_t;
 
     typedef boost::function<void(
@@ -32,8 +34,10 @@ public:
         const datamodel::merge_result &)
     > put_callback_t;
 
+    /*
     typedef boost::function<bool(bool) // found
     > drop_callback_t;
+    */
 
     typedef boost::function<void(
         const record * &)
@@ -61,7 +65,8 @@ public:
         spb::PersistedRecord &); // referenced, local record
 
     void drop(
-        drop_callback_t &&,
+        get_callback_t &&,
+//        drop_callback_t &&,
         const std::string & key, // referenced
         spb::PersistedRecord &); // referenced
 
@@ -105,7 +110,8 @@ private:
         spb::PersistedRecord &);
 
     void on_drop(
-        const drop_callback_t &,
+        const get_callback_t &,
+//        const drop_callback_t &,
         const std::string &,
         spb::PersistedRecord &);
 

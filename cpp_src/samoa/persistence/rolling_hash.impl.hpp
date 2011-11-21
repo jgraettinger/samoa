@@ -1,6 +1,4 @@
 
-#include "samoa/error.hpp"
-
 namespace samoa {
 namespace persistence {
 
@@ -76,7 +74,7 @@ record * rolling_hash::prepare_record(
     // need to wrap?
     if(_tbl.end + rec_len > _tbl.region_size)
     {
-        SAMOA_ASSERT(_tbl.wrap == 0);
+        assert(_tbl.wrap == 0);
 
         _tbl.wrap = _tbl.end;
         _tbl.end = records_offset();

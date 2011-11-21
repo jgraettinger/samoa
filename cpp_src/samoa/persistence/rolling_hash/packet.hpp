@@ -1,5 +1,5 @@
-#ifndef SAMOA_PERSISTENCE_ROLLING_HASH_RECORD_HPP
-#define SAMOA_PERSISTENCE_ROLLING_HASH_RECORD_HPP
+#ifndef SAMOA_PERSISTENCE_ROLLING_HASH_PACKET_HPP
+#define SAMOA_PERSISTENCE_ROLLING_HASH_PACKET_HPP
 
 #include <cstddef>
 #include <stdexcept>
@@ -8,31 +8,12 @@ namespace samoa {
 namespace persistence {
 namespace rolling_hash {
 
-class hash_ring_packet
+class packet
 {
 public:
 
-    /// Byte-length of packet header
-    const uint32_t header_length = sizeof(rolling_hash_packet);
-
-    /// Byte-alignment of the (packed) packet header structure
-    const uint32_t header_alignment = sizeof(_meta) % sizeof(uint32_t);
-
-    /// Correcting byte-alignment of capacity required
-    ///  to ensure that packet is uint32_t aligned
-    const uint32_t capacity_alignment_adjustment = header_alignment ? \
-        (sizeof(uint32_t) - header_alignment) : 0;
-
-    /// Maximum representable capacity of a packet 
-    const uint32_t max_capacity = (1<<11) + capacity_alignment_adjustment - 1;
-
-    /// Minimum byte-length of an (uint32_t-aligned) packet
-    const uint32_t min_packet_byte_length = header_length() + \
-        capacity_alignment_adjustment;
-
-
     // 
-    hash_ring_packet(uint32_t capacity);
+    packet(uint32_t capacity);
 
     /*!
      * \brief Examines packet for issues in storage or retrieval.
@@ -53,7 +34,7 @@ public:
      *  - byte-range of key_begin() : key_end()
      *  - byte-range of value_begin() : value_end()
      */
-    uint32_t compute_crc_32();
+    uint32_t compute_crc_32() const;
 
     /*!
      * \brief Update the 32-bit CRC of the packet
@@ -63,7 +44,7 @@ public:
     { _meta.crc_32 = checksum; }
 
     /// Location of next element in linear hash table
-    uint32_t get_hash_chain_next() const
+    uint32_t hash_chain_next() const
     { return _meta.hash_chain_next; }
 
     /// Update location of next record in linear hash table
@@ -98,18 +79,18 @@ public:
     { _meta.completes_sequence = true; }
 
     /// Total key / value storage capacity of the packet
-    uint32_t get_capacity() const
-    { return (_meta.capacity << 2) + capacity_alignment_adjustment; }
+    uint32_t capacity() const
+    { return (_meta.capacity << 2) + capacity_alignment_adjustment(); }
 
     /// Remaining storage capacity of the packet
-    uint32_t get_available_capacity() const
+    uint32_t available_capacity() const
     { return capacity() - key_length() - value_length(); }
 
-    uint32_t get_key_length() const
+    uint32_t key_length() const
     { return _meta.key_length; }
 
     const char * key_begin() const
-    { return reinterpret_cast<char*>(this) + header_length(); }
+    { return reinterpret_cast<const char*>(this) + header_length(); }
 
     const char * key_end() const
     { return key_begin() + key_length(); }
@@ -129,7 +110,7 @@ public:
     char * set_key(uint32_t key_length);
 
 
-    uint32_t get_value_length() const
+    uint32_t value_length() const
     { return _meta.value_length; }
 
     const char * value_begin() const
@@ -149,8 +130,33 @@ public:
      */
     char * set_value(uint32_t value_length);
 
-    uint32_t get_packet_length() const
-    { return header_length() + key_length() + value_length(); }
+    uint32_t packet_length() const
+    { return header_length() + capacity(); }
+
+    /// Byte-length of packet header
+    static uint32_t header_length()
+    { return sizeof(packet); }
+
+    /// Byte-alignment of the (packed) packet header structure
+    static uint32_t header_alignment()
+    { return sizeof(_meta) % sizeof(uint32_t); }
+
+    /// Correcting byte-alignment of capacity required
+    ///  to ensure that packet is uint32_t aligned
+    static uint32_t capacity_alignment_adjustment()
+    { return header_alignment ? (sizeof(uint32_t) - header_alignment()) : 0; }
+
+    /// Maximum representable capacity of a packet 
+    static uint32_t max_capacity()
+    { return (1<<13) - header_alignment(); }
+
+    /// Minimum byte-length of an (uint32_t-aligned) packet
+    static uint32_t min_packet_byte_length()
+    { return header_length() + capacity_alignment_adjustment(); }
+
+    /// Maximum byte-length of a packet
+    static uint32_t max_packet_byte_length()
+    { return header_length() + max_capacity(); }
 
 private:
 

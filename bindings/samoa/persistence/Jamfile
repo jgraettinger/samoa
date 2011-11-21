@@ -9,3 +9,5 @@ python-extension _persistence :
 
 install dist : _persistence : <location>$(INSTALL)/samoa/persistence ;
 
+build-project rolling_hash ;
+
