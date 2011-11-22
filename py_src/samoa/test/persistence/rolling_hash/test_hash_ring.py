@@ -92,14 +92,24 @@ class TestHashRing(unittest.TestCase):
             ring.allocate_packets(1489) 
 
         for i in xrange(100):
-            print i
+
             ring.allocate_packets(1489)
-            if i == 10:
-                import pdb; pdb.set_trace()
-            ring.head().set_dead()
+            print "after allocate\n", ring
+
+            pkt = ring.head()
+            while True:
+
+                pkt.set_dead()
+                if pkt.completes_sequence():
+                    break
+                pkt = ring.next_packet(pkt)
+
+            print "after marking\n", ring
+
             ring.reclaim_head()
+            print "after reclaim\n", ring
 
-
+            import pdb; pdb.set_trace()
 
 """
     def test_mapped(self):

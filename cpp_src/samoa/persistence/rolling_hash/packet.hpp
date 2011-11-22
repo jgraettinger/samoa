@@ -36,6 +36,9 @@ public:
      */
     uint32_t compute_crc_32() const;
 
+    uint32_t crc_32() const
+    { return _meta.crc_32; }
+
     /*!
      * \brief Update the 32-bit CRC of the packet
      * @param checksum Must be returned by compute_crc_32()

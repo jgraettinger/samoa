@@ -34,10 +34,46 @@ void py_set_value(packet * p, const bpl::str & value)
     std::copy(begin, end, p->set_value(std::distance(begin, end)));
 }
 
+std::string py_repr_packet(packet & p)
+{
+    std::stringstream out;
+    out << "packet" << &p << "<";
+
+    if(p.continues_sequence())
+        out << "cont, ";
+
+    if(p.completes_sequence())
+        out << "fin, ";
+
+    if(p.is_dead())
+        out << "dead, ";
+
+    out << "len " << p.packet_length() << ", ";
+    out << "cap " << p.capacity() << ", ";
+
+    out << "key " << p.key_length() << ":\"";
+    out << std::string(p.key_begin(), p.key_begin() + std::min<uint32_t>(
+        p.key_length(), 10));
+    out << "\", ";
+
+    out << "val " << p.value_length() << ":\"";
+    out << std::string(p.value_begin(), p.value_begin() + std::min<uint32_t>(
+        p.value_length(), 10));
+    out << "\", ";
+
+    if(p.hash_chain_next())
+        out << "next " << p.hash_chain_next() << ", ";
+
+    out << "crc " << p.crc_32();
+    out << ">";
+
+    return out.str();
+}
 
 void make_packet_bindings()
 {
     bpl::class_<packet, boost::noncopyable>("Packet", bpl::no_init)
+        .def("__repr__", &py_repr_packet)
         .def("check_integrity", &packet::check_integrity)
         .def("compute_crc_32", &packet::compute_crc_32)
         .def("set_crc_32", &packet::set_crc_32)

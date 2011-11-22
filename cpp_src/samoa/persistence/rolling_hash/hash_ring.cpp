@@ -189,8 +189,6 @@ packet * hash_ring::allocate_packets(uint32_t capacity)
 void hash_ring::reclaim_head()
 {
     packet * pkt = head();
-    SAMOA_ASSERT(pkt && pkt->is_dead());
-
     bool first_in_sequence = true;
 
     while(true)
@@ -206,11 +204,17 @@ void hash_ring::reclaim_head()
             RING_INTEGRITY_CHECK(pkt->continues_sequence());
 
         _tbl.begin += pkt->packet_length();
+        if(_tbl.is_wrapped && _tbl.begin == _region_size)
+        {
+            _tbl.begin = ring_region_offset();
+            _tbl.is_wrapped = false;
+        }
+        RING_INTEGRITY_CHECK(_tbl.begin < _region_size);
 
         if(pkt->completes_sequence())
             break;
 
-        pkt = next_packet(pkt);
+        pkt = head();
     }
 }
 
@@ -303,15 +307,13 @@ packet * hash_ring::next_packet(const packet * pkt) const
 
     offset += pkt->packet_length();
 
-    if(_tbl.is_wrapped)
+    if(_tbl.is_wrapped && offset == _region_size)
     {
-        if(offset == _region_size)
-            offset = ring_region_offset();
-
-        if(offset == _tbl.begin)
-            return nullptr;
+        offset = ring_region_offset();
     }
-    else if(offset == _tbl.end)
+    SAMOA_ASSERT(offset < _region_size);
+
+    if(offset == _tbl.end)
         return nullptr;
 
     return reinterpret_cast<packet*>(_region_ptr + offset);

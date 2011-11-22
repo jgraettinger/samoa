@@ -40,6 +40,40 @@ bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 }
 */
 
+std::string py_repr_packet(packet & p);
+
+std::string py_repr_hash_ring(hash_ring & r)
+{
+    std::stringstream out;
+
+    out << "hash_ring@" << &r << "<";
+
+    out << "region " << r.region_size() << ", ";
+    out << "index " << r.index_size() << ", ";
+    out << "ring offset " << r.ring_region_offset() << ", ";
+    out << "begin " << r.begin_offset() << ", ";
+    out << "end " << r.end_offset() << ", ";
+
+    if(r.is_wrapped())
+        out << "wrapped,\n";
+    else
+        out << "not wrapped,\n";
+
+    packet * pkt = r.head();
+    for(unsigned i = 0; pkt && i != 15; ++i)
+    {
+        uint32_t offset = r.packet_offset(pkt);
+        out << "\t" << offset << ":" << (offset + pkt->packet_length());
+        out << " " << py_repr_packet(*pkt) << ",\n";
+
+        pkt = r.next_packet(pkt);
+    }
+    out << ">";
+
+    return out.str();
+}
+
+
 void make_hash_ring_bindings()
 {
     hash_ring::locator (hash_ring::*locate_key_ptr)(
@@ -49,6 +83,7 @@ void make_hash_ring_bindings()
     bpl::class_<hash_ring, boost::noncopyable>(
             "HashRing", bpl::no_init)
 
+        .def("__repr__", &py_repr_hash_ring)
         .def("locate_key", locate_key_ptr)
         .def("allocate_packets", &hash_ring::allocate_packets,
             bpl::return_value_policy<bpl::reference_existing_object>())
