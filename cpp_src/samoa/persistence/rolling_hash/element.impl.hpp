@@ -118,7 +118,13 @@ element::element(
             RING_INTEGRITY_CHECK(pkt->continues_sequence());
         }
     }
-    pkt->set_crc_32(pkt->compute_crc_32());
+
+    do
+    {
+        pkt->set_crc_32(pkt->compute_crc_32());
+        pkt = ring->next_packet(pkt);
+    } while(pkt && pkt->continues_sequence());
+
     _last = pkt;
 }
 

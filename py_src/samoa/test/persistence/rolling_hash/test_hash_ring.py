@@ -225,6 +225,20 @@ class TestHashRing(unittest.TestCase):
             self.assertEquals(element.key(), expected_key)
             self.assertEquals(element.value(), expected_value)
 
+    def test_large_elements(self):
+
+        pattern = ''.join(chr(i % 255) for i in xrange(1<<15))
+        ring = HeapHashRing.open(1 << 17, 1)
+
+        head = ring.allocate_packets(len(pattern) * 2)
+
+        # construct in place, with key only
+        element = Element(ring, head, pattern)
+
+        self.assertEquals(element.capacity(), len(pattern) * 2)
+        self.assertEquals(element.key_length(), 1<<15)
+        self.assertEquals(element.value_length(), 0)
+
 
     def _alloc(self, ring, key, value = '', capacity = None):
         if capacity is None:
