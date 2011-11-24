@@ -30,6 +30,10 @@ hash_ring::hash_ring(uint8_t * region_ptr,
         _tbl.begin = ring_region_offset();
         _tbl.end = ring_region_offset();
         _tbl.is_wrapped = false;
+
+        // zero-initialize the table index
+        memset(_region_ptr + index_region_offset(), 0,
+            sizeof(uint32_t) * _index_size);
     }
     else
     {
@@ -52,7 +56,8 @@ hash_ring::locator hash_ring::locate_key(
 
     // dereference index location to head packet offset
     uint32_t next_offset = *reinterpret_cast<uint32_t*>(
-        _region_ptr + loc.index_location * sizeof(uint32_t));
+        _region_ptr + index_region_offset() + \
+            loc.index_location * sizeof(uint32_t));
 
     while(next_offset != 0)
     {
@@ -234,10 +239,14 @@ void hash_ring::rotate_head()
 
     if(new_head)
     {
+        new_head->set_hash_chain_next(
+            old_element.head()->hash_chain_next());
+
         // construct element to assign key & value 
         element new_element(this, new_head,
             key_length, key_gather_iterator(old_element),
-            value_length, value_gather_iterator(old_element));
+            value_length, value_gather_iterator(old_element),
+            old_element.head()->hash_chain_next());
 
         old_element.set_dead();
         reclaim_head();
@@ -261,6 +270,8 @@ void hash_ring::rotate_head()
         std::copy(value_gather_iterator(old_element), value_gather_iterator(),
             std::back_inserter(value_buffer));
 
+        uint32_t hash_chain_next = old_element.head()->hash_chain_next();
+
         old_element.set_dead();
         reclaim_head();
 
@@ -269,7 +280,10 @@ void hash_ring::rotate_head()
 
         element new_element(this, new_head,
             key_length, key_buffer.begin(),
-            value_length, value_buffer.begin());
+            value_length, value_buffer.begin(),
+            hash_chain_next);
+
+        new_element.head()->set_hash_chain_next(hash_chain_next);
     }
 
     update_hash_chain(loc, packet_offset(new_head));
@@ -288,7 +302,8 @@ void hash_ring::update_hash_chain(const locator & loc,
     {
         // no hash chain; update index
         uint32_t & index_value = *reinterpret_cast<uint32_t*>(
-            _region_ptr + loc.index_location * sizeof(uint32_t));
+            _region_ptr + index_region_offset() + \
+                loc.index_location * sizeof(uint32_t));
         index_value = new_offset;
     }
 }

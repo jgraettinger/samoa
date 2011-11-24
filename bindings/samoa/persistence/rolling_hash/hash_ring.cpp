@@ -73,9 +73,51 @@ std::string py_repr_hash_ring(hash_ring & r)
     return out.str();
 }
 
+std::string py_repr_locator(hash_ring::locator & l)
+{
+    std::stringstream out;
+
+    out << "locator@" << &l << "<";
+
+    out << "index_location " << l.index_location << ", ";
+
+    out << "previous_chained_head ";
+    if(l.previous_chained_head)
+    {
+        out << py_repr_packet(*l.previous_chained_head) << ", ";
+    }
+    else
+    {
+        out << "None, ";
+    }
+
+    out << "element_head ";
+    if(l.element_head)
+    {
+        out << py_repr_packet(*l.element_head);
+    }
+    else
+    {
+        out << "None";
+    }
+    out << ">";
+
+    return out.str();
+}
 
 void make_hash_ring_bindings()
 {
+    bpl::class_<hash_ring::locator>("HashRing_Locator", bpl::no_init)
+        .def_readonly("index_location", &hash_ring::locator::index_location)
+        .add_property("previous_chained_head",
+            bpl::make_getter(&hash_ring::locator::previous_chained_head,
+                bpl::return_value_policy<bpl::reference_existing_object>()))
+        .add_property("element_head",
+            bpl::make_getter(&hash_ring::locator::element_head,
+                bpl::return_value_policy<bpl::reference_existing_object>()))
+        .def("__repr__", &py_repr_locator)
+        ;
+
     hash_ring::locator (hash_ring::*locate_key_ptr)(
         const std::string &) const = &hash_ring::locate_key;
 
@@ -89,6 +131,7 @@ void make_hash_ring_bindings()
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("reclaim_head", &hash_ring::reclaim_head)
         .def("rotate_head", &hash_ring::rotate_head)
+        .def("update_hash_chain", &hash_ring::update_hash_chain)
         .def("head", &hash_ring::head,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("next_packet", &hash_ring::next_packet,

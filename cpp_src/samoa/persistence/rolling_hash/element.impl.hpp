@@ -9,12 +9,15 @@ namespace rolling_hash {
 template<typename KeyIterator>
 element::element(
     const hash_ring * ring, packet * pkt,
-    uint32_t key_length, KeyIterator key_it)
+    uint32_t key_length, KeyIterator key_it,
+    uint32_t hash_chain_next)
  :  _ring(ring),
     _head(pkt),
     _last(nullptr)
 {
     RING_INTEGRITY_CHECK(!pkt->continues_sequence());
+
+    _head->set_hash_chain_next(hash_chain_next);
 
     while(key_length)
     {
@@ -49,7 +52,8 @@ template<typename KeyIterator, typename ValueIterator>
 element::element(
     const hash_ring * ring, packet * pkt,
     uint32_t key_length, KeyIterator key_it,
-    uint32_t value_length, ValueIterator value_it)
+    uint32_t value_length, ValueIterator value_it,
+    uint32_t hash_chain_next)
  :  _ring(ring),
     _head(pkt),
     _last(nullptr)
@@ -58,6 +62,8 @@ element::element(
     //  constructors, when gcc supports them
 
     RING_INTEGRITY_CHECK(!pkt->continues_sequence());
+
+    _head->set_hash_chain_next(hash_chain_next);
 
     while(key_length)
     {
@@ -96,7 +102,7 @@ element::element(
 
         while(cur_it != end_it)
         {
-            *(cur_it++) = *(key_it++);
+            *(cur_it++) = *(value_it++);
         }
         value_length -= cur_length;
 
@@ -139,7 +145,14 @@ void element::set_value(
         pkt->set_crc_32(pkt->compute_crc_32());
         pkt = step(pkt);
 
-        SAMOA_ASSERT(pkt);
+        SAMOA_ASSERT(value_length == 0 || pkt);
+    }
+
+    while(pkt)
+    {
+        pkt->set_value(0);
+        pkt->set_crc_32(pkt->compute_crc_32());
+        pkt = step(pkt);
     }
 }
 

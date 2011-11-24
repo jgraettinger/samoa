@@ -15,7 +15,7 @@ public:
         size_t region_size, size_t index_size)
     {
         uint8_t * region = new uint8_t[region_size];
-        memset(region, region_size, 0);
+        memset(region, 0, sizeof(hash_ring::table_header));
 
         return std::unique_ptr<heap_hash_ring>(
             new heap_hash_ring(region, region_size, index_size));

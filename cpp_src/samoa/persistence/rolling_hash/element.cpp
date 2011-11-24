@@ -19,7 +19,7 @@ element::element(
 uint32_t element::key_length() const
 {
     packet * pkt = _head;
-    uint32_t length;
+    uint32_t length = 0;
 
     while(true)
     {
@@ -35,7 +35,7 @@ uint32_t element::key_length() const
 uint32_t element::value_length() const
 {
     packet * pkt = _head;
-    uint32_t length;
+    uint32_t length = 0;
 
     while(true)
     {
@@ -51,7 +51,7 @@ uint32_t element::value_length() const
 uint32_t element::capacity() const
 {
     packet * pkt = _head;
-    uint32_t length;
+    uint32_t length = 0;
 
     while(true)
     {
