@@ -1,4 +1,11 @@
 
+namespace samoa {
+namespace persistence {
+namespace rolling_hash {
+
+class value_zco_adapter
+
+
     /*!
      *
      *

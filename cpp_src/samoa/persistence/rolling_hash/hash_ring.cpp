@@ -22,8 +22,10 @@ hash_ring::hash_ring(uint8_t * region_ptr,
     _index_size(index_size),
     _tbl(*reinterpret_cast<table_header*>(region_ptr))
 {
+    uint32_t expected_size = sizeof(table_header);
+    expected_size = index_size * sizeof(uint32_t);
 
-    SAMOA_ASSERT(region_size > (index_size * sizeof(uint32_t) + sizeof(table_header)));
+    SAMOA_ASSERT(region_size > expected_size);
 
     if(_tbl.persistence_state == NEW)
     {
@@ -61,6 +63,9 @@ hash_ring::locator hash_ring::locate_key(
 
     while(next_offset != 0)
     {
+        RING_INTEGRITY_CHECK(_region_size >= \
+            next_offset + packet::min_packet_byte_length());
+
         // follow chain to next packet
         loc.previous_chained_head = loc.element_head;
         loc.element_head = reinterpret_cast<packet*>(
@@ -154,7 +159,7 @@ packet * hash_ring::allocate_packets(uint32_t capacity)
             }
         }
 
-        LOG_INFO("creating packet length " << packet_length << " capacity " << capacity);
+        //LOG_INFO("creating packet length " << packet_length << " capacity " << capacity);
 
         // initialize packet
         packet * pkt = reinterpret_cast<packet*>(_region_ptr + cur_end);
@@ -198,7 +203,7 @@ void hash_ring::reclaim_head()
 
     while(true)
     {
-        RING_INTEGRITY_CHECK(pkt && pkt->is_dead());
+        SAMOA_ASSERT(pkt && pkt->is_dead());
 
         if(first_in_sequence)
         {
@@ -318,9 +323,7 @@ packet * hash_ring::head() const
 
 packet * hash_ring::next_packet(const packet * pkt) const
 {
-    uint32_t offset = packet_offset(pkt);
-
-    offset += pkt->packet_length();
+    uint32_t offset = packet_offset(pkt) + pkt->packet_length();
 
     if(_tbl.is_wrapped && offset == _region_size)
     {

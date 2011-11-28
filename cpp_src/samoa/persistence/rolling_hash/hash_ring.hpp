@@ -29,7 +29,9 @@ public:
     virtual ~hash_ring();
 
     template<typename KeyIterator>
-    locator locate_key(const KeyIterator & begin, const KeyIterator & end) const;
+    locator locate_key(
+        const KeyIterator & begin,
+        const KeyIterator & end) const;
 
     locator locate_key(const std::string &) const;
 

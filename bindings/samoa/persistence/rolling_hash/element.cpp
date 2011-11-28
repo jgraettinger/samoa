@@ -11,15 +11,6 @@ namespace rolling_hash {
 
 namespace bpl = boost::python;
 
-
-element * py_element_with_key(const hash_ring * ring, packet * pkt,
-    const bpl::str & key, uint32_t hash_chain_next)
-{
-    return new element(ring, pkt,
-        PyString_GET_SIZE(key.ptr()), PyString_AS_STRING(key.ptr()),
-        hash_chain_next);
-}
-
 element * py_element_with_key_value(const hash_ring * ring, packet * pkt,
     const bpl::str & key, const bpl::str & value, uint32_t hash_chain_next)
 {
@@ -49,10 +40,6 @@ void make_element_bindings()
 {
     bpl::class_<element>("Element",
             bpl::init<const hash_ring *, packet *>())
-        .def("__init__", bpl::make_constructor(&py_element_with_key,
-            bpl::default_call_policies(),
-            (bpl::arg("hash_ring"), bpl::arg("head"), bpl::arg("key"),
-                bpl::arg("hash_chain_next") = 0)))
         .def("__init__", bpl::make_constructor(&py_element_with_key_value,
             bpl::default_call_policies(),
             (bpl::arg("hash_ring"), bpl::arg("head"), bpl::arg("key"),
@@ -61,6 +48,7 @@ void make_element_bindings()
         .def("value_length", &element::value_length)
         .def("capacity", &element::capacity)
         .def("set_value", &py_set_value)
+        .def("set_dead", &element::set_dead)
         .def("head", &element::head,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("step", &element::step,

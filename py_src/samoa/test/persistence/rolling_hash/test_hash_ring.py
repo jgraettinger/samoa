@@ -1,21 +1,10 @@
 
 import unittest
-import random
-import uuid
 
 from samoa.persistence.rolling_hash.heap_hash_ring import HeapHashRing
 from samoa.persistence.rolling_hash.element import Element
 
 from samoa.test.cluster_state_fixture import ClusterStateFixture
-
-# TODO: tests for
-#  - bulkhead boundaries
-#  - integrity violation detection
-#  - multi-packet elements:
-#     - key, value, & capacity lengths
-#     - key & value gather
-#     - value updates
-#  - churn, with elements rotated & discarded
 
 class TestHashRing(unittest.TestCase):
 
@@ -133,7 +122,6 @@ class TestHashRing(unittest.TestCase):
         self.assertEquals(ring.begin_offset(), 4116)
         self.assertEquals(ring.end_offset(), 4116)
         self.assertFalse(ring.is_wrapped())
-        return
 
     def test_rotate_with_fixtures(self):
 
@@ -171,6 +159,30 @@ class TestHashRing(unittest.TestCase):
         self.assertEquals(pkt.packet_length(), 32)
         self.assertEquals(ring.packet_offset(pkt), 4228)
         self.assertEquals(pkt.value(), 'test value')
+
+    def test_bulkhead_boundaries_with_fixtures(self):
+
+        # allocate up to bulkhead edge
+        ring = HeapHashRing.open(1 << 20, 1)
+        ring.allocate_packets((1 << 19) - (1 << 13))
+
+        # allocation is split into two packets, on either side of bulkhead
+        head = ring.allocate_packets(1 << 13)
+
+        # 516948 + 7340 == 524288 == 1 << hash_ring::bulkhead_shift
+        self.assertEquals(ring.packet_offset(head), 516948)
+        self.assertEquals(head.packet_length(), 7340)
+        self.assertFalse(head.completes_sequence())
+
+        tail = ring.next_packet(head)
+
+        self.assertEquals(ring.packet_offset(tail), 524288)
+        self.assertEquals(tail.packet_length(), 880)
+        self.assertTrue(tail.continues_sequence())
+        self.assertTrue(tail.completes_sequence())
+
+        # head + tail capacity meets allocation request (plus 2 of padding)
+        self.assertEquals(head.capacity() + tail.capacity(), (1 << 13) + 2)
 
     def test_locate_key(self):
 
@@ -225,20 +237,33 @@ class TestHashRing(unittest.TestCase):
             self.assertEquals(element.key(), expected_key)
             self.assertEquals(element.value(), expected_value)
 
-    def test_large_elements(self):
+    def test_locate_chain_integrity_violation_detection(self):
 
-        pattern = ''.join(chr(i % 255) for i in xrange(1<<15))
-        ring = HeapHashRing.open(1 << 17, 1)
+        # table size of 1 => all keys collide
+        ring = HeapHashRing.open(1 << 13, 1)
 
-        head = ring.allocate_packets(len(pattern) * 2)
+        # previous record, with an invalid chain-next
+        pkt = self._alloc(ring, 'a key', 'test value')
+        pkt.set_hash_chain_next(1 << 14)
+        pkt.set_crc_32(pkt.compute_crc_32())
 
-        # construct in place, with key only
-        element = Element(ring, head, pattern)
+        with self.assertRaisesRegexp(RuntimeError, "region_size"):
+            ring.locate_key('test key')
 
-        self.assertEquals(element.capacity(), len(pattern) * 2)
-        self.assertEquals(element.key_length(), 1<<15)
-        self.assertEquals(element.value_length(), 0)
+    def test_rotate_chain_integrity_violation_detection(self):
 
+        ring = HeapHashRing.open(1 << 13, 1)
+
+        pkt = ring.allocate_packets(4096)
+        pkt.set_key('a key')
+        pkt.set_value('test value')
+        pkt.set_crc_32(pkt.compute_crc_32())
+
+        # we're not inserting the packet into the table index,
+        #   intentionally breaking the hash_ring contract for live records 
+
+        with self.assertRaisesRegexp(RuntimeError, "element_head"):
+            ring.rotate_head()
 
     def _alloc(self, ring, key, value = '', capacity = None):
         if capacity is None:
@@ -256,69 +281,3 @@ class TestHashRing(unittest.TestCase):
         ring.update_hash_chain(locator, ring.packet_offset(pkt))
         return pkt
 
-
-"""
-    def test_churn(self):
-        # Synthesizes "normal" usage, with keys being both added & dropped
-
-        data = {}
-
-        for i in xrange(1000):
-            data[str(uuid.uuid4())] = '=' * int(
-                random.expovariate(1.0 / 135))
-
-        data_size = sum(len(i) + len(j) for i,j in data.iteritems())
-
-        h = HeapRollingHash(
-            int(data_size * 1.3), 2000)
-
-        # Set all keys / values
-        for key, value in data.items():
-            self._set(h, key, value)
-
-        # Randomly churn, dropping & setting keys
-        for i in xrange(5 * len(data)):
-            drop_key, set_key, get_key = random.sample(data.keys(), 3)
-
-            self._upkeep(h)
-            h.mark_for_deletion(drop_key)
-
-            self._upkeep(h)
-            self._set(h, set_key, data[set_key])
-
-            rec = h.get(get_key)
-            if rec:
-                self.assertEquals(data[get_key], rec.value)
-
-        # Set all keys / values
-        for key, value in data.items():
-            self._upkeep(h)
-            self._set(h, key, value)
-
-        # contents of rolling hash should
-        #   be identical to data
-        self.assertEquals(data, self._dict(h))
-
-    def _set(self, h, key, val):
-        rec = h.prepare_record(key, len(val))
-        rec.set_value(val)
-        h.commit_record()
-
-    def _dict(self, h):
-        res = {}
-        rec = h.head()
-
-        while rec:
-            res[rec.key] = rec.value
-            rec = h.step(rec)
-
-        return res
-
-    def _upkeep(self, h):
-
-        if not h.head().is_dead():
-            h.rotate_head()
-
-        while h.head().is_dead():
-            h.reclaim_head()
-"""
