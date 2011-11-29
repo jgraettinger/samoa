@@ -1,6 +1,7 @@
 
 #include "samoa/persistence/rolling_hash/error.hpp"
 #include "samoa/persistence/rolling_hash/hash_ring.hpp"
+#include "samoa/persistence/rolling_hash/value_zco_adapter.hpp"
 
 namespace samoa {
 namespace persistence {
@@ -16,9 +17,6 @@ element::element(
     _head(pkt),
     _last(nullptr)
 {
-    // TODO(johng): an ideal candidate for C++11 delegating
-    //  constructors, when gcc supports them
-
     RING_INTEGRITY_CHECK(!pkt->continues_sequence());
 
     _head->set_hash_chain_next(hash_chain_next);
@@ -84,6 +82,49 @@ element::element(
     } while(pkt && pkt->continues_sequence());
 
     _last = pkt;
+}
+
+template<typename KeyIterator>
+element::element(
+    const hash_ring * ring, packet * pkt,
+    uint32_t key_length, KeyIterator key_it,
+    value_zco_adapter & value_output_adapater,
+    uint32_t hash_chain_next)
+ :  _ring(ring),
+    _head(pkt),
+    _last(nullptr)
+{
+    RING_INTEGRITY_CHECK(!pkt->continues_sequence());
+
+    _head->set_hash_chain_next(hash_chain_next);
+
+    while(key_length)
+    {
+        uint32_t cur_length = std::min(key_length,
+            pkt->available_capacity());
+
+        char * cur_it = pkt->set_key(cur_length);
+        char * end_it = cur_it + cur_length;
+
+        while(cur_it != end_it)
+        {
+            *(cur_it++) = *(key_it++);
+        }
+        key_length -= cur_length;
+
+        if(key_length)
+        {
+            RING_INTEGRITY_CHECK(!pkt->completes_sequence());
+
+            // value_zco_adapter will update packet checksums,
+            //   so don't bother here
+
+            pkt = _ring->next_packet(pkt);
+            RING_INTEGRITY_CHECK(pkt->continues_sequence());
+        }
+    }
+
+    value_output_adapater = value_zco_adapter(*this);
 }
 
 template<typename ValueIterator>

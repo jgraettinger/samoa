@@ -9,6 +9,12 @@ class hash_ring;
 class packet;
 class element;
 
+class key_gather_iterator;
+class value_gather_iterator;
+
+class value_zci_adapter;
+class value_zco_adapter;
+
 }
 }
 }

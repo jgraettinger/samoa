@@ -3,7 +3,6 @@
 
 #include "samoa/persistence/rolling_hash/fwd.hpp"
 #include "samoa/persistence/rolling_hash/packet.hpp"
-#include <google/protobuf/message_lite.h>
 
 namespace samoa {
 namespace persistence {
@@ -24,7 +23,7 @@ public:
     template<typename KeyIterator>
     element(const hash_ring *, packet *,
         uint32_t key_length, KeyIterator key_begin,
-        google::protobuf::MessageLite & value,
+        value_zco_adapter & value_output_adapater,
         uint32_t hash_chain_next);
 
     uint32_t key_length() const;
@@ -34,10 +33,10 @@ public:
     template<typename ValueIterator>
     void set_value(uint32_t value_length, ValueIterator value_begin);
 
-    void serialize_as_value(google::protobuf::MessageLite &);
-    void deserialize_from_value(google::protobuf::MessageLite &);
-
     void set_dead();
+
+    const hash_ring * ring() const
+    { return _ring; }
 
     // access to the underlying packet sequence
     packet * head() const
@@ -46,11 +45,6 @@ public:
     packet * step(packet *) const;
 
 private:
-
-    friend class key_gather_iterator;
-    friend class value_gather_iterator;
-    //friend class value_zco_adapter;
-    //friend class value_zci_adapter;
 
     const hash_ring * _ring;
     packet * _head;
