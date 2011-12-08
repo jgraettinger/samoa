@@ -1,8 +1,7 @@
 
 #include "samoa/persistence/persister.hpp"
-#include "samoa/persistence/rolling_hash.hpp"
-#include "samoa/persistence/heap_rolling_hash.hpp"
-#include "samoa/persistence/mapped_rolling_hash.hpp"
+#include "samoa/persistence/rolling_hash/heap_hash_ring.hpp"
+#include "samoa/persistence/rolling_hash/mapped_hash_ring.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
@@ -28,39 +27,104 @@ persister::~persister()
         delete _layers[i];
 }
 
-void persister::add_heap_hash(
-    size_t storage_size,
-    size_t index_size)
+const rolling_hash::hash_ring & persister::get_layer(size_t index) const
+{ return *_layers.at(index); }
+
+void persister::add_heap_hash(unsigned storage_size, unsigned index_size)
 {
     LOG_DBG("persister " << this << " adding heap hash {"
         << storage_size << ", " << index_size << "}");
 
-    _layers.push_back(new heap_rolling_hash(storage_size, index_size));
+    _layers.push_back(rolling_hash::heap_hash_ring::open(
+        storage_size, index_size).release());
 }
 
-void persister::add_mapped_hash(
-    const std::string & file,
-    size_t storage_size,
-    size_t index_size)
+void persister::add_mapped_hash(const std::string & file,
+    size_t storage_size, size_t index_size)
 {
     LOG_DBG("persister " << this << " adding mapped hash {"
         << file << ", " << storage_size << ", " << index_size << "}");
 
-    _layers.push_back(mapped_rolling_hash::open(
+    _layers.push_back(rolling_hash::mapped_hash_ring::open(
         file, storage_size, index_size).release());
 }
 
 void persister::get(
     get_callback_t && callback,
     const std::string & key,
-    spb::PersistedRecord & precord)
+    spb::PersistedRecord & record)
 {
     _strand.post(
         boost::bind(&persister::on_get,
             shared_from_this(),
             std::move(callback),
             boost::cref(key),
-            boost::ref(precord)));
+            boost::ref(record)));
+}
+
+void persister::drop(
+    drop_callback_t && callback,
+    const std::string & key,
+    spb::PersistedRecord & record)
+{
+    _strand.post(
+        boost::bind(&persister::on_drop,
+            shared_from_this(),
+            std::move(callback),
+            boost::cref(key),
+            boost::ref(record)));
+}
+
+unsigned persister::iteration_begin()
+{
+    spinlock::guard guard(_iterators_lock);
+
+    unsigned i = 0;
+    for(; i != _iterators.size(); ++i)
+    {
+    	iterator & it = _iterators[i];
+        if(it.state == iterator::DEAD)
+        {
+            it.state = iterator::IDLE;
+            it.layer = _layers.size() - 1;
+            it.packet = nullptr;
+
+            step_iterator(it);
+            return i;
+        }
+    }
+
+    // no iterator slots available? add one
+    if(i == _iterators.size())
+    {
+        _iterators.push_back({iterator::IDLE, _layers.size(), nullptr});
+    }
+    return i;
+}
+
+void persister::finish_iteration(unsigned ticket)
+{
+    spinlock::guard guard(_iterators_lock);
+
+    SAMOA_ASSERT(_iterators.at(ticket).state != iterator::POSTED);
+    _iterators[ticket].state = iterator::DEAD;
+}
+
+bool persister::iteration_next(iterate_callback_t && callback, unsigned ticket)
+{
+    spinlock::guard guard(_iterators_lock);
+
+    SAMOA_ASSERT(_iterators.at(ticket).state != iterator::DEAD);
+    SAMOA_ASSERT(_iterators.at(ticket).state != iterator::POSTED);
+
+    _strand.post(
+        boost::bind(&persister::on_iteration_next,
+            shared_from_this(),
+            std::move(callback),
+            ticket));
+
+    _iterators[ticket].state = iterator::POSTED;
+    return true;
 }
 
 void persister::put(
@@ -80,461 +144,427 @@ void persister::put(
             boost::ref(local_record)));
 }
 
-void persister::drop(
-    get_callback_t && callback,
-    const std::string & key,
-    spb::PersistedRecord & precord)
-{
-    _strand.post(
-        boost::bind(&persister::on_drop,
-            shared_from_this(),
-            std::move(callback),
-            boost::cref(key),
-            boost::ref(precord)));
-}
-
-unsigned persister::begin_iteration()
-{
-    spinlock::guard guard(_iterators_lock);
-
-    unsigned i = 0;
-    for(; i != _iterators.size(); ++i)
-    {
-        if(_iterators[i].state == iterator::DEAD)
-        {
-            _iterators[i].state = iterator::BEGIN;
-            _iterators[i].layer = 0;
-            _iterators[i].rec = 0; 
-            return i;
-        }
-    }
-
-    // no iterator slots available? add one
-    if(i == _iterators.size())
-    {
-        _iterators.push_back(iterator({iterator::BEGIN, 0, 0}));
-    }
-    return i;
-}
-
-bool persister::iterate(iterate_callback_t && callback, unsigned ticket)
-{
-    spinlock::guard guard(_iterators_lock);
-
-    SAMOA_ASSERT(_iterators.at(ticket).state != iterator::DEAD);
-
-    if(_iterators.at(ticket).state == iterator::END)
-    {
-        _iterators[ticket].state = iterator::DEAD;
-
-        if(ticket + 1 == _iterators.size())
-            _iterators.pop_back();
-
-        return false;
-    }
-
-    _strand.post(
-        boost::bind(&persister::on_iterate,
-            shared_from_this(),
-            std::move(callback),
-            ticket));
-
-    return true;
-}
-
-const rolling_hash & persister::get_layer(size_t index) const
-{ return *_layers.at(index); }
-
 void persister::on_get(
     const get_callback_t & callback,
     const std::string & key,
-    spb::PersistedRecord & precord)
+    spb::PersistedRecord & record)
 {
     for(size_t i = 0; i != _layers.size(); ++i)
     {
-        const record * rec = _layers[i]->get(key.begin(), key.end());
+        rolling_hash::hash_ring::locator loc = _layers[i]->locate_key(key);
 
-        if(!rec) continue;
+        if(!loc->element_head) continue;
 
-        SAMOA_ASSERT(precord.ParseFromArray(
-            rec->value_begin(), rec->value_length()));
+        rolling_hash::element element(_layers[i], loc->element_head);
 
-        callback(boost::system::error_code(), true);
+        rolling_hash::value_zci_adapter zci_adapter(element);
+        SAMOA_ASSERT(record.ParseFromZeroCopyStream(&zci_adapter));
+
+        callback(true);
         return;
     }
-    callback(boost::system::error_code(), false);
+    callback(false);
+}
+
+void persister::on_drop(
+    const drop_callback_t & callback,
+    const std::string & key,
+    spb::PersistedRecord & record)
+{
+    for(size_t i = 0; i != _layers.size(); ++i)
+    {
+        rolling_hash::hash_ring::locator loc = _layers[i]->locate_key(key);
+
+        if(!loc->element_head) continue;
+
+        rolling_hash::element element(_layers[i], loc->element_head);
+        rolling_hash::value_zci_adapter zci_adapter(element);
+
+        SAMOA_ASSERT(record.ParseFromZeroCopyStream(&zci_adapter));
+
+        // commit drop?
+        if(callback(true))
+        {
+            element->set_dead();
+            compaction();
+        }
+        return;
+    }
+    callback(false);
+}
+
+void persister::step_iterator(iterator & it)
+{
+	// already at layer end? step to next layer
+	if(!it.packet)
+    {
+        for(; it.layer && !it.packet; --it.layer)
+        {
+    	    it.packet = _layers[it.layer]->head();
+        }
+        return;
+    }
+
+    while(it.packet && it.packet->continues_sequence())
+    {
+        it.packet = _layers[it.layer]->next_packet(it.packet);
+    }
+
+    // reached layer end? step to next layer
+    if(!it.packet)
+    {
+        step_iterator(it);
+    }
+}
+
+void persister::on_iteration_next(
+    const iterate_callback_t & callback,
+    size_t ticket)
+{
+    rolling_hash::element element;
+
+    {
+        spinlock::guard guard(_iterators_lock);
+        iterator & it = _iterators[ticket];
+
+        unsigned layer = it.layer;
+        rolling_hash::packet * result = it.packet;
+
+        next_element(it);
+
+        if(!result)
+        {
+        	// we're returning a null element via callback;
+        	//  the iteration ticket is implicitly released
+            it.state = iterator::DEAD;
+        }
+        else
+        {
+            element = rolling_hash::element(_layers[layer], result);
+            it.state = iterator::IDLE;
+        }
+    }
+
+    callback(element);
 }
 
 void persister::on_put(
     const put_callback_t & put_callback,
     const datamodel::merge_func_t & merge_func,
     const std::string & key,
-    const spb::PersistedRecord & remote_precord,
-    spb::PersistedRecord & local_precord)
+    const spb::PersistedRecord & remote_record,
+    spb::PersistedRecord & local_record)
 {
-    unsigned value_length = remote_precord.ByteSize();
-
     // garden path result
     datamodel::merge_result result;
     result.local_was_updated = true;
     result.remote_is_stale = false;
 
-    // first, find a previous record instance
-    size_t cur_layer = 0;
-    rolling_hash::offset_t root_hint = 0, cur_hint = 0;
-    const record * rec = _layers[0]->get(key.begin(), key.end(), &root_hint);
+    // for efficiency, we keep locators for both the root layer
+    //   (where the key may be inserted), and the layer in
+    //   which the key is currently found (and may be marked dead)
+    rolling_hash::hash_ring::locator root_locator = {0, nullptr, nullptr};
+    rolling_hash::hash_ring::locator inner_locator = {0, nullptr, nullptr};
 
-    while(!rec && ++cur_layer != _layers.size())
+    // lambda to encapsulate the details of root vs leaf locator
+    auto locator = [&locators](unsigned layer) \
+        -> rolling_hash::hash_ring::locator &
+    { return layer ? inner_locator : root_locator; }
+
+    // first, attempt to find a previous record instance
+    unsigned layer = 0;
+    for(; !locator(layer).element_head; ++layer)
     {
-        rec = _layers[cur_layer]->get(key.begin(), key.end(), &cur_hint);
+        locator(layer) = _layers[layer]->locate_key(key);
     }
 
-    if(rec)
+    rolling_hash::element cur_element;
+
+    if(locator(layer).element_head)
     {
-        // provision a value size equal to the length of the
-        //  update, _plus_ the length of the old record
-        value_length += rec->value_length();
-    }
+        // an element exists under this key; parse into local_record
+        cur_element = rolling_hash::element(_layers[layer],
+            locator(layer).element_head);
 
-    if(make_room(key.length(), value_length, root_hint, cur_hint, cur_layer))
-    {
-        // while making room, we invalidated the previously found hints,
-        //  and we need to find them again
+        rolling_hash::value_zci_adapter zci_adapter(element);
+        SAMOA_ASSERT(local_record.ParseFromZeroCopyStream(&zci_adapter));
 
-        cur_layer = 0;
-        rec = _layers[0]->get(key.begin(), key.end(), &root_hint);
-
-        while(!rec && ++cur_layer != _layers.size())
-        {
-            rec = _layers[cur_layer]->get(key.begin(), key.end(), &cur_hint);
-        }
-    }
-
-    if(!_layers[0]->would_fit(key.length(), value_length))
-    {
-        // won't fit? return error to caller
-        put_callback(boost::system::errc::make_error_code(
-            boost::system::errc::not_enough_memory),
-            result);
-        return;
-    }
-
-    record * new_rec = _layers[0]->prepare_record(
-        key.begin(), key.end(), value_length);
-
-    if(rec)
-    {
-        // a previous record exists under this key;
-        //  give caller the opportunity to merge them
-
-        SAMOA_ASSERT(local_precord.ParseFromArray(
-            rec->value_begin(), rec->value_length()));
-
-        result = merge_func(local_precord, remote_precord);
-
+        // give caller the opportunity to merge remote_record into local_record
+        result = merge_func(local_record, remote_record);
         if(!result.local_was_updated)
         {
-            // merge-callback aborted the write
+            // local_record wasn't updated => write should be aborted
             put_callback(boost::system::error_code(), result);
             return;
         }
     }
     else
     {
-        // no existing record; directly copy remote_record
-        local_precord.CopyFrom(remote_precord);
+        // no element exists under this key; directly copy remote_record
+        local_record.CopyFrom(remote_record);
     }
 
-    // re-compute local record length
-    value_length = local_precord.ByteSize();
-    SAMOA_ASSERT(value_length <= new_rec->value_length());
+    uint32_t required_capacity = key.size() + local_record.ByteSize();
 
-    // write, trim, & commit record
-    local_precord.SerializeWithCachedSizesToArray(
-        reinterpret_cast<google::protobuf::uint8*>(
-            new_rec->value_begin()));
-
-    new_rec->trim_value_length(value_length);
-    _layers[0]->commit_record(root_hint);
-
-    if(rec && cur_layer)
+    // do we have enough space to write over the old value, in-place?
+    if(element.capacity() >= required_capacity)
     {
-        // previous record isn't in top layer: mark old location for collection
-        _layers[cur_layer]->mark_for_deletion(key.begin(), key.end(), cur_hint);
+        // we've enough space to write over the old value, in-place
+        rolling_hash::value_zco_adapter zco_adapter(element);
+        google::protobuf::io::CodedOutputStream co_stream(&zco_adapter);
+        SAMOA_ASSERT(local_record.SerializeWithCachedSizes(&co_stream));
+
+        zco_adapter.finish();
+        return;
     }
+
+    // A closure (passed to allocate_root_element()) which tracks whether
+    //   a layer rotation invalidates either our root or inner locator
+    //   (and therefore necessitates a second lookup of the key)
+    bool locators_invalidated = false;
+
+    auto invalidates_check = [&](rolling_hash::packet * head)
+    {
+        if(head == locator(layer).element_head ||
+           head == locator(layer).previous_chained_head)
+        {
+            locators_invalidated = true;
+        }
+    }
+
+    rolling_hash::packet * head = allocate_root_element(
+        required_capacity, invalidates_check);
+
+    if(!head)
+    {
+        // insufficient space; return error to caller
+        put_callback(boost::system::errc::make_error_code(
+            boost::system::errc::not_enough_memory),
+            result);
+        return;
+    }
+
+    if(locators_invalidated)
+    {
+        // compaction invalidated our locators; re-query for key
+        for(layer = 0; !locator(layer).element_head; ++layer)
+        {
+            locator(layer) = _layers[layer]->locate_key(key);
+        }
+    }
+
+    // write new element into root layer
+    rolling_hash::element new_element(_layers[layer], head, key);
+
+    rolling_hash::value_zco_adapter zco_adapter(element);
+    google::protobuf::io::CodedOutputStream co_stream(&zco_adapter);
+    SAMOA_ASSERT(local_record.SerializeWithCachedSizes(&co_stream));
+
+    if(!cur_element.is_null())
+    {
+        if(layer != 0)
+        {
+            // previous element is in non-root layer; drop from index
+            _layers[layer]->drop_from_hash_chain(inner_locator);
+        }
+        else
+        {
+            // previous element is in root layer; take over it's chain-next
+            head->set_hash_chain_next(cur_element.head().hash_chain_next());
+        }
+        cur_element.set_dead();
+    }
+
+    // insert new element into root index
+    _layers[0]->update_hash_chain(root_locator,
+        _layers[0]->packet_offset(head));
 
     put_callback(boost::system::error_code(), result);
 }
 
-void persister::on_drop(
-    const get_callback_t & callback,
-    const std::string & key,
-    spb::PersistedRecord & precord)
+template<typename PreRotateLambda>
+rolling_hash::packet * persister::allocate_root_element(
+    uint32_t required_capacity, const PreRotateLambda & pre_rotate_lambda)
 {
-    for(size_t i = 0; i != _layers.size(); ++i)
+    rolling_hash::packet * new_head = nullptr;
+    for(unsigned i = 0; i != max_compactions && !head; ++i)
     {
-        rolling_hash & layer = *_layers[i];
-        rolling_hash::offset_t hint = 0;
-        const record * rec = layer.get(key.begin(), key.end(), &hint);
+    	if(_layers[0]->head())
+            top_down_compaction(0, pre_rotate_lambda);
 
-        if(!rec) continue;
+        new_head = _layers[0]->allocate_packets(required_capacity);
+    }
+    return head;
+}
 
-        SAMOA_ASSERT(precord.ParseFromArray(
-            rec->value_begin(), rec->value_length()));
-
-        layer.mark_for_deletion(key.begin(), key.end(), hint);
-        make_room(0, 0, 0, 0, 0);
-
-        callback(boost::system::error_code(), true);
+template<typename PreRotateLambda>
+void persister::top_down_compaction(unsigned layer_ind,
+    const PreRotateLambda & pre_rotate_lambda)
+{
+	if(layer_ind + 1 == _layers.size())
+    {
+        leaf_compaction(pre_rotate_lambda);
         return;
     }
-    callback(boost::system::error_code(), false);
-}
 
-void persister::on_iterate(
-    const iterate_callback_t & callback,
-    size_t ticket)
-{
-    spinlock::guard guard(_iterators_lock);
+    rolling_hash::ring * layer = _layers[layer_ind];
+    rolling_hash::packet * head = layer->head();
 
-    iterator & iter = _iterators[ticket];
-    assert(!iter.state == iterator::DEAD);
+    SAMOA_ASSERT(head);
 
-    if(iter.state == iterator::BEGIN)
+    if(head->is_dead())
     {
-        iter.state = iterator::LIVE;
-        iter.layer = _layers.size();
-        iter.rec = 0;
-    }
+        layer->reclaim_head();
 
-    const record * next_rec = 0;
-
-    while(!next_rec)
-    {
-        // reached the end of this layer? begin the next one up
-        while(iter.rec == 0 && iter.layer)
-            iter.rec = _layers[--iter.layer]->head();
-
-        if(iter.rec == 0)
-        {
-            // end of sequence
-            iter.state = iterator::END;
-            break;
-        }
-
-        if(!iter.rec->is_dead())
-        {
-            next_rec = iter.rec;
-        }
-
-        iter.rec = _layers[iter.layer]->step(iter.rec);
-    }
-
-    callback(next_rec);
-}
-
-bool persister::make_room(size_t key_length, size_t val_length,
-    record::offset_t root_hint, record::offset_t cur_hint,
-    size_t cur_layer)
-{
-    bool invalid = false;
-
-    size_t cur_rotation = 0;
-
-    // tests whether shifting this layer's head node would invalidate
-    //  either of the hints, and sets 'invalid' if so
-    auto invalidates_check = [&](size_t layer)
-    {
-        if(layer == 0 && _layers[0]->head_invalidates(root_hint))
-        {
-            invalid = true;
-        }
-        else if(layer == cur_layer && \
-            _layers[cur_layer]->head_invalidates(cur_hint))
-        {
-            invalid = true;
-        }
-    };
-
-    auto iterator_step = [&](rolling_hash & layer, const record * r)
-    {
+        // update any iterators pointing at the old head 
         spinlock::guard guard(_iterators_lock);
+
         for(auto it = _iterators.begin(); it != _iterators.end(); ++it)
         {
-            if(it->state == iterator::LIVE && it->rec == r)
-                it->rec = layer.step(r);
-        }
-    };
-
-    auto rotate_down = [&](rolling_hash & layer, rolling_hash & next)-> bool
-    {
-        const record * head = layer.head();
-
-        assert(next.would_fit(head->key_length(), head->value_length()));
-
-        // allocate new record copy at tail of the next layer down
-        record * new_rec = next.prepare_record(
-            head->key_begin(), head->key_end(), head->value_length());
-
-        std::copy(head->value_begin(), head->value_end(),
-            new_rec->value_begin());
-
-        next.commit_record();
-
-        // shift any iterators pointed at head down to
-        //  the new record on the lower layer
-        {
-            spinlock::guard guard(_iterators_lock);
-            for(auto it = _iterators.begin(); it != _iterators.end(); ++it)
-            {
-                if(it->state == iterator::LIVE && it->rec == head)
-                {
-                    it->layer += 1;
-                    it->rec = new_rec;
-                }
-            }
-        }
-
-        // mark original head record as dead, & reclaim
-        layer.mark_for_deletion(head->key_begin(), head->key_end());
-        layer.reclaim_head();
-        return true;
-    };
-
-    auto prep_leaf = [&](size_t trg_key, size_t trg_val) -> bool
-    {
-        rolling_hash & hash = *_layers.back();
-
-        for(const record * head = hash.head(); head &&
-            !hash.would_fit(trg_key, trg_val); head = hash.head())
-        {
-            if(++cur_rotation == _max_rotations)
-                return false;
-
-            invalidates_check(_layers.size() - 1);
-            iterator_step(hash, head);
-
-            if(head->is_dead())
-                hash.reclaim_head();
-            else
-                hash.rotate_head();
-        }
-        return true;
-    };
-
-    boost::function<bool(size_t, size_t, size_t)> prep_inner;
-
-    auto prep = [&](size_t layer, size_t trg_key, size_t trg_val) -> bool
-    {
-        if(layer + 1 == _layers.size())
-            return prep_leaf(trg_key, trg_val);
-        else
-            return prep_inner(layer, trg_key, trg_val);
-    };
-
-    prep_inner = [&](size_t layer, size_t trg_key, size_t trg_val) -> bool
-    {
-        rolling_hash & hash = *_layers[layer];
-
-        for(const record * head = hash.head(); head &&
-            !hash.would_fit(trg_key, trg_val); head = hash.head())
-        {
-            if(++cur_rotation == _max_rotations)
-                return false;
-
-            if(head->is_dead())
-            {
-                invalidates_check(layer);
-                iterator_step(hash, head);
-                hash.reclaim_head();
-            }
-            else
-            {
-                // record is live; spill over to the next layer down
-                if(!prep(layer + 1, head->key_length(), head->value_length()))
-                    return false;
-
-                invalidates_check(layer);
-                rotate_down(hash, *_layers[layer+1]);
-            }
-        }
-        return true;
-    };
-
-    prep(0, key_length, val_length);
-
-    if(cur_rotation < _min_rotations)
-    {
-        // require that at least _min_rotations were performed;
-        //  if we're not there yet, apply additional maintenance
-        //  rotations of the bottom layer
-        rolling_hash & hash = *_layers.back();
-
-        for(const record * head = hash.head(); head; head = hash.head())
-        {
-            if(cur_rotation++ == _min_rotations)
-                break;
-
-            invalidates_check(_layers.size() - 1);
-            iterator_step(hash, head);
-
-            if(head->is_dead())
-                hash.reclaim_head();
-            else
-                hash.rotate_head();
+        	if(it->packet == head)
+        		it->packet = layer->head();
         }
     }
+    else
+    {
+        // element is live, and must be 'spilled' down to the next layer
+    	rolling_hash::element element(layer, head);
+        pre_rotate_lambda(head);
 
-    return invalid;
+        // attempt to write element at tail of next layer down
+        rolling_hash::packet * new_head = put_key_value(
+            _layers[layer_ind + 1],
+            element.key_length(),
+            rolling_hash::key_gather_iterator(element),
+            element.value_length(),
+            rolling_hash::value_gather_iterator(element));
+
+        if(!new_head)
+        {
+            // not enough space; recurse
+            top_down_compaction(layer_ind + 1, pre_rotate_lambda);
+            return;
+        }
+
+        // query for key, and drop from layer index
+        rolling_hash::hash_ring::locator locator = layer->locate_key(
+            rolling_hash::key_gather_iterator(element),
+            rolling_hash::key_gather_iterator());
+
+        layer->drop_from_hash_chain(locator);
+
+        // reclaim head
+        element.set_dead();
+        layer->reclaim_head();
+
+        // update any iterators pointing at old head
+        spinlock::guard guard(_iterators_lock);
+
+        for(auto it = _iterators.begin(); it != _iterators.end(); ++it)
+        {
+            if(it->packet == head)
+            {
+                it->layer += 1;
+                it->packet = new_head;
+            }
+        }
+    }
 }
 
-/*
-void persister::compact_leaf()
+template<typename PreRotateLambda>
+void persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
 {
-    rolling_hash & layer = *_layers.back();
-    const record * head = layer.head();
-
-    invalidates_check(_layers.size() - 1);
-    iterator_step(layer, head);
+    rolling_hash::ring & layer = *_layers.back();
+    rolling_hash::packet * head = layer->head();
 
     if(head->is_dead())
     {
         layer.reclaim_head();
+        return;
+    }
+
+	rolling_hash::element element(layer, head);
+    pre_rotate_lambda(head);
+
+    request::state::ptr_t rstate = boost::make_shared<request::state>();
+
+    // extract key & parse protobuf record
+    rstate->set_key(std::string(
+        rolling_hash::key_gather_iterator(element),
+        rolling_hash::key_gather_iterator()));
+
+    rolling_hash::value_zci_adapter zci_adapter(element);
+    SAMOA_ASSERT(rstate->get_local_record(
+        ).ParseFromZeroCopyStream(&zci_adapter));
+
+    rolling_hash::hash_ring::locator locator = \
+        layer.locate_key(rstate.key());
+
+    // drop and reclaim the element
+    element.set_dead();
+    layer.reclaim_head();
+
+    if(!_record_upkeep(rstate))
+    {
+        // record should be discarded
+        layer.drop_from_hash_chain(locator);
     }
     else
     {
-        request::state::ptr_t rstate = boost::make_shared<request::state>();
+        // record should be re-written at ring tail
+        uint32_t capacity = rstate->key().size() + \
+            rstate->local_record().ByteSize();
 
-        // set key & parsed protobuf record value
-        rstate->set_key(std::string(head->key_begin(), head->key_end()));
-        SAMOA_ASSERT(rstate->get_local_record().ParseFromArray(
-            head->value_begin(), head->value_length()));
+        // allocation will always succeed, so long as record
+        //  upkeep maintains or shrinks serialized value length
+        rolling_hash::packet * new_head = layer.allocate_packets(capacity);
+        SAMOA_ASSERT(new_head);
 
-        if(!_record_upkeep(rstate))
-        {
-            // head record should be discarded
-            layer.mark_for_deletion(head->key_begin(), head->key_end());
-            layer.reclaim_head();
-        }
-        else
-        {
-            // the compacted record should be rotated to the layer tail
-        
-            // updated values must be at least as short as the original
-            //  otherwise, we can't guarantee the rotation will always fit
-            new_value_length = rstate->get_local_record().ByteSize();
-            SAMOA_ASSERT(new_value_length <= head->value_length());
+        // write key & value, and update hash chain
+        rolling_hash::element new_element(layer, new_head, rstate->key());
 
-            // rotate head to layer tail, and write updated value
-            record * tail = layer.rotate_head(new_value_length);
+        rolling_hash::value_zco_adapter zco_adapter(element);
+        google::protobuf::io::CodedOutputStream co_stream(&zco_adapter);
+        SAMOA_ASSERT(rstate->local_record(
+            ).SerializeWithCachedSizes(&co_stream));
 
-            rstate->get_local_record().SerializeWithCachedSizesToArray(
-                reinterpret_cast<google::protobuf::uint8*>(
-                    tail->value_begin()));
-        }
+        layer.update_hash_chain(locator, layer->packet_offset(new_head));
     }
 }
-*/
+
+
+rolling_hash::packet * persister::put_key_value(
+    rolling_hash::hash_ring & layer,
+    uint32_t key_length, const rolling_hash::key_gather_iterator & key_it,
+    uint32_t val_length, const rolling_hash::value_gather_iterator & val_it)
+{
+    rolling_hash::packet * head = layer->allocate_packets(
+        key_length + val_length);
+
+    if(!head)
+    	return nullptr;
+
+    rolling_hash::hash_ring::locator locator = layer->locate_key(
+        key_it, rolling_hash::key_gather_iterator());
+
+    // take over the previous key location's chain-next,
+    //   if a previous key location exists
+    uint32_t hash_chain_next = locator.element_head ? \
+        locator.element_head->hash_chain_next() : 0;
+
+    // fill key, value, and chain-next
+    rolling_hash::element element(&layer, head,
+        key_length, key_it, val_length, val_it, hash_chain_next);
+
+    layer.update_hash_chain(locator, layer.packet_offset(head));
+
+    if(locator.element_head)
+    {
+        // mark replaced element as dead
+    	rolling_hash::element(layer, locator.element_head).set_dead();
+    }
+    return head;
+}
 
 }
 }

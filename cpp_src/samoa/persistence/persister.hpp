@@ -1,5 +1,5 @@
-#ifndef SAMOA_PERSISTENCE_PERSITER_HPP
-#define SAMOA_PERSISTENCE_PERSITER_HPP
+#ifndef SAMOA_PERSISTENCE_PERSISTER_HPP
+#define SAMOA_PERSISTENCE_PERSISTER_HPP
 
 #include "samoa/persistence/fwd.hpp"
 #include "samoa/persistence/record.hpp"
@@ -24,49 +24,38 @@ public:
 
     typedef persister_ptr_t ptr_t;
 
-    typedef boost::function<void(
-        const boost::system::error_code &,
-        bool) // found
+    typedef boost::function<void(bool) // found
     > get_callback_t;
+
+    typedef boost::function<bool(bool) // found
+    > drop_callback_t;
+
+    typedef boost::function<void(element)
+    > iterate_callback_t;
 
     typedef boost::function<void(
         const boost::system::error_code &,
         const datamodel::merge_result &)
     > put_callback_t;
 
-    /*
-    typedef boost::function<bool(bool) // found
-    > drop_callback_t;
-    */
-
-    typedef boost::function<void(
-        const record * &)
-    > iterate_callback_t;
-
-
     persister();
     virtual ~persister();
 
-    void add_heap_hash(size_t storage_size, size_t index_size);
+    size_t get_layer_count() const
+    { return _layers.size(); }
 
-    void add_mapped_hash(const std::string & file,
-        size_t storage_size, size_t index_size);
+    const rolling_hash::hash_ring & get_layer(size_t index) const;
 
-    void get(
-        get_callback_t &&,
+    void add_heap_hash_ring(unsigned storage_size, unsigned index_size);
+
+    void add_mapped_hash_ring(const std::string & file,
+        unsigned storage_size, unsigned index_size);
+
+    void get(get_callback_t &&,
         const std::string & key, // referenced
         spb::PersistedRecord &); // referenced
 
-    void put(
-        put_callback_t &&,
-        datamodel::merge_func_t &&,
-        const std::string & key, //referenced
-        const spb::PersistedRecord &, // referenced, remote record
-        spb::PersistedRecord &); // referenced, local record
-
-    void drop(
-        get_callback_t &&,
-//        drop_callback_t &&,
+    void drop(drop_callback_t &&,
         const std::string & key, // referenced
         spb::PersistedRecord &); // referenced
 
@@ -75,7 +64,7 @@ public:
      * 
      * @returns A non-zero iteration ticket, to be passed to iterate()
      */
-    unsigned begin_iteration();
+    unsigned iteration_begin();
 
     /*!
      * Preconditions:
@@ -88,52 +77,47 @@ public:
      *  - if true is returned, iterate_callback will be called from
      *     persister's io_service, and a record will be returned by-argument
      */ 
-    bool iterate(iterate_callback_t &&, unsigned ticket);
+    void iteration_next(iterate_callback_t &&, unsigned ticket);
 
-    size_t get_layer_count() const
-    { return _layers.size(); }
-
-    const rolling_hash & get_layer(size_t index) const;
+    void put(put_callback_t &&,
+        datamodel::merge_func_t &&,
+        const std::string & key, //referenced
+        const spb::PersistedRecord &, // referenced, remote record
+        spb::PersistedRecord &); // referenced, local record
 
 private:
-    
-    void on_get(
-        const get_callback_t &,
+
+    struct iterator {
+        enum {
+        	DEAD,
+        	IDLE,
+        	POSTED
+        } state;
+
+        size_t layer;
+        const packet * packet;
+    };
+
+    void on_get(const get_callback_t &,
         const std::string &,
         spb::PersistedRecord &);
 
-    void on_put(
-        const put_callback_t &,
+    void on_drop(const drop_callback_t &,
+        const std::string &,
+        spb::PersistedRecord &);
+
+    void on_iteration_next(const iterate_callback_t &, size_t);
+
+    void on_put(const put_callback_t &,
         const datamodel::merge_func_t &,
         const std::string &,
         const spb::PersistedRecord &,
         spb::PersistedRecord &);
 
-    void on_drop(
-        const get_callback_t &,
-//        const drop_callback_t &,
-        const std::string &,
-        spb::PersistedRecord &);
-
-    void on_iterate(const iterate_callback_t &, size_t);
-
-    bool make_room(size_t, size_t, record::offset_t, record::offset_t, size_t);
-
-    std::vector<rolling_hash*> _layers;
-
-    struct iterator {
-        enum {
-            DEAD,
-            BEGIN,
-            LIVE,
-            END
-        } state;
-        size_t layer;
-        const record * rec;
-    };
-    std::vector<iterator> _iterators;
+    std::vector<rolling_hash::hash_ring *> _layers;
 
     spinlock _iterators_lock;
+    std::vector<iterator> _iterators;
 
     core::proactor_ptr_t _proactor;
     boost::asio::strand _strand;

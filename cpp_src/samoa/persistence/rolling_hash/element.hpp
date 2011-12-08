@@ -12,7 +12,12 @@ class element
 {
 public:
 
+    element();
+
     element(const hash_ring *, packet *);
+
+    element(const hash_ring *, packet *,
+        const std::string & key);
 
     template<typename KeyIterator, typename ValueIterator>
     element(const hash_ring *, packet *,
@@ -20,11 +25,8 @@ public:
         uint32_t value_length, ValueIterator value_begin,
         uint32_t hash_chain_next);
 
-    template<typename KeyIterator>
-    element(const hash_ring *, packet *,
-        uint32_t key_length, KeyIterator key_begin,
-        value_zco_adapter & value_output_adapater,
-        uint32_t hash_chain_next);
+    bool is_null() const
+    { return _head == nullptr; }
 
     uint32_t key_length() const;
     uint32_t value_length() const;

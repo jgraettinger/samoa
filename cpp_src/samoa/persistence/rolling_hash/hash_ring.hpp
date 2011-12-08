@@ -43,6 +43,8 @@ public:
 
     void update_hash_chain(const locator & loc, uint32_t new_offset);
 
+    void drop_from_hash_chain(const locator & loc);
+
     packet * head() const;
 
     packet * next_packet(const packet *) const;

@@ -1,5 +1,6 @@
 
 #include "samoa/persistence/rolling_hash/mapped_hash_ring.hpp"
+#include "samoa/persistence/rolling_hash/error.hpp"
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -25,13 +26,29 @@ struct mapped_hash_ring::pimpl_t
     mapped_region_ptr_t mregion;
 };
 
-mapped_hash_ring::mapped_hash_ring(pimpl_ptr_t pimpl)
+mapped_hash_ring::mapped_hash_ring(pimpl_ptr_t pimpl, bool is_new)
  : hash_ring::hash_ring(
         reinterpret_cast<uint8_t*>(pimpl->mregion->get_address()),
         pimpl->region_size,
         pimpl->index_size),
    _pimpl(std::move(pimpl))
-{ }
+{
+    if(is_new)
+    {
+        // zero-initialize the table header & index
+        memset(_region_ptr, 0,
+            sizeof(table_header) + sizeof(uint32_t) * _index_size);
+
+        _tbl.begin = ring_region_offset();
+        _tbl.end = ring_region_offset();
+    }
+    else
+        RING_INTEGRITY_CHECK(_tbl.persistence_state == FROZEN);
+
+    // set as active, and flush to disk
+    _tbl.persistence_state = ACTIVE;
+    _pimpl->mregion->flush();
+}
 
 mapped_hash_ring::~mapped_hash_ring()
 {
@@ -64,7 +81,7 @@ std::unique_ptr<mapped_hash_ring> mapped_hash_ring::open(
     p->region_size = region_size;
     p->index_size = index_size;
 
-    // obtain a lock on the file
+    // obtain a (co-operative) lock on the file
     p->flock.reset(new bip::file_lock(file.c_str()));
     if(!p->flock->try_lock())
         throw std::runtime_error(file + " is locked");

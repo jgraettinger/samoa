@@ -132,6 +132,7 @@ void make_hash_ring_bindings()
         .def("reclaim_head", &hash_ring::reclaim_head)
         .def("rotate_head", &hash_ring::rotate_head)
         .def("update_hash_chain", &hash_ring::update_hash_chain)
+        .def("drop_from_hash_chain", &hash_ring::drop_from_hash_chain)
         .def("head", &hash_ring::head,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("next_packet", &hash_ring::next_packet,

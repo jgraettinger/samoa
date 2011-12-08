@@ -265,6 +265,42 @@ class TestHashRing(unittest.TestCase):
         with self.assertRaisesRegexp(RuntimeError, "element_head"):
             ring.rotate_head()
 
+    def test_drop_from_chain_head(self):
+
+        fixture = ClusterStateFixture()
+        ring = HeapHashRing.open(1 << 14, 1)
+
+        # pkt1's offset is in the table index
+        pkt1 = self._alloc(ring, fixture.generate_bytes())
+        # pkt2's offset is chained from pkt1
+        pkt2 = self._alloc(ring, fixture.generate_bytes())
+
+        pkt1.set_dead()
+        ring.drop_from_hash_chain(ring.locate_key(pkt1.key()))
+
+        # pkt2 is still reachable
+        locator = ring.locate_key(pkt2.key())
+        self.assertEquals(locator.element_head, pkt2)
+
+    def test_drop_from_chain_link(self):
+
+        fixture = ClusterStateFixture()
+        ring = HeapHashRing.open(1 << 14, 1)
+
+        # pkt1's offset is in the table index
+        pkt1 = self._alloc(ring, fixture.generate_bytes())
+        # pkt2's offset is chained from pkt1
+        pkt2 = self._alloc(ring, fixture.generate_bytes())
+        # pkt3's offset is chained from pkt2
+        pkt2 = self._alloc(ring, fixture.generate_bytes())
+
+        pkt2.set_dead()
+        ring.drop_from_hash_chain(ring.locate_key(pkt2.key()))
+
+        # pkt3 is still reachable
+        locator = ring.locate_key(pkt3.key())
+        self.assertEquals(locator.element_head, pkt3)
+
     def _alloc(self, ring, key, value = '', capacity = None):
         if capacity is None:
             capacity = len(key) + len(value)

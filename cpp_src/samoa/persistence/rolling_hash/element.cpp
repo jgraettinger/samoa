@@ -7,6 +7,12 @@ namespace samoa {
 namespace persistence {
 namespace rolling_hash {
 
+element::element()
+ : _ring(nullptr),
+   _head(nullptr)
+   _last(nullptr)
+{ }
+
 element::element(
     const hash_ring * ring, packet * packet)
  :  _ring(ring),
@@ -14,6 +20,46 @@ element::element(
     _last(packet)
 {
     RING_INTEGRITY_CHECK(packet->check_integrity());
+}
+
+element::element(
+    const hash_ring * ring, packet * packet,
+    const std::string & key)
+ :  _ring(ring),
+    _head(pkt),
+    _last(nullptr)
+{
+    RING_INTEGRITY_CHECK(!pkt->continues_sequence());
+
+    uint32_t key_length = key.size();
+    auto key_it = key.begin();
+
+    while(key_length)
+    {
+        uint32_t cur_length = std::min(key_length,
+            pkt->available_capacity());
+
+        std::copy(key_it, key_it + cur_length,
+            pkt->set_key(cur_length));
+
+        key_it += cur_length;
+        key_length -= cur_length;
+
+        if(key_length)
+        {
+            RING_INTEGRITY_CHECK(!pkt->completes_sequence());
+
+            // value_zco_adapter will update packet checksums,
+            //   so don't bother here
+
+            pkt = _ring->next_packet(pkt);
+            RING_INTEGRITY_CHECK(pkt->continues_sequence());
+        }
+    }
+    // client is responsible for computing updated checksums
+    //  (likely via value_zco_adapater)
+}
+
 }
 
 uint32_t element::key_length() const

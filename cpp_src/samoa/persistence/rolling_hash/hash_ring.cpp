@@ -27,21 +27,8 @@ hash_ring::hash_ring(uint8_t * region_ptr,
 
     SAMOA_ASSERT(region_size > expected_size);
 
-    if(_tbl.persistence_state == NEW)
-    {
-        _tbl.begin = ring_region_offset();
-        _tbl.end = ring_region_offset();
-        _tbl.is_wrapped = false;
-
-        // zero-initialize the table index
-        memset(_region_ptr + index_region_offset(), 0,
-            sizeof(uint32_t) * _index_size);
-    }
-    else
-    {
-        SAMOA_ASSERT(_tbl.persistence_state == FROZEN);
-    }
-    _tbl.persistence_state = ACTIVE;
+    // additional initialization & corruption checks
+    //  are expected to be done by subclasses
 }
 
 hash_ring::~hash_ring()
@@ -297,19 +284,45 @@ void hash_ring::rotate_head()
 void hash_ring::update_hash_chain(const locator & loc,
     uint32_t new_offset)
 {
+    SAMOA_ASSERT(new_offset > ring_region_offset() && \
+        new_offset < _region_size);
+
     if(loc.previous_chained_head)
     {
+    	// update previous element in the hash chain
         loc.previous_chained_head->set_hash_chain_next(new_offset);
         loc.previous_chained_head->set_crc_32(
             loc.previous_chained_head->compute_crc_32());
     }
     else
     {
-        // no hash chain; update index
+        // offset is stored directly in table index
         uint32_t & index_value = *reinterpret_cast<uint32_t*>(
             _region_ptr + index_region_offset() + \
                 loc.index_location * sizeof(uint32_t));
         index_value = new_offset;
+    }
+}
+
+void hash_ring::drop_from_hash_chain(const locator & loc)
+{
+	SAMOA_ASSERT(loc.element_head);
+
+    if(loc.previous_chained_head)
+    {
+        // update previous element in the hash chain
+        loc.previous_chained_head->set_hash_chain_next(
+            loc.element_head->hash_chain_next());
+        loc.previous_chained_head->set_crc_32(
+            loc.previous_chained_head->compute_crc_32());
+    }
+    else
+    {
+    	// offset is stored directly in table index
+        uint32_t & index_value = *reinterpret_cast<uint32_t*>(
+            _region_ptr + index_region_offset() + \
+                loc.index_location * sizeof(uint32_t));
+        index_value = loc.element_head->hash_chain_next();
     }
 }
 

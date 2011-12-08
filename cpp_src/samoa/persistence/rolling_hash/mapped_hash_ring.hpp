@@ -22,7 +22,7 @@ private:
     struct pimpl_t;
     typedef std::unique_ptr<pimpl_t> pimpl_ptr_t;
 
-    mapped_hash_ring(pimpl_ptr_t);
+    mapped_hash_ring(pimpl_ptr_t, bool is_new);
 
     pimpl_ptr_t _pimpl;
 };
