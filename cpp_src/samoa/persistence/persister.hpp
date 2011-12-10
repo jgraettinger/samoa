@@ -2,8 +2,10 @@
 #define SAMOA_PERSISTENCE_PERSISTER_HPP
 
 #include "samoa/persistence/fwd.hpp"
-#include "samoa/persistence/record.hpp"
+#include "samoa/persistence/rolling_hash/fwd.hpp"
+#include "samoa/persistence/rolling_hash/element.hpp"
 #include "samoa/datamodel/merge_func.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
@@ -30,7 +32,7 @@ public:
     typedef boost::function<bool(bool) // found
     > drop_callback_t;
 
-    typedef boost::function<void(element)
+    typedef boost::function<void(rolling_hash::element)
     > iterate_callback_t;
 
     typedef boost::function<void(
@@ -38,13 +40,17 @@ public:
         const datamodel::merge_result &)
     > put_callback_t;
 
+    typedef boost::function<bool(const request::state_ptr_t &)
+    > record_upkeep_callback_t;
+
+
     persister();
     virtual ~persister();
 
-    size_t get_layer_count() const
+    size_t layer_count() const
     { return _layers.size(); }
 
-    const rolling_hash::hash_ring & get_layer(size_t index) const;
+    const rolling_hash::hash_ring & layer(size_t index) const;
 
     void add_heap_hash_ring(unsigned storage_size, unsigned index_size);
 
@@ -69,13 +75,6 @@ public:
     /*!
      * Preconditions:
      *  - ticket was previously returned by begin_iteration, and is still valid
-     *
-     * Postcodition:
-     *  - if false is returned, this ticket has completed iteration, and
-     *     is no longer valid. iterate_callback will not be called.
-     *
-     *  - if true is returned, iterate_callback will be called from
-     *     persister's io_service, and a record will be returned by-argument
      */ 
     void iteration_next(iterate_callback_t &&, unsigned ticket);
 
@@ -84,6 +83,14 @@ public:
         const std::string & key, //referenced
         const spb::PersistedRecord &, // referenced, remote record
         spb::PersistedRecord &); // referenced, local record
+
+    const record_upkeep_callback_t & record_upkeep_callback() const
+    { return _record_upkeep; }
+
+    void set_record_upkeep_callback(const record_upkeep_callback_t &);
+
+    unsigned max_on_demand_compactions() const
+    { return 10; }
 
 private:
 
@@ -95,7 +102,7 @@ private:
         } state;
 
         size_t layer;
-        const packet * packet;
+        const rolling_hash::packet * packet;
     };
 
     void on_get(const get_callback_t &,
@@ -119,11 +126,10 @@ private:
     spinlock _iterators_lock;
     std::vector<iterator> _iterators;
 
+    record_upkeep_callback_t _record_upkeep;
+
     core::proactor_ptr_t _proactor;
     boost::asio::strand _strand;
-
-    size_t _min_rotations;
-    size_t _max_rotations;
 };
 
 }

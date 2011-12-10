@@ -14,7 +14,7 @@
 
 namespace samoa {
 namespace server {
-
+/*
 namespace spb = samoa::core::protobuf;
 
 // default period of 1 ms
@@ -289,7 +289,7 @@ void partition_upkeep::load_request_state(
 
     return;
 }
-
+*/
 }
 }
 

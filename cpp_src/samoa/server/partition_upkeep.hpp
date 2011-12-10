@@ -12,6 +12,7 @@
 namespace samoa {
 namespace server {
 
+/*
 class partition_upkeep :
     public core::periodic_task<partition_upkeep>
 {
@@ -77,6 +78,7 @@ protected:
 
     unsigned _ticket;
 };
+*/
 
 }
 }

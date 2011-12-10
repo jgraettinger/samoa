@@ -10,12 +10,6 @@
 namespace samoa {
 namespace persistence {
 
-class record;
-
-class rolling_hash;
-class heap_rolling_hash;
-class mapped_rolling_hash;
-
 class persister;
 typedef boost::shared_ptr<persister> persister_ptr_t;
 typedef boost::weak_ptr<persister> persister_weak_ptr_t;

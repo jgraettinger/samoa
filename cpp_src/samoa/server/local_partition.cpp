@@ -30,12 +30,12 @@ local_partition::local_partition(
         {
             if(it->has_file_path())
             {
-                _persister->add_mapped_hash(
+                _persister->add_mapped_hash_ring(
                     it->file_path(), it->storage_size(), it->index_size());
             }
             else
             {
-                _persister->add_heap_hash(
+                _persister->add_heap_hash_ring(
                     it->storage_size(), it->index_size());
             }
         }
