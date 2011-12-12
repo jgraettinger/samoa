@@ -17,7 +17,7 @@ class PeeredCluster(object):
 
         self.injectors = {}
         self.fixtures = {}
-        self.partition_uuids = {}
+        self.partitions = []
 
         # select the first server as the server other servers peer against
         root_fixture = None
@@ -40,21 +40,21 @@ class PeeredCluster(object):
         # not accessible until start_server_contexts is called
         self.listeners = None
         self.contexts = None
-        self.rolling_hashes = None
+        self.persisters = None
 
     def add_partition(self, table_uuid, server_name):
 
-        part_uuid = self.fixtures[name].add_local_partition(table_uuid).uuid
+        part_uuid = self.fixtures[server_name
+            ].add_local_partition(table_uuid).uuid
+        part_uuid = UUID(part_uuid)
 
-        self.partition_uuids.setdefault(name, []).append(
-            (table_uuid, part_uuid))
+        self.partitions.append((table_uuid, server_name, part_uuid))
         return part_uuid
 
     def start_server_contexts(self):
 
         self.listeners = {}
         self.contexts = {}
-        self.rolling_hashes = {}
 
         for name, injector in self.injectors.iteritems():
             self.listeners[name] = injector.get_instance(Listener)
@@ -62,17 +62,13 @@ class PeeredCluster(object):
             context = self.listeners[name].get_context()
             self.contexts[name] = context
 
-            if name not in self.partition_uuids:
-                continue
-
-            for tbl_uuid, part_uuid in self.partition_uuids[name]:
-
-                self.rolling_hashes[name] = self.context.get_cluster_state(
-                    ).get_table_set(
-                    ).get_table(tbl_uuid
-                    ).get_partition(part_uuid
-                    ).get_persister(
-                    ).get_layer(0)
+        self.persisters = {}
+        for table_uuid, name, part_uuid in self.partitions:
+            self.persisters[part_uuid] = self.contexts[name].get_cluster_state(
+                ).get_table_set(
+                ).get_table(table_uuid
+                ).get_partition(part_uuid
+                ).get_persister()
 
     def stop_server_contexts(self):
 

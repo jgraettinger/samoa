@@ -175,16 +175,22 @@ datamodel::merge_result py_on_merge(
 {
     pysamoa::python_scoped_lock block;
 
-    bpl::reference_existing_object::apply<
-        spb::PersistedRecord &>::type convert;
+    datamodel::merge_result result(true, false);
 
-    bpl::reference_existing_object::apply<
-        const spb::PersistedRecord &>::type const_convert;
+    if(merge_callback)
+    {
+        bpl::reference_existing_object::apply<
+            spb::PersistedRecord &>::type convert;
 
-    return bpl::extract<datamodel::merge_result>(
-        merge_callback(
-            bpl::handle<>(convert(local_record)),
-            bpl::handle<>(const_convert(remote_record))));
+        bpl::reference_existing_object::apply<
+            const spb::PersistedRecord &>::type const_convert;
+
+        result = bpl::extract<datamodel::merge_result>(
+            merge_callback(
+                bpl::handle<>(convert(local_record)),
+                bpl::handle<>(const_convert(remote_record))));
+    }
+    return result;
 }
 
 future::ptr_t py_put(
@@ -193,11 +199,11 @@ future::ptr_t py_put(
     const bpl::str & py_key,
     const prec_ptr_t & remote_record)
 {
-    if(!PyCallable_Check(merge_callback.ptr()))
+    if(merge_callback && !PyCallable_Check(merge_callback.ptr()))
     {
         throw std::invalid_argument(
             "persister::put(merge_callback, key, remote_record): "\
-            "argument 'merge_callback' isn't a callable");
+            "argument 'merge_callback' must be None or a callable");
     }
 
     future::ptr_t f(boost::make_shared<future>());

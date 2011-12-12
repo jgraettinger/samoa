@@ -216,6 +216,12 @@ void persister::on_iteration_next(
 
         SAMOA_ASSERT(it.state == iterator::POSTED);
 
+        if(it.packet && it.packet->is_dead())
+        {
+            // a ring update shifted our iterator; step to repair
+            step_iterator(it);
+        }
+
         size_t layer_ind = it.layer_ind;
         rolling_hash::packet * result = it.packet;
 
@@ -338,16 +344,23 @@ void persister::on_put(
     };
 
     // attempt to allocate packets for the write
-    //   if insufficient space is available, compact at least
-    //   required_capacity * max_compaction_factor() bytes before aborting
-    size_t compacted_bytes = 0;
     rolling_hash::packet * new_head = \
         _layers[0]->allocate_packets(required_capacity);
 
-    while(!new_head && compacted_bytes < max_compaction_factor() * required_capacity)
+    size_t total_compactions = 0;
+    uint32_t max_compaction = required_capacity;
+
+    // if insufficient space is available, compact at least
+    // max_compaction * max_compaction_factor() * len(layers) bytes before
+    // aborting, where max_compaction is the larger of required_capacity,
+    // and the largest element observed during compaction
+    while(!new_head && total_compactions < \
+    	(max_compaction * max_compaction_factor() * _layers.size()))
     {
-        compacted_bytes += top_down_compaction(required_capacity,
-            invalidates_check);
+        uint32_t this_compaction = top_down_compaction(invalidates_check);
+
+        max_compaction = std::max(max_compaction, this_compaction);
+        total_compactions += this_compaction;
 
         new_head = _layers[0]->allocate_packets(required_capacity);
     }
@@ -429,12 +442,11 @@ void persister::step_iterator(iterator & it)
         {
             it.packet = _layers[--it.layer_ind]->head();
         }
-        if(it.packet && it.packet->is_dead())
+        if(!it.packet || !it.packet->is_dead())
         {
-            // need to step into layer; recurse
-            step_iterator(it);
+        	return;
         }
-        return;
+        // otherwise, need to step more deeply into layer below
     }
 
     do
@@ -451,50 +463,17 @@ void persister::step_iterator(iterator & it)
 }
 
 template<typename PreRotateLambda>
-uint32_t persister::top_down_compaction(uint32_t required_capacity,
-    const PreRotateLambda & pre_rotate_lambda)
+uint32_t persister::top_down_compaction(const PreRotateLambda & pre_rotate_lambda)
 {
-    size_t layer_ind = 0;
-    uint32_t base_compaction = 0;
-
-    // work down-stack, trying to find a compactable layer
-    for(; !base_compaction && layer_ind + 1 != _layers.size(); ++layer_ind)
-    {
-        base_compaction = inner_compaction(layer_ind, pre_rotate_lambda);
-    }
-    if(!base_compaction)
-        base_compaction = leaf_compaction(pre_rotate_lambda);
-
-    uint32_t target_compaction = std::min(base_compaction, required_capacity);
-
-    LOG_INFO("BASE compaction " << layer_ind << " of " << base_compaction << " target " << required_capacity);
-
-    // return up-stack, compacting the minimum
-    //   of base_compaction vs required_capacity 
-    while(layer_ind--)
-    {
-        uint32_t cur, layer_compaction = 0;
-
-        while(layer_compaction < target_compaction && \
-            (cur = inner_compaction(layer_ind, pre_rotate_lambda)))
-        {
-            LOG_INFO("UP compaction " << layer_ind << " of " << cur);
-            layer_compaction += cur;
-        }
-    }
-    return base_compaction;
-
-    /*
     for(size_t layer_ind = 0; layer_ind + 1 != _layers.size(); ++layer_ind)
     {
         uint32_t compacted_bytes = inner_compaction(layer_ind, pre_rotate_lambda);
 
-    	// stop on the first successful inner-node compaction
+    	// stop on the first successful compaction
         if(compacted_bytes)
             return compacted_bytes;
     }
     return leaf_compaction(pre_rotate_lambda);
-    */
 }
 
 void persister::on_bottom_up_compaction(
@@ -612,7 +591,7 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
     	return 0;
     }
 
-    uint32_t compacted_bytes = 0;
+    uint32_t compacted_bytes;
 
     if(head->is_dead())
     {

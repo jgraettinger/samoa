@@ -1,7 +1,10 @@
 
+import os
+import tempfile
 import unittest
 
 from samoa.persistence.rolling_hash.heap_hash_ring import HeapHashRing
+from samoa.persistence.rolling_hash.mapped_hash_ring import MappedHashRing
 from samoa.persistence.rolling_hash.element import Element
 
 from samoa.test.cluster_state_fixture import ClusterStateFixture
@@ -272,6 +275,28 @@ class TestHashRing(unittest.TestCase):
         locator = ring.locate_key(pkt3.key())
         self.assertEquals(ring.packet_offset(pkt3),
             ring.packet_offset(locator.element_head))
+
+    def test_mapped_hash_ring(self):
+
+        desc, path = tempfile.mkstemp()
+        os.close(desc)
+        os.remove(path)
+
+        ring = MappedHashRing.open(path, 1 << 14, 10)
+
+        self._alloc(ring, 'foo', 'bar')
+        self._alloc(ring, 'baz', 'bing')
+
+        del ring
+        ring = MappedHashRing.open(path, 1 << 14, 10)
+
+        self.assertEquals('bar',
+            ring.locate_key('foo').element_head.value())
+        self.assertEquals('bing',
+            ring.locate_key('baz').element_head.value())
+        del ring
+
+        os.remove(path)
 
     def _alloc(self, ring, key, value = ''):
 

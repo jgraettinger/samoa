@@ -13,7 +13,7 @@ class mapped_hash_ring : public hash_ring
 public:
 
     static std::unique_ptr<mapped_hash_ring> open(
-        const std::string & file, size_t region_size, size_t index_size);
+        const std::string & file, uint32_t region_size, uint32_t index_size);
 
     virtual ~mapped_hash_ring();
 

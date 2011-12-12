@@ -29,9 +29,7 @@ class TestGetBlob(unittest.TestCase):
             unreachable: a remote partition which is unavailable
         """
 
-        server_names = ['peer_A', 'peer_B', 'peer_nil', 'forwarder']
         common_fixture = ClusterStateFixture()
-
         self.table_uuid = UUID(
             common_fixture.add_table(
                 data_type = DataType.BLOB_TYPE,
@@ -41,51 +39,46 @@ class TestGetBlob(unittest.TestCase):
         common_fixture.add_remote_partition(self.table_uuid)
 
         self.cluster = PeeredCluster(common_fixture,
-            server_names = server_names)
+            server_names = ['peer_A', 'peer_B', 'peer_nil', 'forwarder'])
 
-        # create local partitions for peer A, B, & nil
-        self.partition_uuids = {}
-        for srv_name in ['peer_A', 'peer_B', 'peer_nil']:
-            self.partition_uuids[srv_name] = UUID(self.cluster.fixtures[
-                srv_name].add_local_partition(self.table_uuid).uuid)
+        self.part_A = self.cluster.add_partition(self.table_uuid, 'peer_A')
+        self.part_B = self.cluster.add_partition(self.table_uuid, 'peer_B')
+        self.part_nil = self.cluster.add_partition(self.table_uuid, 'peer_nil')
 
         self.cluster.start_server_contexts()
+        self.persisters = self.cluster.persisters
 
         self.key = common_fixture.generate_bytes()
         self.value_A = common_fixture.generate_bytes()
         self.value_B = common_fixture.generate_bytes()
 
-        # set test key/value under peer A & B
-        for (srv_name, test_value) in [
-                ('peer_A', self.value_A), ('peer_B', self.value_B)]:
-
-            record_hash = self.cluster.contexts[srv_name].get_cluster_state(
-                ).get_table_set(
-                ).get_table(self.table_uuid
-                ).get_partition(self.partition_uuids[srv_name]
-                ).get_persister(
-                ).get_layer(0)
+        def populate():
 
             record = PersistedRecord()
-            record.add_blob_value(test_value)
+            record.add_blob_value(self.value_A)
+            ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
 
-            ClockUtil.tick(record.mutable_cluster_clock(),
-                self.partition_uuids[srv_name])
+            yield self.persisters[self.part_A].put(None, self.key, record)
 
-            raw_record = record_hash.prepare_record(self.key,
-                record.ByteSize())
-            raw_record.set_value(record.SerializeToBytes())
-            record_hash.commit_record()
+            record = PersistedRecord()
+            record.add_blob_value(self.value_B)
+            ClockUtil.tick(record.mutable_cluster_clock(), self.part_B)
+
+            yield self.persisters[self.part_B].put(None, self.key, record)
+            yield
+
+        return populate
 
     def _quorum_read_test(self, server_name):
         """
         Regardless of the node issued to, quorum-reads of three in this fixture
         should always produce the same (merged) result
         """
-        self._build_fixture()
+        populate = self._build_fixture()
 
         def test():
 
+            yield populate()
             request = yield self.cluster.schedule_request(server_name)
 
             samoa_request = request.get_message()
@@ -106,8 +99,8 @@ class TestGetBlob(unittest.TestCase):
                 set([self.value_A, self.value_B]))
 
             expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.partition_uuids['peer_A'])
-            ClockUtil.tick(expected_clock, self.partition_uuids['peer_B'])
+            ClockUtil.tick(expected_clock, self.part_A)
+            ClockUtil.tick(expected_clock, self.part_B)
 
             # ensure the expected clock is present in the response
             self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
@@ -135,10 +128,11 @@ class TestGetBlob(unittest.TestCase):
 
     def test_simple_read_A(self):
 
-        self._build_fixture()
+        populate = self._build_fixture()
 
         def test():
 
+            yield populate()
             request = yield self.cluster.schedule_request('peer_A')
 
             samoa_request = request.get_message()
@@ -157,7 +151,7 @@ class TestGetBlob(unittest.TestCase):
                 [self.value_A])
 
             expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.partition_uuids['peer_A'])
+            ClockUtil.tick(expected_clock, self.part_A)
 
             # ensure the expected clock is present in the response
             self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
@@ -173,10 +167,11 @@ class TestGetBlob(unittest.TestCase):
 
     def test_simple_read_nil(self):
 
-        self._build_fixture()
+        populate = self._build_fixture()
 
         def test():
 
+            yield populate()
             request = yield self.cluster.schedule_request('peer_nil')
 
             samoa_request = request.get_message()
@@ -204,9 +199,11 @@ class TestGetBlob(unittest.TestCase):
 
     def test_error_cases(self):
 
-        self._build_fixture()
+        populate = self._build_fixture()
 
         def test():
+
+            yield populate()
 
             # missing table
             request = yield self.cluster.schedule_request('forwarder')

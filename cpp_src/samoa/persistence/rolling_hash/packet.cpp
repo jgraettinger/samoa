@@ -42,11 +42,6 @@ uint32_t packet::compute_crc_32() const
 void packet::set_dead()
 {
     _meta.is_dead = true;
-    _meta.value_length = 0;
-
-    // key is left untouched; allows dead packets in
-    //   rolling hash journal to serve as drop-markers
-
     set_crc_32(compute_crc_32());
 }
 

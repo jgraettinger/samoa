@@ -360,7 +360,6 @@ class TestPersister(unittest.TestCase):
     def test_synthetic_load(self):
 
         seed = random.randint(0, 1<<32)
-        seed = 3264719307
         print "Using seed ", seed
 
         fixture = ClusterStateFixture(seed)
@@ -382,7 +381,7 @@ class TestPersister(unittest.TestCase):
 
             expected = persister_values.copy()
 
-            def iteration_callback(element):
+            def iterate(element):
 
                 record = PersistedRecord()
                 element.parse_persisted_record(record)
@@ -392,7 +391,7 @@ class TestPersister(unittest.TestCase):
                 del expected[element.key()]
 
             ticket = persister.iteration_begin()
-            while (yield persister.iteration_next(iteration_callback, ticket)):
+            while (yield persister.iteration_next(iterate, ticket)):
                 pass
 
             self.assertEquals(expected, {})
@@ -400,10 +399,21 @@ class TestPersister(unittest.TestCase):
 
         def test():
 
-            # Psuedo-randomly churn, getting, dropping, and setting keys
+            ticket = None
+
+            def iterate(element):
+
+                # validate the stored record matches the
+                #  current expectation for this key
+                record = PersistedRecord()
+                element.parse_persisted_record(record)
+
+                self.assertEquals(record.blob_value[0],
+                    persister_values.get(element.key()))
+
             for i in xrange(50 * len(keys)):
 
-                # periodically validate the current keyset via iteration
+                # periodically validate the entire keyset via iteration
                 if i % len(keys) == 0:
                     yield validate_keyset()
 
@@ -414,7 +424,10 @@ class TestPersister(unittest.TestCase):
                 key = keys[ind]
                 value = persister_values.get(key)
 
-                choice = rnd.choice(('put', 'get', 'drop_commit', 'drop_abort'))
+                op = rnd.choice(('put', 'get',
+                    'drop_commit', 'drop_abort', 'iter'))
+
+                #print 'iteration', i, key, op
 
                 def merge(local_record, remote_record):
                     self.assertEquals(local_record.blob_value[0], value)
@@ -432,22 +445,14 @@ class TestPersister(unittest.TestCase):
                     self.assertEquals(local_record.blob_value[0], value)
                     return False
 
-                if choice == 'put':
-
+                if op == 'put':
                     record = PersistedRecord()
                     record.add_blob_value('=' * int(rnd.expovariate(1.0 / 2048)))
 
-                    #try:
                     yield persister.put(merge, key, record)
                     persister_values[key] = record.blob_value[0]
 
-                    #except RuntimeError, e:
-                    #    if e.message != 'Cannot allocate memory':
-                    #        raise
-                    #    print e, len(record.blob_value[0])
-
-                elif choice == 'get':
-
+                elif op == 'get':
                     record = yield persister.get(key)
 
                     if value is None:
@@ -455,11 +460,11 @@ class TestPersister(unittest.TestCase):
                     else:
                         self.assertEquals(record.blob_value[0], value)
 
-                elif choice == 'drop_abort':
+                elif op == 'drop_abort':
                     self.assertFalse(
                         (yield persister.drop(drop_abort, key)))
 
-                elif choice == 'drop_commit':
+                elif op == 'drop_commit':
                     was_dropped = yield persister.drop(drop_commit, key)
 
                     if value is None:
@@ -468,6 +473,12 @@ class TestPersister(unittest.TestCase):
                         self.assertTrue(was_dropped)
                         del persister_values[key]
 
+                elif op == 'iter':
+                    if ticket is None:
+                    	ticket = persister.iteration_begin()
+
+                    if not (yield persister.iteration_next(iterate, ticket)):
+                    	ticket = None
             yield
 
         Proactor.get_proactor().run_test(test)

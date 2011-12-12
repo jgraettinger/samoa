@@ -1,9 +1,11 @@
 
 #include "samoa/persistence/rolling_hash/mapped_hash_ring.hpp"
 #include "samoa/persistence/rolling_hash/error.hpp"
+#include "samoa/log.hpp"
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <boost/lexical_cast.hpp>
 #include <fstream>
 
 namespace samoa {
@@ -62,22 +64,39 @@ mapped_hash_ring::~mapped_hash_ring()
 }
 
 std::unique_ptr<mapped_hash_ring> mapped_hash_ring::open(
-    const std::string & file, size_t region_size, size_t index_size)
+    const std::string & file, uint32_t region_size, uint32_t index_size)
 {
+    LOG_INFO("file " << file << ", region_size " << region_size \
+        << " index_size " << index_size);
+
     bool is_new = false;
-    if(std::ifstream(file.c_str()).fail())
     {
-        std::ofstream tmp(file.c_str());
-        if(tmp.fail())
-            throw std::runtime_error("Failed to open " + file);
+        std::ifstream tmp_in(file.c_str());
 
-        tmp.seekp(region_size);
-        tmp.put(0);
+        if(tmp_in.fail())
+        {
+            LOG_INFO("file " << file << " doesn't exist");
 
-        if(tmp.fail())
-            throw std::runtime_error("Failed to size " + file);
+            std::ofstream tmp_of(file.c_str());
+            if(tmp_of.fail())
+                throw std::runtime_error("Failed to open " + file);
 
-        is_new = true;
+            tmp_of.seekp(region_size);
+            tmp_of.put(0);
+
+            if(tmp_of.fail())
+                throw std::runtime_error("Failed to size " + file);
+
+            is_new = true;
+        }
+        else
+        {
+            tmp_in.seekg(0, std::ios_base::end);
+
+            if(tmp_in.tellg() != region_size + 1)
+                throw std::runtime_error("Size mismatch: " + \
+                    boost::lexical_cast<std::string>(tmp_in.tellg()));
+        }
     }
 
     pimpl_ptr_t p(new pimpl_t());

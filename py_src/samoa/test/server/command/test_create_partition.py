@@ -61,9 +61,9 @@ class TestCreatePartition(unittest.TestCase):
 
             self.assertEquals(part.get_ring_position(), 1234567)
 
-            ring_layer = part.get_persister().get_layer(0)
-            self.assertEquals(ring_layer.total_region_size(), (1<<19))
-            self.assertEquals(ring_layer.total_index_size(), 1234)
+            ring_layer = part.get_persister().layer(0)
+            self.assertEquals(ring_layer.region_size(), (1<<19))
+            self.assertEquals(ring_layer.index_size(), 1234)
 
             # cleanup
             context.get_tasklet_group().cancel_group()

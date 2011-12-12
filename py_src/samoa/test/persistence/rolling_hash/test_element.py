@@ -63,10 +63,6 @@ class TestElement(unittest.TestCase):
         # mark element as dead
         element.set_dead()
 
-        self.assertEquals(element.key_length(), 8)
-        self.assertEquals(element.key(), 'test key')
-        self.assertEquals(element.value_length(), 0)
-
         packet = element.head()
         self.assertTrue(packet.completes_sequence())
         self.assertTrue(packet.is_dead())
@@ -129,10 +125,6 @@ class TestElement(unittest.TestCase):
 
         # mark element as dead
         element.set_dead()
-
-        self.assertEquals(element.key_length(), 1 << 15)
-        self.assertEquals(element.key(), pattern)
-        self.assertEquals(element.value_length(), 0)
 
         packet = element.head()
         while not packet.completes_sequence():

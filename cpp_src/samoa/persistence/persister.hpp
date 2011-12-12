@@ -127,7 +127,7 @@ private:
     void step_iterator(iterator &);
 
     template<typename PreRotateLambda>
-    uint32_t top_down_compaction(uint32_t, const PreRotateLambda &);
+    uint32_t top_down_compaction(const PreRotateLambda &);
 
     void on_bottom_up_compaction(
         const bottom_up_compaction_callback_t & callback);

@@ -51,15 +51,19 @@ std::string py_repr_packet(packet & p)
     out << "len " << p.packet_length() << ", ";
     out << "cap " << p.capacity() << ", ";
 
-    out << "key " << p.key_length() << ":\"";
-    out << std::string(p.key_begin(), p.key_begin() + std::min<uint32_t>(
-        p.key_length(), 10));
-    out << "\", ";
+    bpl::object py_key = bpl::str(
+        p.key_begin(), p.key_begin() + std::min<uint32_t>(
+            p.key_length(), 50));
 
-    out << "val " << p.value_length() << ":\"";
-    out << std::string(p.value_begin(), p.value_begin() + std::min<uint32_t>(
-        p.value_length(), 10));
-    out << "\", ";
+    bpl::object py_val = bpl::str(
+        p.value_begin(), p.value_begin() + std::min<uint32_t>(
+            p.value_length(), 200));
+
+    std::string rkey = bpl::extract<std::string>(py_key.attr("__repr__")());
+    std::string rval = bpl::extract<std::string>(py_val.attr("__repr__")());
+
+    out << "key " << p.key_length() << ":" << rkey << ", ";
+    out << "val " << p.value_length() << ":" << rval << ", ";
 
     if(p.hash_chain_next())
         out << "next " << p.hash_chain_next() << ", ";
