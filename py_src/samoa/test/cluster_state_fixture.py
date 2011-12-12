@@ -74,7 +74,7 @@ class ClusterStateFixture(object):
 
     def generate_name(self):
         return ''.join(self.rnd.choice('abcdefghijklmnopqrstuvwxyz') \
-            for i in xrange(0, self.rnd.randint(4, 10)))
+            for i in xrange(0, self.rnd.randint(4, 30)))
 
     def generate_bytes(self):
         return ''.join(chr(self.rnd.choice(xrange(0, 256))) \

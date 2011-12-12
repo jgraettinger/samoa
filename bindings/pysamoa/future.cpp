@@ -14,13 +14,13 @@ using namespace samoa::core;
 future::future()
  : _called(false), _error(false), _reenter_via_post(false)
 {
-    LOG_DBG("created " << this);
+    //LOG_DBG("created " << this);
 }
 
 future::future(const bpl::object & result)
  : _called(true), _error(false), _reenter_via_post(false), _result(result)
 {
-    LOG_DBG("created (pre-called) " << this);
+    //LOG_DBG("created (pre-called) " << this);
 }
 
 future::~future()
@@ -31,7 +31,7 @@ future::~future()
     _result = _exc_type = _exc_msg = bpl::object();
     _coroutine.reset();
 
-    LOG_DBG("destroyed " << this);
+    //LOG_DBG("destroyed " << this);
 }
 
 // precondition: Python GIL is held

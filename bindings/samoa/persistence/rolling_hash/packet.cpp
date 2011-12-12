@@ -65,6 +65,10 @@ std::string py_repr_packet(packet & p)
         out << "next " << p.hash_chain_next() << ", ";
 
     out << "crc " << p.crc_32();
+
+    if(!p.check_integrity())
+        out << ", CORRUPT";
+
     out << ">";
 
     return out.str();

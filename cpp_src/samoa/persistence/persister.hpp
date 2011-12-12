@@ -43,6 +43,8 @@ public:
     typedef boost::function<bool(const request::state_ptr_t &)
     > record_upkeep_callback_t;
 
+    typedef boost::function<void(void)
+    > bottom_up_compaction_callback_t;
 
     persister();
     virtual ~persister();
@@ -52,10 +54,12 @@ public:
 
     const rolling_hash::hash_ring & layer(size_t index) const;
 
-    void add_heap_hash_ring(unsigned storage_size, unsigned index_size);
+    void add_heap_hash_ring(uint32_t storage_size, uint32_t index_size);
 
-    void add_mapped_hash_ring(const std::string & file,
-        unsigned storage_size, unsigned index_size);
+    void add_mapped_hash_ring(
+        const std::string & file,
+        uint32_t storage_size,
+        uint32_t index_size);
 
     void get(get_callback_t &&,
         const std::string & key, // referenced
@@ -70,13 +74,13 @@ public:
      * 
      * @returns A non-zero iteration ticket, to be passed to iterate()
      */
-    unsigned iteration_begin();
+    size_t iteration_begin();
 
     /*!
      * Preconditions:
      *  - ticket was previously returned by begin_iteration, and is still valid
      */ 
-    void iteration_next(iterate_callback_t &&, unsigned ticket);
+    void iteration_next(iterate_callback_t &&, size_t ticket);
 
     void put(put_callback_t &&,
         datamodel::merge_func_t &&,
@@ -84,13 +88,12 @@ public:
         const spb::PersistedRecord &, // referenced, remote record
         spb::PersistedRecord &); // referenced, local record
 
-    const record_upkeep_callback_t & record_upkeep_callback() const
-    { return _record_upkeep; }
-
     void set_record_upkeep_callback(const record_upkeep_callback_t &);
 
-    unsigned max_on_demand_compactions() const
-    { return 10; }
+    float max_compaction_factor() const
+    { return 3.0; }
+
+    void bottom_up_compaction(bottom_up_compaction_callback_t &&);
 
 private:
 
@@ -101,8 +104,8 @@ private:
         	POSTED
         } state;
 
-        size_t layer;
-        const rolling_hash::packet * packet;
+        size_t layer_ind;
+        rolling_hash::packet * packet;
     };
 
     void on_get(const get_callback_t &,
@@ -121,11 +124,29 @@ private:
         const spb::PersistedRecord &,
         spb::PersistedRecord &);
 
+    void step_iterator(iterator &);
+
+    template<typename PreRotateLambda>
+    uint32_t top_down_compaction(uint32_t, const PreRotateLambda &);
+
+    void on_bottom_up_compaction(
+        const bottom_up_compaction_callback_t & callback);
+
+    template<typename PreRotateLambda>
+    uint32_t inner_compaction(size_t, const PreRotateLambda &);
+
+    template<typename PreRotateLambda>
+    uint32_t leaf_compaction(const PreRotateLambda &);
+
+    void write_record_with_cached_sizes(
+        const spb::PersistedRecord &, rolling_hash::element &);
+
     std::vector<rolling_hash::hash_ring *> _layers;
 
     spinlock _iterators_lock;
     std::vector<iterator> _iterators;
 
+    spinlock _record_upkeep_lock;
     record_upkeep_callback_t _record_upkeep;
 
     core::proactor_ptr_t _proactor;

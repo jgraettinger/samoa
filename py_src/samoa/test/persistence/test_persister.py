@@ -1,39 +1,42 @@
 
 import unittest
 import random
-import uuid
 
 from samoa.core.protobuf import PersistedRecord
 from samoa.core.proactor import Proactor
-from samoa.persistence.persister import Persister
 from samoa.datamodel.merge_func import MergeResult
+from samoa.persistence.persister import Persister
+
+# imports required for library loads
+import samoa.request.request_state
+import samoa.persistence.rolling_hash.hash_ring
+
+from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestPersister(unittest.TestCase):
 
-    def setUp(self):
-
-        self.persister = Persister()
-        self.persister.add_heap_hash(1<<14, 10)
-        self.persister.add_heap_hash(1<<16, 1000)
-
-    def test_basic(self):
-
+    def test_put(self):
         def test():
 
-            expected = PersistedRecord()
-            expected.add_blob_value('bar')
+            persister = Persister()
+            persister.add_heap_hash_ring(1<<14, 10)
 
-            def merge_not_called(local_record, remote_record):
+            ring = persister.layer(0)
+
+            record = PersistedRecord()
+            record.add_blob_value('bar')
+
+            def not_called(local_record, remote_record):
                 self.assertFalse(True)
 
             # Putting a new key succeeds w/o merge callback
             self.assertTrue(
-                (yield self.persister.put(merge_not_called, 'foo', expected)))
+                (yield persister.put(not_called, 'foo', record)))
 
             self.assertEquals('bar',
-                (yield self.persister.get('foo')).blob_value[0])
+                (yield persister.get('foo')).blob_value[0])
 
-            def merge_called(local_record, remote_record):
+            def checked_replace(local_record, remote_record):
                 self.assertEquals(local_record.blob_value[0], 'bar')
                 self.assertEquals(remote_record.blob_value[0], 'baz')
 
@@ -43,66 +46,375 @@ class TestPersister(unittest.TestCase):
                     local_was_updated = True,
                     remote_is_stale = False)
 
-            # Putting an update invokes the merge callback
-            expected.blob_value[0] = 'baz'
+            expected_end_offset = ring.end_offset()
+
+            # Putting an update invokes merge callback
+            record.blob_value[0] = 'baz'
             self.assertTrue(
-                (yield self.persister.put(merge_called, 'foo', expected)))
+                (yield persister.put(checked_replace, 'foo', record)))
 
+            # Merge callback updated local_record, and it was stored
             self.assertEquals('baz',
-                (yield self.persister.get('foo')).blob_value[0])
+                (yield persister.get('foo')).blob_value[0])
 
-            def drop_not_called(local_record):
+            # The updated value was the same size => no new allocation
+            self.assertEquals(ring.end_offset(), expected_end_offset)
+
+            def checked_replace(local_record, remote_record):
+                self.assertEquals(local_record.blob_value[0], 'baz')
+                self.assertEquals(remote_record.blob_value[0],
+                    'a much longer value')
+
+                local_record.CopyFrom(remote_record)
+
+                return MergeResult(
+                    local_was_updated = True,
+                    remote_is_stale = False)
+
+            # Putting a larger update
+            record.blob_value[0] = 'a much longer value'
+            self.assertTrue(
+                (yield persister.put(checked_replace, 'foo', record)))
+
+            # Merge callback updated local_record, and it was stored
+            self.assertEquals('a much longer value',
+                (yield persister.get('foo')).blob_value[0])
+
+            # Larger value required a re-allocation
+            self.assertNotEquals(ring.end_offset(), expected_end_offset)
+
+            def abort_merge_callback(local_record, remote_record):
+                self.assertEquals(local_record.blob_value[0],
+                    'a much longer value')
+                self.assertEquals(remote_record.blob_value[0], 'bing')
+
+                local_record.CopyFrom(remote_record)
+
+                return MergeResult(
+                    local_was_updated = False,
+                    remote_is_stale = False)
+
+            # A second update, which doesn't commit
+            record.blob_value[0] = 'bing'
+            self.assertTrue(
+                (yield persister.put(abort_merge_callback, 'foo', record)))
+
+            # Despite updating the local_record copy, merge callback
+            #  returned that local wasn't updated => it wasn't stored
+            self.assertEquals('a much longer value',
+                (yield persister.get('foo')).blob_value[0])
+
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def test_drop(self):
+        def test():
+
+            persister = Persister()
+            persister.add_heap_hash_ring(1<<14, 10)
+
+            record = PersistedRecord()
+            record.add_blob_value('bar')
+
+            def not_called():
                 self.assertFalse(True)
 
-            # Attempt to drop an unknown key returns None
-            self.assertEquals(None,
-                (yield self.persister.drop(drop_not_called, 'bar')))
+            # Place a fixture value
+            self.assertTrue(
+                (yield persister.put(not_called, 'foo', record)))
 
-            def drop_rollback(local_record):
-                self.assertEquals(local_record.blob_value[0], 'baz')
+            # Attempt to drop an unknown key is no-op, & yields False
+            self.assertEquals(False,
+                (yield persister.drop(not_called, 'bar')))
+
+            def rollback(local_record):
+                self.assertEquals(local_record.blob_value[0], 'bar')
                 return False
 
-            # Attempt to drop 'foo', but don't commit; returns None
-            self.assertEquals(None,
-                (yield self.persister.drop(drop_rollback, 'foo')))
+            # Attempt to drop 'foo', but don't commit; returns False
+            self.assertEquals(False,
+                (yield persister.drop(rollback, 'foo')))
 
             # Key / value are still present
-            self.assertEquals('baz',
-                (yield self.persister.get('foo')).blob_value[0])
+            self.assertEquals('bar',
+                (yield persister.get('foo')).blob_value[0])
 
-            def drop_commit(local_record):
-                self.assertEquals(local_record.blob_value[0], 'baz')
+            def commit(local_record):
+                self.assertEquals(local_record.blob_value[0], 'bar')
                 return True
 
-            # This time, record is dropped & returned
-            result = yield self.persister.drop(drop_commit, 'foo')
-            self.assertEquals('baz', result.blob_value[0])
+            # This time, record is dropped
+            self.assertEquals(True,
+                (yield persister.drop(commit, 'foo')))
 
             # Key / value are no longer present
-            self.assertFalse((yield self.persister.get('foo')))
-
+            self.assertFalse((yield persister.get('foo')))
             yield        
 
         Proactor.get_proactor().run_test(test)
 
-    def test_churn(self):
+    def test_iteration(self):
+        def test():
 
-        keys = [str(uuid.uuid4()) for i in xrange(300)]
-        values = {}
+            persister = Persister()
+            persister.add_heap_hash_ring(1<<14, 10)
+
+            record = PersistedRecord()
+            record.add_blob_value('')
+
+            put_fixture_order = [
+                ('foo', 'foo value'),
+                ('bar', 'bar value'),
+                ('baz', 'baz value'),
+                # causes a re-allocation
+                ('bar', 'a much longer bar value')]
+
+            # place several fixture keys / values
+            for key, value in put_fixture_order:
+                record.blob_value[0] = value
+                self.assertTrue(
+                    (yield persister.put(self._replace_callback, key, record)))
+
+            iteration_fixture_order = [
+                ('foo', 'foo value'),
+                ('baz', 'baz value'),
+                ('bar', 'a much longer bar value')]
+
+            def not_called():
+                self.assertFalse(True)
+
+            outer_ticket = persister.iteration_begin()
+
+            # perform N ** 2 iteration steps, where for each step of the
+            #  outer iterator, we perform a full 'inner' iteration
+
+            for outer_key, outer_value in iteration_fixture_order:
+
+                def outer_callback(element):
+                    self.assertEquals(element.key(), outer_key)
+                    element.parse_persisted_record(record)
+
+                not_done = yield persister.iteration_next(
+                    outer_callback, outer_ticket)
+                self.assertEquals(record.blob_value[0], outer_value)
+                self.assertTrue(not_done)
+
+                # perform complete inner iteration
+                inner_ticket = persister.iteration_begin()
+
+                for inner_key, inner_value in iteration_fixture_order:
+
+                    def inner_callback(element):
+                        self.assertEquals(element.key(), inner_key)
+                        element.parse_persisted_record(record)
+
+                    not_done = yield persister.iteration_next(
+                        inner_callback, inner_ticket)
+                    self.assertEquals(record.blob_value[0], inner_value)
+                    self.assertTrue(not_done)
+
+                # check end-of-iteration
+                not_done = yield persister.iteration_next(
+                    not_called, inner_ticket)
+                self.assertFalse(not_done)
+
+            # check end-of-iteration
+            not_done = yield persister.iteration_next(
+                not_called, outer_ticket)
+            self.assertFalse(not_done)
+
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def test_bottom_up_compaction(self):
+        def test():
+
+            persister = Persister()
+            persister.add_heap_hash_ring(1<<15, 10)
+            persister.add_heap_hash_ring(1<<15, 10)
+
+            root = persister.layer(0)
+            leaf = persister.layer(1)
+
+            upkeeps_observed = []
+            def upkeep(rstate):
+                upkeeps_observed.append((rstate.get_key(),
+                    rstate.get_local_record().blob_value[0]))
+
+                # Tell persister to keep record
+                return True
+
+            persister.set_record_upkeep_callback(upkeep)
+
+            # place two keys, having single & multiple packets
+            record = PersistedRecord()
+            record.add_blob_value('')
+
+            def not_called():
+                self.assertFalse(True)
+
+            record.blob_value[0] = 'foo value'
+            self.assertTrue(
+                (yield persister.put(not_called, 'foo', record)))
+
+            record.blob_value[0] = '=' * (1 << 14)
+            self.assertTrue(
+                (yield persister.put(not_called, 'bar', record)))
+
+            # precondition: leaf ring is empty
+            self.assertEquals(leaf.begin_offset(), leaf.end_offset())
+
+            # begin an iteration; the iterator will skip the empty leaf
+            #  layer, and begin with 'foo' in the root layer
+            ticket = persister.iteration_begin()
+
+            # after first compaction, leaf has content
+            yield persister.bottom_up_compaction()
+            self.assertNotEquals(leaf.begin_offset(), leaf.end_offset())
+            self.assertEquals(upkeeps_observed, [])
+
+            # validate that iterator properly followed 'foo'
+            #  to the leaf layer during inner-compaction
+            def iter_foo(element):
+                self.assertEquals(element.key(), 'foo')
+                element.parse_persisted_record(record)
+
+            yield persister.iteration_next(
+                iter_foo, ticket)
+            self.assertEquals(record.blob_value[0], 'foo value')
+
+            # after second compaction, root ring is empty
+            yield persister.bottom_up_compaction()
+            self.assertEquals(root.begin_offset(), root.end_offset())
+            self.assertEquals(upkeeps_observed.pop(), ('foo', 'foo value'))
+
+            # write a longer foo value into root; marks foo as dead in leaf
+            record.blob_value[0] = 'a longer foo value'
+            self.assertTrue(
+                (yield persister.put(self._replace_callback, 'foo', record)))
+
+            # precondition: root is no longer empty
+            self.assertNotEquals(root.begin_offset(), root.end_offset())
+
+            # validate that iterator properly followed 'bar'
+            #  to the leaf layer during the second compaction
+            def iter_bar(element):
+                self.assertEquals(element.key(), 'bar')
+                element.parse_persisted_record(record)
+
+            yield persister.iteration_next(
+                iter_bar, ticket)
+            self.assertEquals(record.blob_value[0], '=' * (1 << 14))
+
+            # we reclaim foo's dead record => no upkeep was observed;
+            #  root layer is again empty
+            yield persister.bottom_up_compaction()
+            self.assertEquals(root.begin_offset(), root.end_offset())
+            self.assertEquals(upkeeps_observed, [])
+
+            # bar is rotated to ring tail
+            yield persister.bottom_up_compaction()
+            # foo is rotated to ring tail
+            yield persister.bottom_up_compaction()
+
+            # our iterator will see both keys again
+            self.assertTrue((
+                yield persister.iteration_next(iter_bar, ticket)))
+            self.assertTrue((
+                yield persister.iteration_next(iter_foo, ticket)))
+
+            # end of iteration
+            self.assertFalse((
+                yield persister.iteration_next(not_called, ticket)))
+
+            upkeeps_observed = []
+
+            # switch to an upkeep method which discards the record
+            def upkeep(rstate):
+                upkeeps_observed.append((rstate.get_key(),
+                    rstate.get_local_record().blob_value[0]))
+                return False
+
+            persister.set_record_upkeep_callback(upkeep)
+
+            yield persister.bottom_up_compaction()
+            self.assertEquals(upkeeps_observed.pop(),
+                ('bar', '=' * (1 << 14)))
+
+            yield persister.bottom_up_compaction()
+            self.assertEquals(upkeeps_observed.pop(),
+                ('foo', 'a longer foo value'))
+
+            # persister is now empty
+            yield persister.bottom_up_compaction()
+            self.assertEquals(upkeeps_observed, [])
+
+            self.assertEquals(root.begin_offset(), root.end_offset())
+            self.assertEquals(leaf.begin_offset(), leaf.end_offset())
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def test_synthetic_load(self):
+
+        seed = random.randint(0, 1<<32)
+        seed = 3264719307
+        print "Using seed ", seed
+
+        fixture = ClusterStateFixture(seed)
+        rnd = fixture.rnd
+
+        # 300 * (4-30 byte key + expovariate(1/2048)) ~= 650,000 bytes
+        keys = list(fixture.generate_name() for i in xrange(300))
+        persister_values = {}
+
+        persister = Persister()
+        persister.add_heap_hash_ring(1<<15, 10)
+        persister.add_heap_hash_ring(1<<16, 50)
+        persister.add_heap_hash_ring(1<<20, 500)
+
+        def validate_keyset():
+
+            # iterate through persister, asserting we
+            #  see each expected value exactly once
+
+            expected = persister_values.copy()
+
+            def iteration_callback(element):
+
+                record = PersistedRecord()
+                element.parse_persisted_record(record)
+
+                self.assertEquals(record.blob_value[0],
+                    expected[element.key()])
+                del expected[element.key()]
+
+            ticket = persister.iteration_begin()
+            while (yield persister.iteration_next(iteration_callback, ticket)):
+                pass
+
+            self.assertEquals(expected, {})
+            yield
 
         def test():
 
-            # Randomly churn, dropping & setting keys
+            # Psuedo-randomly churn, getting, dropping, and setting keys
             for i in xrange(50 * len(keys)):
 
-                # sample key on exponential distribution
-                ind = min(int(random.expovariate(
+                # periodically validate the current keyset via iteration
+                if i % len(keys) == 0:
+                    yield validate_keyset()
+
+                # sample keyspace on exponential distribution
+                ind = min(int(rnd.expovariate(
                     3.0 / len(keys))), len(keys) - 1)
 
                 key = keys[ind]
-                value = values.get(key)
+                value = persister_values.get(key)
 
-                choice = random.choice(('put', 'get', 'drop'))
+                choice = rnd.choice(('put', 'get', 'drop_commit', 'drop_abort'))
 
                 def merge(local_record, remote_record):
                     self.assertEquals(local_record.blob_value[0], value)
@@ -112,55 +424,57 @@ class TestPersister(unittest.TestCase):
                         local_was_updated = True,
                         remote_is_stale = False)
 
-                def drop(local_record):
+                def drop_commit(local_record):
+                    self.assertEquals(local_record.blob_value[0], value)
                     return True
+
+                def drop_abort(local_record):
+                    self.assertEquals(local_record.blob_value[0], value)
+                    return False
 
                 if choice == 'put':
 
-                    new_rec = PersistedRecord()
-                    new_rec.add_blob_value('=' * min(350,
-                        int(random.expovariate(1.0 / 135))))
+                    record = PersistedRecord()
+                    record.add_blob_value('=' * int(rnd.expovariate(1.0 / 2048)))
 
-                    yield self.persister.put(merge, key, new_rec)
-                    values[key] = new_rec.blob_value[0]
+                    #try:
+                    yield persister.put(merge, key, record)
+                    persister_values[key] = record.blob_value[0]
 
-                elif choice == 'drop':
-
-                    dropped_rec = yield self.persister.drop(drop, key)
-
-                    if value is None:
-                        self.assertEquals(dropped_rec, None)
-                    else:
-                        self.assertEquals(dropped_rec.blob_value[0], value)
-                        del values[key]
+                    #except RuntimeError, e:
+                    #    if e.message != 'Cannot allocate memory':
+                    #        raise
+                    #    print e, len(record.blob_value[0])
 
                 elif choice == 'get':
 
-                    rec = yield self.persister.get(key)
+                    record = yield persister.get(key)
 
                     if value is None:
-                        self.assertEquals(rec, None)
+                        self.assertEquals(record, None)
                     else:
-                        self.assertEquals(rec.blob_value[0], value)
+                        self.assertEquals(record.blob_value[0], value)
 
-            # iterate through persister, asserting we see each expected value 
-            ticket = self.persister.begin_iteration()
+                elif choice == 'drop_abort':
+                    self.assertFalse(
+                        (yield persister.drop(drop_abort, key)))
 
-            while True:
+                elif choice == 'drop_commit':
+                    was_dropped = yield persister.drop(drop_commit, key)
 
-                raw_record = yield self.persister.iterate(ticket)
+                    if value is None:
+                        self.assertFalse(was_dropped)
+                    else:
+                        self.assertTrue(was_dropped)
+                        del persister_values[key]
 
-                if not raw_record:
-                    break
-
-                rec = PersistedRecord()
-                rec.ParseFromBytes(raw_record.value)
-
-                self.assertEquals(rec.blob_value[0], values[raw_record.key])
-                del values[raw_record.key]
-
-            self.assertEquals(values, {})
             yield
 
         Proactor.get_proactor().run_test(test)
+
+    def _replace_callback(self, local_record, remote_record):
+        # A merge function which always replaced local with remote
+        local_record.CopyFrom(remote_record)
+        return MergeResult(
+            local_was_updated = True, remote_is_stale = False)
 

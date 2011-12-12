@@ -2,6 +2,7 @@
 #define SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCI_ADAPTER_HPP
 
 #include <google/protobuf/io/zero_copy_stream.h>
+#include "samoa/error.hpp"
 
 namespace samoa {
 namespace persistence {
@@ -46,7 +47,7 @@ public:
 
     void BackUp(int count)
     {
-        SAMOA_ASSERT(count <= _next_offset);
+        SAMOA_ASSERT((unsigned)count <= _next_offset);
 
         _next_offset -= count;
         _total_bytes -= count;
@@ -69,6 +70,7 @@ public:
             }
             count -= size;
         }
+        return true;
     }
 
     google::protobuf::int64 ByteCount() const

@@ -9,22 +9,20 @@ namespace rolling_hash {
 
 element::element()
  : _ring(nullptr),
-   _head(nullptr)
+   _head(nullptr),
    _last(nullptr)
 { }
 
-element::element(
-    const hash_ring * ring, packet * packet)
+element::element(const hash_ring * ring, packet * head)
  :  _ring(ring),
-    _head(packet),
-    _last(packet)
+    _head(head),
+    _last(head)
 {
-    RING_INTEGRITY_CHECK(packet->check_integrity());
+    RING_INTEGRITY_CHECK(head->check_integrity());
 }
 
 element::element(
-    const hash_ring * ring, packet * packet,
-    const std::string & key)
+    const hash_ring * ring, packet * pkt, const std::string & key)
  :  _ring(ring),
     _head(pkt),
     _last(nullptr)
@@ -58,8 +56,6 @@ element::element(
     }
     // client is responsible for computing updated checksums
     //  (likely via value_zco_adapater)
-}
-
 }
 
 uint32_t element::key_length() const

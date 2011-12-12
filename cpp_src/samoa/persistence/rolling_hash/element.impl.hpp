@@ -11,15 +11,12 @@ template<typename KeyIterator, typename ValueIterator>
 element::element(
     const hash_ring * ring, packet * pkt,
     uint32_t key_length, KeyIterator key_it,
-    uint32_t value_length, ValueIterator value_it,
-    uint32_t hash_chain_next)
+    uint32_t value_length, ValueIterator value_it)
  :  _ring(ring),
     _head(pkt),
     _last(nullptr)
 {
     RING_INTEGRITY_CHECK(!pkt->continues_sequence());
-
-    _head->set_hash_chain_next(hash_chain_next);
 
     while(key_length)
     {

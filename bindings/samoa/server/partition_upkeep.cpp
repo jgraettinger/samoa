@@ -12,10 +12,12 @@ namespace bpl = boost::python;
 
 void make_partition_upkeep_bindings()
 {
+    /*
     bpl::class_<partition_upkeep, partition_upkeep::ptr_t, boost::noncopyable>(
         "PartitionUpkeep", bpl::init<const context::ptr_t, const table::ptr_t,
             const local_partition::ptr_t>())
         ;
+    */
 }
 
 }

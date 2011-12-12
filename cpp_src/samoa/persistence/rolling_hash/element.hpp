@@ -22,8 +22,7 @@ public:
     template<typename KeyIterator, typename ValueIterator>
     element(const hash_ring *, packet *,
         uint32_t key_length, KeyIterator key_begin,
-        uint32_t value_length, ValueIterator value_begin,
-        uint32_t hash_chain_next);
+        uint32_t value_length, ValueIterator value_begin);
 
     bool is_null() const
     { return _head == nullptr; }

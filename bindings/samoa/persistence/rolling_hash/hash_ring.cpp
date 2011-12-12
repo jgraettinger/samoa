@@ -60,7 +60,7 @@ std::string py_repr_hash_ring(hash_ring & r)
         out << "not wrapped,\n";
 
     packet * pkt = r.head();
-    for(unsigned i = 0; pkt && i != 15; ++i)
+    for(unsigned i = 0; pkt; ++i)
     {
         uint32_t offset = r.packet_offset(pkt);
         out << "\t" << offset << ":" << (offset + pkt->packet_length());
@@ -130,7 +130,6 @@ void make_hash_ring_bindings()
         .def("allocate_packets", &hash_ring::allocate_packets,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("reclaim_head", &hash_ring::reclaim_head)
-        .def("rotate_head", &hash_ring::rotate_head)
         .def("update_hash_chain", &hash_ring::update_hash_chain)
         .def("drop_from_hash_chain", &hash_ring::drop_from_hash_chain)
         .def("head", &hash_ring::head,

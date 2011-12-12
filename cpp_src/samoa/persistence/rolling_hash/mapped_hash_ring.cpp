@@ -64,6 +64,7 @@ mapped_hash_ring::~mapped_hash_ring()
 std::unique_ptr<mapped_hash_ring> mapped_hash_ring::open(
     const std::string & file, size_t region_size, size_t index_size)
 {
+    bool is_new = false;
     if(std::ifstream(file.c_str()).fail())
     {
         std::ofstream tmp(file.c_str());
@@ -75,6 +76,8 @@ std::unique_ptr<mapped_hash_ring> mapped_hash_ring::open(
 
         if(tmp.fail())
             throw std::runtime_error("Failed to size " + file);
+
+        is_new = true;
     }
 
     pimpl_ptr_t p(new pimpl_t());
@@ -93,7 +96,8 @@ std::unique_ptr<mapped_hash_ring> mapped_hash_ring::open(
     p->mregion.reset(new bip::mapped_region(
         *p->fmapping, bip::read_write, 0, region_size));
 
-    return std::unique_ptr<mapped_hash_ring>(new mapped_hash_ring(std::move(p)));
+    return std::unique_ptr<mapped_hash_ring>(
+        new mapped_hash_ring(std::move(p), is_new));
 }
 
 }

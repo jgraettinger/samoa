@@ -70,7 +70,7 @@ class TestHashRing(unittest.TestCase):
 
         # free the first allocation
         ring.head().set_dead()
-        ring.reclaim_head()
+        self.assertEquals(ring.reclaim_head(), 116)
         self.assertEquals(ring.begin_offset(), 136)
 
         # allocation which is sized up into a larger packet,
@@ -88,14 +88,14 @@ class TestHashRing(unittest.TestCase):
         # reclaim both packets from allocation of 8193
         ring.head().set_dead()
         ring.next_packet(ring.head()).set_dead()
-        ring.reclaim_head()
+        self.assertEquals(ring.reclaim_head(), 8220)
         self.assertEquals(ring.begin_offset(), 8356)
         self.assertTrue(ring.is_wrapped())
 
         # reclaim both packets from allocation of 8190; ring unwraps
         ring.head().set_dead()
         ring.next_packet(ring.head()).set_dead()
-        ring.reclaim_head()
+        self.assertEquals(ring.reclaim_head(), 8216)
         self.assertEquals(ring.begin_offset(), ring.ring_region_offset())
         self.assertFalse(ring.is_wrapped())
 
@@ -111,54 +111,17 @@ class TestHashRing(unittest.TestCase):
 
         # reclaim packet from allocation of 91
         ring.head().set_dead()
-        ring.reclaim_head()
+        self.assertEquals(ring.reclaim_head(), 116)
         self.assertEquals(ring.begin_offset(), 136)
         self.assertEquals(ring.end_offset(), 4116)
         self.assertFalse(ring.is_wrapped())
 
         # reclaim packet from allocation of 3967; ring now empty
         ring.head().set_dead()
-        ring.reclaim_head()
+        self.assertEquals(ring.reclaim_head(), 3980)
         self.assertEquals(ring.begin_offset(), 4116)
         self.assertEquals(ring.end_offset(), 4116)
         self.assertFalse(ring.is_wrapped())
-
-    def test_rotate_with_fixtures(self):
-
-        ring = HeapHashRing.open(1 << 13, 1)
-
-        pkt = self._alloc(ring, 'test key', 'test value', capacity = 4192)
-
-        # 13 of header, 4195 of capacity (3 of padding)
-        self.assertEquals(pkt.packet_length(), 4208)
-        self.assertEquals(ring.begin_offset(), 20)
-        self.assertEquals(ring.end_offset(), 4228)
-
-        ring.rotate_head()
-        pkt = ring.head()
-
-        # 13 of header, 19 of capacity (1 of padding)
-        self.assertEquals(pkt.packet_length(), 32)
-        self.assertEquals(ring.begin_offset(), 4228)
-        self.assertEquals(ring.end_offset(), 4260)
-
-        # fill ring remainder
-        ring.allocate_packets(8114)
-        self.assertEquals(ring.begin_offset(), 4228)
-        self.assertEquals(ring.end_offset(), 4228)
-        self.assertTrue(ring.is_wrapped())
-
-        # rotate ring, this time under full condition
-        #  (packet is 'rotated' in-place, & doesn't move)
-        ring.rotate_head()
-        self.assertEquals(ring.begin_offset(), 4260)
-        self.assertEquals(ring.end_offset(), 4260)
-        self.assertTrue(ring.is_wrapped())
-
-        pkt = ring.locate_key('test key').element_head
-        self.assertEquals(pkt.packet_length(), 32)
-        self.assertEquals(ring.packet_offset(pkt), 4228)
-        self.assertEquals(pkt.value(), 'test value')
 
     def test_bulkhead_boundaries_with_fixtures(self):
 
@@ -205,13 +168,13 @@ class TestHashRing(unittest.TestCase):
         self.assertEquals(locator.element_head.key(), key2)
         self.assertEquals(locator.element_head.value(), val2)
 
-    def test_location_and_rotation_churn(self):
+    def test_rotation_churn(self):
 
         fixture = ClusterStateFixture()
 
         # index size is deliberately small,
         #  to excercise hash chaining
-        ring = HeapHashRing.open(1 << 14, 5)
+        ring = HeapHashRing.open(1 << 14, 3)
 
         d = {}
 
@@ -226,7 +189,29 @@ class TestHashRing(unittest.TestCase):
             d[key] = value
 
         for i in xrange(2 * len(d)):
-            ring.rotate_head()
+
+            # note this mimics persister::leaf_compaction();
+            #  it rotates the key/value at ring head, to ring tail
+            element = Element(ring, ring.head())
+
+            key = element.key()
+            value = element.value()
+            locator = ring.locate_key(key)
+
+            hash_chain_next = ring.head().hash_chain_next()
+
+            # kill & reclaim head element
+            element.set_dead()
+            ring.reclaim_head()
+
+            new_head = ring.allocate_packets(len(key) + len(value))
+            self.assertTrue(new_head)
+
+            new_head.set_hash_chain_next(hash_chain_next)
+
+            # write updated value
+            Element(ring, new_head, key, value)
+            ring.update_hash_chain(locator, ring.packet_offset(new_head))
 
         for expected_key, expected_value in d.iteritems():
 
@@ -250,21 +235,6 @@ class TestHashRing(unittest.TestCase):
         with self.assertRaisesRegexp(RuntimeError, "region_size"):
             ring.locate_key('test key')
 
-    def test_rotate_chain_integrity_violation_detection(self):
-
-        ring = HeapHashRing.open(1 << 13, 1)
-
-        pkt = ring.allocate_packets(4096)
-        pkt.set_key('a key')
-        pkt.set_value('test value')
-        pkt.set_crc_32(pkt.compute_crc_32())
-
-        # we're not inserting the packet into the table index,
-        #   intentionally breaking the hash_ring contract for live records 
-
-        with self.assertRaisesRegexp(RuntimeError, "element_head"):
-            ring.rotate_head()
-
     def test_drop_from_chain_head(self):
 
         fixture = ClusterStateFixture()
@@ -280,7 +250,8 @@ class TestHashRing(unittest.TestCase):
 
         # pkt2 is still reachable
         locator = ring.locate_key(pkt2.key())
-        self.assertEquals(locator.element_head, pkt2)
+        self.assertEquals(ring.packet_offset(pkt2),
+            ring.packet_offset(locator.element_head))
 
     def test_drop_from_chain_link(self):
 
@@ -292,20 +263,19 @@ class TestHashRing(unittest.TestCase):
         # pkt2's offset is chained from pkt1
         pkt2 = self._alloc(ring, fixture.generate_bytes())
         # pkt3's offset is chained from pkt2
-        pkt2 = self._alloc(ring, fixture.generate_bytes())
+        pkt3 = self._alloc(ring, fixture.generate_bytes())
 
         pkt2.set_dead()
         ring.drop_from_hash_chain(ring.locate_key(pkt2.key()))
 
         # pkt3 is still reachable
         locator = ring.locate_key(pkt3.key())
-        self.assertEquals(locator.element_head, pkt3)
+        self.assertEquals(ring.packet_offset(pkt3),
+            ring.packet_offset(locator.element_head))
 
-    def _alloc(self, ring, key, value = '', capacity = None):
-        if capacity is None:
-            capacity = len(key) + len(value)
+    def _alloc(self, ring, key, value = ''):
 
-        pkt = ring.allocate_packets(capacity)
+        pkt = ring.allocate_packets(len(key) + len(value))
         if not pkt:
             return None
 

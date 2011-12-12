@@ -1,8 +1,9 @@
-#ifndef SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCI_ADAPTER_HPP
-#define SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCI_ADAPTER_HPP
+#ifndef SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCO_ADAPTER_HPP
+#define SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCO_ADAPTER_HPP
 
-#include "samoa/persistence/rolling_hash/error.hpp"
 #include <google/protobuf/io/zero_copy_stream.h>
+#include "samoa/error.hpp"
+#include "samoa/log.hpp"
 
 namespace samoa {
 namespace persistence {
@@ -20,7 +21,7 @@ public:
         _total_bytes(0)
     { }
 
-    bool Next(const void ** data, int * size)
+    bool Next(void ** data, int * size)
     {
         SAMOA_ASSERT(_next_packet);
 
@@ -47,6 +48,9 @@ public:
             _next_offset = 0;
 
             RING_INTEGRITY_CHECK(_next_packet->continues_sequence());
+
+            available_length = _next_packet->capacity() \
+                - _next_packet->key_length();
         }
 
         *data = _next_packet->set_value(available_length) + _next_offset;
@@ -61,14 +65,10 @@ public:
     {
         SAMOA_ASSERT((unsigned)count <= _next_offset);
 
-        // this is generally called when all data is written,
-        //   so we'll want to update the _next_packet value-length
-        //   (without destroying written data) and compute the crc
-
         uint32_t new_length = _next_packet->value_length() - count;
 
+        // trim _next_packet's value to exactly hold new_length
         _next_packet->set_value(new_length);
-        _next_packet->set_crc_32(_next_packet->compute_crc_32());
 
         _next_offset -= count;
         _total_bytes -= count;
@@ -81,11 +81,14 @@ public:
     {
         while(_next_packet)
         {
-            if(!(_next_packet = _element.step(_next_packet)))
-                break;
-
-            _next_packet->set_value(0);
+            _next_packet->set_value(_next_offset);
             _next_packet->set_crc_32(_next_packet->compute_crc_32());
+
+            if(_next_packet->completes_sequence())
+                break;
+    
+            _next_offset = 0;
+            _next_packet = _element.ring()->next_packet(_next_packet);
         }
     }
 

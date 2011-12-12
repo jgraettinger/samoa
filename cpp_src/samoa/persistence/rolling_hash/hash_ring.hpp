@@ -37,13 +37,11 @@ public:
 
     packet * allocate_packets(uint32_t capacity);
 
-    void reclaim_head();
-
-    void rotate_head();
+    uint32_t reclaim_head();
 
     void update_hash_chain(const locator & loc, uint32_t new_offset);
 
-    void drop_from_hash_chain(const locator & loc);
+    void drop_from_hash_chain(const locator &);
 
     packet * head() const;
 
@@ -105,6 +103,8 @@ protected:
 }
 }
 }
+
+#include "samoa/persistence/rolling_hash/hash_ring.impl.hpp"
 
 #endif
 

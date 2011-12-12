@@ -5,10 +5,6 @@
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/functional/hash.hpp>
-#include <ext/algorithm>
-#include <algorithm>
-#include <vector>
 
 namespace samoa {
 namespace persistence {
@@ -33,49 +29,6 @@ hash_ring::hash_ring(uint8_t * region_ptr,
 
 hash_ring::~hash_ring()
 { }
-
-template<typename KeyIterator>
-hash_ring::locator hash_ring::locate_key(
-    const KeyIterator & key_begin, const KeyIterator & key_end) const
-{
-    locator loc = {0, nullptr, nullptr};
-
-    size_t hash_value = boost::hash_range(key_begin, key_end);
-    loc.index_location = hash_value % _index_size;
-
-    // dereference index location to head packet offset
-    uint32_t next_offset = *reinterpret_cast<uint32_t*>(
-        _region_ptr + index_region_offset() + \
-            loc.index_location * sizeof(uint32_t));
-
-    while(next_offset != 0)
-    {
-        RING_INTEGRITY_CHECK(_region_size >= \
-            next_offset + packet::min_packet_byte_length());
-
-        // follow chain to next packet
-        loc.previous_chained_head = loc.element_head;
-        loc.element_head = reinterpret_cast<packet*>(
-            _region_ptr + next_offset);
-
-        element elem(this, loc.element_head);
-
-        if(!__gnu_cxx::lexicographical_compare_3way(
-            key_begin, key_end,
-            key_gather_iterator(elem), key_gather_iterator()))
-        {
-            // keys match
-            return loc;
-        }
-        next_offset = loc.element_head->hash_chain_next();
-    }
-
-    // key not found in chain
-    loc.previous_chained_head = loc.element_head;
-    loc.element_head = nullptr;
-
-    return loc;
-}
 
 hash_ring::locator hash_ring::locate_key(const std::string & key) const
 {
@@ -183,8 +136,10 @@ packet * hash_ring::allocate_packets(uint32_t capacity)
     return head;
 }
 
-void hash_ring::reclaim_head()
+uint32_t hash_ring::reclaim_head()
 {
+    uint32_t reclaimed_bytes = 0;
+
     packet * pkt = head();
     bool first_in_sequence = true;
 
@@ -208,83 +163,20 @@ void hash_ring::reclaim_head()
         }
         RING_INTEGRITY_CHECK(_tbl.begin < _region_size);
 
+        reclaimed_bytes += pkt->packet_length();
+
         if(pkt->completes_sequence())
             break;
 
         pkt = head();
     }
-}
-
-void hash_ring::rotate_head()
-{
-    element old_element(this, head());
-
-    locator loc = locate_key(
-        key_gather_iterator(old_element), key_gather_iterator());
-    RING_INTEGRITY_CHECK(loc.element_head);
-
-    uint32_t key_length = old_element.key_length();
-    uint32_t value_length = old_element.value_length();
-
-    // attempt to allocate new packets for a direct copy
-    packet * new_head = allocate_packets(key_length + value_length);
-
-    if(new_head)
-    {
-        new_head->set_hash_chain_next(
-            old_element.head()->hash_chain_next());
-
-        // construct element to assign key & value 
-        element new_element(this, new_head,
-            key_length, key_gather_iterator(old_element),
-            value_length, value_gather_iterator(old_element),
-            old_element.head()->hash_chain_next());
-
-        old_element.set_dead();
-        reclaim_head();
-    }
-    else
-    {
-        // full condition: allocation failed
-
-        // copy element key / value content to temporary buffers, mark and
-        //  reclaim the element, re-allocate packets, and write from temp buffers
-
-        std::vector<uint8_t> key_buffer;
-        std::vector<uint8_t> value_buffer;
-
-        // TODO(johng): revisit this, would be nice to use a core::buffer_ring
-        key_buffer.reserve(key_length);
-        value_buffer.reserve(value_length);
-
-        std::copy(key_gather_iterator(old_element), key_gather_iterator(),
-            std::back_inserter(key_buffer));
-        std::copy(value_gather_iterator(old_element), value_gather_iterator(),
-            std::back_inserter(value_buffer));
-
-        uint32_t hash_chain_next = old_element.head()->hash_chain_next();
-
-        old_element.set_dead();
-        reclaim_head();
-
-        new_head = allocate_packets(key_length + value_length);
-        SAMOA_ASSERT(new_head);
-
-        element new_element(this, new_head,
-            key_length, key_buffer.begin(),
-            value_length, value_buffer.begin(),
-            hash_chain_next);
-
-        new_element.head()->set_hash_chain_next(hash_chain_next);
-    }
-
-    update_hash_chain(loc, packet_offset(new_head));
+    return reclaimed_bytes;
 }
 
 void hash_ring::update_hash_chain(const locator & loc,
     uint32_t new_offset)
 {
-    SAMOA_ASSERT(new_offset > ring_region_offset() && \
+    SAMOA_ASSERT(new_offset >= ring_region_offset() && \
         new_offset < _region_size);
 
     if(loc.previous_chained_head)
