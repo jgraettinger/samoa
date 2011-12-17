@@ -55,6 +55,8 @@ public:
 
     const datamodel::merge_func_t & get_consistent_merge() const;
 
+    const datamodel::prune_func_t & get_consistent_prune() const;
+
     /// The key's position on the hash-ring continuum
     uint64_t ring_position(const std::string & key) const;
 

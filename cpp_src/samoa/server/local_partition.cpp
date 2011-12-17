@@ -52,6 +52,15 @@ bool local_partition::merge_partition(
     return false;
 }
 
+void local_partition::spawn_tasklets(
+    const context::ptr_t & context, const table::ptr_t & table)
+{
+    _persister->set_record_upkeep_callback(
+        eventual_consistency(context,
+            table->get_uuid(), get_uuid(),
+            table->get_consistent_prune()));
+}
+
 }
 }
 

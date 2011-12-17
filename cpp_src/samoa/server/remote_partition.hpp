@@ -31,6 +31,8 @@ public:
     bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,
         spb::ClusterState::Table::Partition & local) const;
+
+    void spawn_tasklets(const context_ptr_t &, const table_ptr_t &);
 };
 
 }

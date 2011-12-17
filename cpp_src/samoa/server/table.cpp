@@ -161,7 +161,10 @@ uint64_t table::ring_position(const std::string & key) const
 
 void table::spawn_tasklets(const context::ptr_t & context)
 {
-
+    for(auto it = _index.begin(); it != _index.end(); ++it)
+    {
+        it->second->spawn_tasklets(context, _uuid);
+    }
 }
 
 bool table::merge_table(

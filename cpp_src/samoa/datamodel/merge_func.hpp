@@ -30,6 +30,10 @@ typedef boost::function<
         const core::protobuf::PersistedRecord &) // remote record
 > merge_func_t;
 
+typedef boost::function<
+    bool (core::protobuf::PersistedRecord &)
+> prune_func_t;
+
 }
 }
 

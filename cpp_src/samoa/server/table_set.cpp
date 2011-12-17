@@ -83,7 +83,10 @@ table::ptr_t table_set::get_table_by_name(const std::string & name)
 
 void table_set::spawn_tasklets(const context::ptr_t & context)
 {
-
+    for(auto it = _uuid_index.begin(); it != _uuid_index.end(); ++it)
+    {
+        it->second->spawn_tasklets(context);
+    }
 }
 
 bool table_set::merge_table_set(const spb::ClusterState & peer,
