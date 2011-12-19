@@ -42,11 +42,6 @@ class DropPartitionHandler(CommandHandler):
             # race condition check
             raise StateError(404, "partition already dropped")
 
-        ring_pos = pb_part.ring_position
-
-        pb_part.Clear()
-        pb_part.set_uuid(part_uuid.to_hex())
-        pb_part.set_ring_position(ring_pos)
         pb_part.set_dropped(True)
         pb_part.set_dropped_timestamp(int(time.time()))
 

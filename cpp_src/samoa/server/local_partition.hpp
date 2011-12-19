@@ -33,8 +33,6 @@ public:
     const persistence::persister_ptr_t & get_persister()
     { return _persister; }
 
-    void spawn_tasklets(const context_ptr_t &);
-
     bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,
         spb::ClusterState::Table::Partition & local) const;

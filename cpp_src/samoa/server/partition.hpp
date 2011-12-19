@@ -58,7 +58,8 @@ public:
         spb::ClusterState::Table::Partition & local) const = 0;
 
     //! Launches all tasklets required by the runtime partition
-    void spawn_tasklets(const context_ptr_t &, const table_ptr_t &) = 0;
+    virtual void spawn_tasklets(const context_ptr_t &,
+        const table_ptr_t &) = 0;
 
 protected:
 

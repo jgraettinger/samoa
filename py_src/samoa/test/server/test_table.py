@@ -20,7 +20,8 @@ class TestTable(unittest.TestCase):
 
         self.gen.add_local_partition(self.state.uuid)
         self.gen.add_remote_partition(self.state.uuid)
-        self.gen.add_dropped_partition(self.state.uuid)
+        self.gen.add_remote_partition(self.state.uuid
+            ).set_dropped(True)
 
         # null hypothesis - should build
         Table(self.state, self.gen.server_uuid, None)
@@ -119,11 +120,6 @@ class TestTable(unittest.TestCase):
 
         # locally drop p1
         part = self.gen.get_partition(tbl_uuid, UUID.from_name('p1'))
-        p1_rpos = part.ring_position
-
-        part.Clear()
-        part.set_uuid(UUID.from_name('p1').to_hex())
-        part.set_ring_position(p1_rpos)
         part.set_dropped(True)
 
         # locally update consistent range of p2
@@ -134,11 +130,6 @@ class TestTable(unittest.TestCase):
 
         # peer drops p3
         part = pgen.get_partition(tbl_uuid, UUID.from_name('p3'))
-        p3_rpos = part.ring_position
-
-        part.Clear()
-        part.set_uuid(UUID.from_name('p3').to_hex())
-        part.set_ring_position(p3_rpos)
         part.set_dropped(True)
 
         # peer updates consistent range of p4
@@ -154,14 +145,15 @@ class TestTable(unittest.TestCase):
 
         # additional partitions known only by peer
         pgen.add_remote_partition(tbl_uuid)
-        pgen.add_dropped_partition(tbl_uuid)
+        pgen.add_remote_partition(tbl_uuid).set_dropped(True)
         pgen.add_remote_partition(tbl_uuid)
 
 
         table = Table(self.state, self.gen.server_uuid, None)
 
         # p1 is locally dropped
-        self.assertFalse(table.get_partition(UUID.from_name('p1')))
+        self.assertNotIn(UUID.from_name('p1'),
+            [p.get_uuid() for p in table.get_ring()])
 
         # p2 is locally updated
         self.assertEquals(table.get_partition(UUID.from_name('p2')
@@ -186,7 +178,8 @@ class TestTable(unittest.TestCase):
         self.assertEquals(len(table.get_ring()), 7)
 
         # p1 is still dropped
-        self.assertFalse(table.get_partition(UUID.from_name('p1')))
+        self.assertNotIn(UUID.from_name('p1'),
+            [p.get_uuid() for p in table.get_ring()])
 
         # p2 is still updated
         self.assertEquals(table.get_partition(UUID.from_name('p2')

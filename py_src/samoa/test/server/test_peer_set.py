@@ -98,28 +98,13 @@ class TestPeerSet(unittest.TestCase):
 
         # locally drop part1
         part = fixture.get_partition(table, part1)
-        rpos = part.ring_position
-
-        part.Clear()
-        part.set_uuid(part1)
-        part.set_ring_position(rpos)
         part.set_dropped(True)
 
         # peer drops part2 & part 3
         part = pgen.get_partition(table, part2)
-        rpos = part.ring_position
-
-        part.Clear()
-        part.set_uuid(part2)
-        part.set_ring_position(rpos)
         part.set_dropped(True)
 
         part = pgen.get_partition(table, part3)
-        rpos = part.ring_position
-
-        part.Clear()
-        part.set_uuid(part3)
-        part.set_ring_position(rpos)
         part.set_dropped(True)
 
         # locally set p3 as a 'seed' peer

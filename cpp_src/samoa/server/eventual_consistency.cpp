@@ -1,5 +1,16 @@
 #include "samoa/server/eventual_consistency.hpp"
+#include "samoa/server/context.hpp"
+#include "samoa/server/replication.hpp"
+#include "samoa/server/peer_set.hpp"
+#include "samoa/server/table.hpp"
+#include "samoa/server/local_partition.hpp"
+#include "samoa/persistence/persister.hpp"
+#include "samoa/request/request_state.hpp"
+#include "samoa/request/state_exception.hpp"
 #include "samoa/core/proactor.hpp"
+#include "samoa/error.hpp"
+#include "samoa/log.hpp"
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {
@@ -15,8 +26,8 @@ eventual_consistency::eventual_consistency(
     _prune_func(prune_func)
 { }
 
-void eventual_consistency::operator()(
-    const request::state_ptr_t & rstate)
+bool eventual_consistency::operator()(
+    const request::state::ptr_t & rstate)
 {
     context::ptr_t ctxt = _weak_context.lock();
     if(!ctxt)
@@ -33,26 +44,23 @@ void eventual_consistency::operator()(
     }
 
     rstate->load_io_service_state(
-        core::proactor::get_instance()->serial_io_service());
+        core::proactor::get_proactor()->serial_io_service());
     rstate->load_context_state(ctxt);
 
     rstate->set_table_uuid(_table_uuid);
     rstate->load_table_state();
 
-    // moving a key off of the local partition requires a
-    //  successful quorum of all responsible remote partitions
+    // quorum is all responsible partitions
     rstate->set_quorum_count(0);
     rstate->load_replication_state();
 
-    // assume the common case:
-    //  this key still belongs with this partition
+    // assume common case, that this key still belongs here
     rstate->set_primary_partition_uuid(_partition_uuid);
     try {
         rstate->load_route_state();
 
-        // replicate 
+        // replicate value to peers
         rstate->peer_replication_success();
-
         replication::replicated_write(
             boost::bind(&eventual_consistency::on_replication,
                 shared_from_this()),
@@ -60,7 +68,7 @@ void eventual_consistency::operator()(
     }
     catch(const request::state_exception & e)
     {
-        // nope, this key doesn't belong on our partition;
+        // this key doesn't belong on our partition;
         //  back off to routing by key alone, and attempt
         //  to move it to responsible partitions
         std::string key = rstate->get_key();
@@ -74,13 +82,91 @@ void eventual_consistency::operator()(
                 shared_from_this(), _1, _2, rstate),
             rstate->get_peer_set()->select_best_peer(rstate));
     }
+    return true;
+}
+
+void eventual_consistency::on_replication()
+{
+    // no-op
 }
 
 void eventual_consistency::on_move_request(
     const boost::system::error_code & ec,
     samoa::client::server_request_interface iface,
-    const persistence::persister::ptr_t & persister,
     const request::state::ptr_t & rstate)
+{
+    if(ec)
+    {
+    	LOG_WARN(ec.message());
+    	return;
+    }
+
+    spb::SamoaRequest & samoa_request = iface.get_message();
+
+    samoa_request.set_type(spb::REPLICATE);
+    samoa_request.set_key(rstate->get_key());
+
+    // the handling peers should perform a replication fanout
+    samoa_request.set_requested_quorum(
+        rstate->get_table()->get_replication_factor());
+
+    samoa_request.mutable_table_uuid()->assign(
+        rstate->get_table_uuid().begin(),
+        rstate->get_table_uuid().end());
+
+    // serialize remote record to the peer
+    core::zero_copy_output_adapter zco_adapter;
+    SAMOA_ASSERT(rstate->get_remote_record(
+        ).SerializeToZeroCopyStream(&zco_adapter));
+    iface.add_data_block(zco_adapter.output_regions());
+
+    iface.flush_request(
+        boost::bind(&eventual_consistency::on_move_response,
+            shared_from_this(), _1, _2, rstate));
+}
+
+void eventual_consistency::on_move_response(
+    const boost::system::error_code & ec,
+    samoa::client::server_response_interface iface,
+    const request::state::ptr_t & rstate)
+{
+    if(ec)
+    {
+    	LOG_WARN(ec.message());
+    	return;
+    }
+    if(iface.get_error_code())
+    {
+        LOG_WARN("remote error on move: " << \
+            iface.get_message().error().ShortDebugString());
+
+        iface.finish_response();
+        return;
+    }
+    if(iface.get_message().replication_success() != \
+        rstate->get_table()->get_replication_factor())
+    {
+        LOG_WARN("failed to meet quorum while moving " << rstate->get_key());
+        iface.finish_response();
+        return;
+    }
+
+    local_partition::ptr_t partition = \
+        boost::dynamic_pointer_cast<local_partition>(
+            rstate->get_table()->get_partition(_partition_uuid));
+    SAMOA_ASSERT(partition);
+
+    partition->get_persister()->drop(
+        boost::bind(&eventual_consistency::on_move_drop,
+            shared_from_this(), _1),
+        rstate->get_key(), rstate->get_local_record());
+}
+
+bool eventual_consistency::on_move_drop(bool found)
+{
+    SAMOA_ASSERT(found);
+    return true;
+}
 
 }
 }

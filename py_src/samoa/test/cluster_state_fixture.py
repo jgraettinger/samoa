@@ -133,21 +133,6 @@ class ClusterStateFixture(object):
         self._table_name_ind[tbl.name] = tbl
         return tbl
 
-    def add_dropped_partition(self, table_uuid,
-        uuid = None, ring_position = None):
-
-        uuid = self._coerce_uuid(uuid)
-        table = self.get_table(table_uuid)
-
-        if ring_position is None:
-            ring_position = self.rnd.randint(0, 1<<64)
-
-        part = pb.add_partition(table, uuid, ring_position)
-        part.set_dropped(True)
-
-        self._part_ind[(UUID(table.uuid), uuid)] = part
-        return part
-
     def add_local_partition(self, table_uuid,
         uuid = None, ring_position = None,
         storage_size = (1<<20), index_size = 10000):

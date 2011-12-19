@@ -39,81 +39,105 @@ table::table(const spb::ClusterState::Table & ptable,
    _name(ptable.name()),
    _consistency_horizon(ptable.consistency_horizon())
 {
-    auto it = ptable.partition().begin();
-    auto last_it = it;
+    std::vector<uint64_t> ring_positions;
 
-    std::vector<const spb::ClusterState::Table::Partition *> tmp_ring;
-    tmp_ring.reserve(ptable.partition_size());
-
-    for(; it != ptable.partition().end(); ++it)
+    // gather partition positions for ring participants
+    auto it = std::begin(ptable.partition());
+    for(auto last_it = it; it != ptable.partition().end(); last_it = it++)
     {
-        // check partition ring-order invariant
+        // assert partition ring-order invariant
         SAMOA_ASSERT(last_it == it || partition_order_cmp()(*last_it, *it));
-        last_it = it;
 
-        if(it->dropped())
+        if(!it->dropped())
         {
-            // index w/ nullptr, to enforce uuid uniqueness
-            SAMOA_ASSERT(_index.insert(std::make_pair(
-                core::parse_uuid(it->uuid()), partition::ptr_t())).second);
+        	ring_positions.push_back(it->ring_position());
         }
-        else
-            tmp_ring.push_back(&(*it));
     }
+    _ring.reserve(ring_positions.size());
 
     // effective factor is bounded by the number of live partitions
     _replication_factor = std::min<unsigned>(
-        ptable.replication_factor(), tmp_ring.size());
+        ptable.replication_factor(), ring_positions.size());
 
-    for(unsigned i = 0; i != tmp_ring.size(); ++i)
+    typedef spb::ClusterState::Table::Partition proto_part_t;
+
+    // walk partitions, building runtime instances
+    for(const proto_part_t & p_part : ptable.partition())
     {
-        const spb::ClusterState::Table::Partition & ppart = *tmp_ring[i];
+        core::uuid p_uuid = core::parse_uuid(p_part.uuid());
+        core::uuid p_server_uuid = core::parse_uuid(p_part.server_uuid());
 
-        core::uuid p_uuid = core::parse_uuid(ppart.uuid());
-        core::uuid p_server_uuid = core::parse_uuid(ppart.server_uuid());
-
-        partition::ptr_t part, old_part;
-
+        partition::ptr_t previous_partition;
         if(current)
         {
-            // look for a runtime instance of the partition
-            uuid_index_t::const_iterator p_it = current->_index.find(p_uuid);
+            // look for a previous runtime instance of the partition
+            uuid_index_t::const_iterator p_it = \
+                current->_index.find(p_uuid);
 
             if(p_it != current->_index.end())
-                old_part = p_it->second;
+                previous_partition = p_it->second;
         }
 
-        // first, map to indices of the partition which bound the current
-        //  partition's range of responsible ring positions
-        uint64_t range_begin = (i + tmp_ring.size() - 1) % tmp_ring.size();
-        uint64_t range_end = (i + _replication_factor - 1) % tmp_ring.size();
+        if(p_part.dropped())
+        {
+            partition::ptr_t partition;
 
-        // lookup to map to positions on the ring (inclusive)
-        range_begin = tmp_ring[range_begin]->ring_position();
-        range_end = tmp_ring[range_end]->ring_position() - 1;
+            if(p_part.ring_layer_size())
+            {
+                // only local partitions have persister layers
+                SAMOA_ASSERT(p_server_uuid == _server_uuid);
+
+                // construct a local partition, but assign an empty
+                //  responsible range, and don't insert into the ring
+                partition = boost::make_shared<local_partition>(p_part, 0, 0,
+                    boost::dynamic_pointer_cast<local_partition>(
+                        previous_partition));
+            }
+
+            // index even nullptr, to enforce uuid uniqueness
+            SAMOA_ASSERT(_index.insert(
+                std::make_pair(p_uuid, partition)).second);
+            continue;
+        }
+
+        // map to (inclusive) ring positions which bound the
+        //  partition's range of responsible ring positions
+        uint64_t range_begin = _ring.size() + ring_positions.size() - 1;
+        uint64_t range_end   = _ring.size() + _replication_factor - 1;
+
+        range_begin = ring_positions[range_begin % ring_positions.size()];
+        range_end = ring_positions[range_end % ring_positions.size()] - 1;
+
+        partition::ptr_t partition;
 
         if(p_server_uuid == _server_uuid)
         {
-            part = boost::make_shared<local_partition>(ppart,
+            partition = boost::make_shared<local_partition>(p_part,
                 range_begin, range_end,
-                boost::dynamic_pointer_cast<local_partition>(old_part));
+                boost::dynamic_pointer_cast<local_partition>(
+                    previous_partition));
         }
         else
         {
-            part = boost::make_shared<remote_partition>(ppart,
+            partition = boost::make_shared<remote_partition>(p_part,
                 range_begin, range_end,
-                boost::dynamic_pointer_cast<remote_partition>(old_part));
+                boost::dynamic_pointer_cast<remote_partition>(
+                    previous_partition));
         }
 
         // index partition on uuid, checking for duplicates
-        SAMOA_ASSERT(_index.insert(std::make_pair(p_uuid, part)).second);
-        _ring.push_back(part);
+        SAMOA_ASSERT(_index.insert(
+            std::make_pair(p_uuid, partition)).second);
+
+        _ring.push_back(partition);
     }
 
     if(_data_type == datamodel::BLOB_TYPE)
     {
         _consistent_merge = boost::bind(&datamodel::blob::consistent_merge,
             _1, _2, _consistency_horizon);
+        _consistent_prune = boost::bind(&datamodel::blob::consistent_prune,
+            _1, _consistency_horizon);
     }
 }
 
@@ -154,6 +178,9 @@ partition::ptr_t table::get_partition(const core::uuid & uuid) const
 const datamodel::merge_func_t & table::get_consistent_merge() const
 { return _consistent_merge; }
 
+const datamodel::prune_func_t & table::get_consistent_prune() const
+{ return _consistent_prune; }
+
 uint64_t table::ring_position(const std::string & key) const
 {
     return boost::hash<std::string>()(key);
@@ -163,7 +190,12 @@ void table::spawn_tasklets(const context::ptr_t & context)
 {
     for(auto it = _index.begin(); it != _index.end(); ++it)
     {
-        it->second->spawn_tasklets(context, _uuid);
+    	if(!it->second)
+        {
+            // dropped partitions are nullptr to enforce uniqueness
+        	continue;
+        }
+        it->second->spawn_tasklets(context, shared_from_this());
     }
 }
 
@@ -217,7 +249,12 @@ bool table::merge_table(
             spb::ClusterState::Table::Partition * new_part = local_parts.Add();
 
             new_part->set_uuid(p_it->uuid());
+            new_part->set_server_uuid(p_it->server_uuid());
             new_part->set_ring_position(p_it->ring_position());
+
+            // remote peer may not tell us of our own partition
+            SAMOA_ASSERT(core::parse_uuid(
+                new_part->server_uuid()) != _server_uuid);
 
             if(p_it->dropped())
             {
@@ -227,13 +264,7 @@ bool table::merge_table(
             }
             else
             {
-                // check that peer isn't trying to tell us of our own partition
-                core::uuid server_uuid = core::parse_uuid(p_it->server_uuid());
-                SAMOA_ASSERT(server_uuid != _server_uuid);
-
                 LOG_INFO("discovered partition " << p_it->uuid());
-
-                new_part->set_server_uuid(p_it->server_uuid());
 
                 // build a temporary remote_partition instance to build
                 //  our local view of the partition
@@ -272,9 +303,6 @@ bool table::merge_table(
             {
                 // locally-live partition is remotely dropped
                 LOG_INFO("partition " << p_it->uuid() << " was dropped");
-                l_it->Clear();
-                l_it->set_uuid(p_it->uuid());
-                l_it->set_ring_position(p_it->ring_position());
                 l_it->set_dropped(true);
                 l_it->set_dropped_timestamp(time(0));
                 dirty = true;

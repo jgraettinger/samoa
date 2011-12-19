@@ -9,8 +9,8 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
-#include <boost/unordered_set.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <vector>
 #include <list>
 
@@ -19,7 +19,8 @@ namespace server {
 
 namespace spb = samoa::core::protobuf;
 
-class table
+class table :
+    public boost::enable_shared_from_this<table>
 {
 public:
 
@@ -85,6 +86,7 @@ private:
     uuid_index_t  _index;
 
     datamodel::merge_func_t _consistent_merge;
+    datamodel::prune_func_t _consistent_prune;
 };
 
 }

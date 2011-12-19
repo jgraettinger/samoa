@@ -2,6 +2,7 @@
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/datamodel/clock_util.hpp"
 #include "samoa/request/request_state.hpp"
+#include "samoa/core/server_time.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 
@@ -83,6 +84,20 @@ merge_result blob::consistent_merge(
     result.local_was_updated = true;
     result.remote_is_stale = true;
     return result;
+}
+
+bool blob::consistent_prune(
+    spb::PersistedRecord & record,
+    unsigned consistency_horizon)
+{
+    clock_util::prune_record(record, consistency_horizon);
+
+    if(record.has_expire_timestamp() && \
+       record.expire_timestamp() < core::server_time::get_time())
+    {
+        return false;
+    }
+    return true;
 }
 
 }

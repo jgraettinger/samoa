@@ -1,4 +1,7 @@
 #include "samoa/server/local_partition.hpp"
+#include "samoa/server/context.hpp"
+#include "samoa/server/table.hpp"
+#include "samoa/server/eventual_consistency.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"

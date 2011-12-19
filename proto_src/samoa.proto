@@ -80,16 +80,14 @@ message ClusterState {
         message Partition {
 
             required string uuid = 1;
+            required string server_uuid = 2;
+            required uint64 ring_position = 3;
 
-            optional bool   dropped = 2 [default = false];
-            optional uint64 dropped_timestamp = 11;
-
-            // fields captured by all partitions
-            optional string server_uuid = 3;
-            optional uint64 ring_position = 4;
-            optional uint64 consistent_range_begin = 8;
-            optional uint64 consistent_range_end = 9;
-            optional uint64 lamport_ts = 10;
+            optional uint64 consistent_range_begin = 4;
+            optional uint64 consistent_range_end = 5;
+            optional uint64 lamport_ts = 6;
+            optional bool   dropped = 7 [default = false];
+            optional uint64 dropped_timestamp = 8;
 
             message RingLayer {
 
@@ -97,7 +95,7 @@ message ClusterState {
                 required uint64 index_size = 2;
                 optional string file_path = 3;
             };
-            repeated RingLayer ring_layer = 12;
+            repeated RingLayer ring_layer = 9;
         };
         repeated Partition partition = 7;
     };

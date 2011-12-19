@@ -22,6 +22,10 @@ public:
         spb::PersistedRecord & local_record,
         const spb::PersistedRecord & remote_record,
         unsigned consistency_horizon);
+
+    static bool consistent_prune(
+        spb::PersistedRecord &,
+        unsigned consistency_horizon);
 };
 
 }
