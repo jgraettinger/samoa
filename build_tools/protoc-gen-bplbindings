@@ -439,10 +439,6 @@ method_templates[(FieldDesc.LABEL_REPEATED, 'message')] = \
     return _m.mutable_%(field_name)s(ind);
 }
 
-void %(msg_name)s_%(field_name)s_proxy::setitem(unsigned ind,
-    %(cpp_type)s val)
-{ /* not reachable from bindings */ }
-
 %(cpp_type)s py_add_%(field_name)s(
     %(msg_name)s & m)
 { return m.add_%(field_name)s(); }

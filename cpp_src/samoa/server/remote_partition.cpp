@@ -7,7 +7,7 @@ namespace server {
 remote_partition::remote_partition(
     const spb::ClusterState::Table::Partition & part,
     uint64_t range_begin, uint64_t range_end,
-    const remote_partition::ptr_t & current)
+    const remote_partition::ptr_t & /* current */)
  :  partition(part, range_begin, range_end)
 { }
 

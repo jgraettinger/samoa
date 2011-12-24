@@ -7,8 +7,7 @@
 #include "pysamoa/iterutil.hpp"
 #include <boost/python/operators.hpp>
 #include <boost/bind.hpp>
-
-#include <iostream>
+#include <memory>
 
 namespace samoa {
 namespace core {
@@ -109,7 +108,7 @@ void py_run_test(proactor & p, bpl::object test_steps, unsigned idle_timeout_ms)
     pysamoa::python_scoped_unlock unlock;
 
     boost::asio::io_service & io_srv = *p.get_declared_io_service();
-    std::auto_ptr<boost::asio::io_service::work> work(
+    std::unique_ptr<boost::asio::io_service::work> work(
         new boost::asio::io_service::work(io_srv));
 
     // initialize idle timer

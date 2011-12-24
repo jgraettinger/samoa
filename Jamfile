@@ -6,6 +6,9 @@ project root
     : requirements 
         <threading>multi
         <cxxflags>-std=c++0x
+        <cxxflags>-Wall
+        <cxxflags>-Wextra
+        <cxxflags>-Werror
         #<define>BOOST_ASIO_ENABLE_HANDLER_TRACKING
     : default-build debug 
     : build-dir $(BUILD) 

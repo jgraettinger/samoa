@@ -51,8 +51,8 @@ void client_state::flush_response(const state::ptr_t & guard)
     _flush_response_called = true;
 
     _client->schedule_response(
-        // pass this as argument to binder, but also pass a new
-        //  reference to guard the lifetime of the request_state
+        // pass 'this' as argument to binder, but also pass 'guard'
+        //  by-value, to protect the lifetime of the request state
         boost::bind(&client_state::on_response, this, _1, guard));
 }
 
@@ -95,7 +95,7 @@ void client_state::reset_client_state()
 }
 
 void client_state::on_response(server::client::response_interface iface,
-    const state::ptr_t & guard)
+    const state::ptr_t & /* guard */)
 {
     // set the response request_id to that of the request
     _samoa_response.set_request_id(_samoa_request.request_id());

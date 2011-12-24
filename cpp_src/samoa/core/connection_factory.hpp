@@ -40,8 +40,7 @@ private:
     void on_connect(const boost::system::error_code &,
         const callback_t &);
 
-    void on_timeout(const boost::system::error_code &,
-        const callback_t &);
+    void on_timeout(const boost::system::error_code &);
 
     unsigned _timeout_ms;
     io_service_ptr_t _io_srv;

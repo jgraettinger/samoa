@@ -23,7 +23,7 @@ typedef boost::shared_ptr<spb::PersistedRecord> prec_ptr_t;
 void py_on_get(
     const future::ptr_t & future,
     bool found,
-    const str_ptr_t & key,
+    const str_ptr_t & /*key_lifetime_guard*/,
     const prec_ptr_t & record)
 {
     python_scoped_lock block;
@@ -59,7 +59,7 @@ future::ptr_t py_get(persister & p, const bpl::str & py_key)
 bool py_on_drop(
     const future::ptr_t & future,
     const bpl::object & drop_callback,
-    const str_ptr_t & key,
+    const str_ptr_t & /*key_lifetime_guard*/,
     const prec_ptr_t & record,
     bool found)
 {
@@ -153,8 +153,8 @@ void py_on_put(
     const future::ptr_t & future,
     const boost::system::error_code & ec,
     const datamodel::merge_result & result,
-    const str_ptr_t & key,
-    const prec_ptr_t & local_record)
+    const str_ptr_t & /*key_lifetime_guard*/,
+    const prec_ptr_t & /*local_record_lifetime_guard*/)
 {
     pysamoa::python_scoped_lock block;
 

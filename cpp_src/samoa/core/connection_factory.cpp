@@ -55,7 +55,7 @@ connection_factory::connection_factory(
         boost::posix_time::milliseconds(p->_timeout_ms));
     p->_timer.async_wait(boost::bind(
         &connection_factory::on_timeout, p,
-        boost::asio::placeholders::error, callback));
+        boost::asio::placeholders::error));
     return p;
 }
 
@@ -96,7 +96,7 @@ void connection_factory::on_connect(
         _timer.expires_from_now(boost::posix_time::milliseconds(_timeout_ms));
         _timer.async_wait(boost::bind(
             &connection_factory::on_timeout, shared_from_this(),
-            boost::asio::placeholders::error, callback));
+            boost::asio::placeholders::error));
     }
     else if(ec)
     {
@@ -119,8 +119,7 @@ void connection_factory::on_connect(
 }
 
 void connection_factory::on_timeout(
-    const boost::system::error_code & ec,
-    const connection_factory::callback_t & callback)
+    const boost::system::error_code & ec)
 {
     // was the timer canceled?
     if(ec == boost::asio::error::operation_aborted)

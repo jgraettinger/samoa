@@ -25,7 +25,6 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
 {
     rstate->load_table_state();
     rstate->load_route_state();
-    rstate->load_replication_state();
 
     if(!rstate->get_primary_partition())
     {
@@ -33,6 +32,8 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
         rstate->get_peer_set()->forward_request(rstate);
         return;
     }
+
+    rstate->load_replication_state();
 
     bool write_request = !rstate->get_request_data_blocks().empty();
 
@@ -83,7 +84,7 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
     // local write is committed
     if(rstate->peer_replication_success())
     {
-        on_flush(rstate);
+        on_client_response(rstate);
 
         if(!merge_result.remote_is_stale)
         {
@@ -94,7 +95,7 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
 
     // quorum isn't met or a peer is out of date; start a reverse replication
     replication::replicated_write(
-        boost::bind(&replicate_handler::on_flush,
+        boost::bind(&replicate_handler::on_client_response,
             shared_from_this(), rstate),
         rstate);
 }
@@ -118,10 +119,11 @@ void replicate_handler::on_read(const boost::system::error_code & ec,
         rstate->add_response_data_block(zco_adapter.output_regions());
     }
 
-    on_flush(rstate);
+    on_client_response(rstate);
 }
 
-void replicate_handler::on_flush(const request::state::ptr_t & rstate)
+void replicate_handler::on_client_response(
+    const request::state::ptr_t & rstate)
 {
     rstate->get_samoa_response().set_replication_success(
         rstate->get_peer_success_count());

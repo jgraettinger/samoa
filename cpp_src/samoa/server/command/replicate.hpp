@@ -36,7 +36,7 @@ protected:
     void on_read(const boost::system::error_code &,
         bool, const request::state_ptr_t &);
 
-    void on_flush(const request::state_ptr_t &);
+    void on_client_response(const request::state_ptr_t &);
 };
 
 }
