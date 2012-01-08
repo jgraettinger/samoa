@@ -51,7 +51,7 @@ class TestDropTable(unittest.TestCase):
             self.assertFalse(table) 
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)
@@ -75,7 +75,7 @@ class TestDropTable(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)

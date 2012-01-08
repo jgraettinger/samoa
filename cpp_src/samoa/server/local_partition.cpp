@@ -55,7 +55,7 @@ bool local_partition::merge_partition(
     return false;
 }
 
-void local_partition::spawn_tasklets(
+void local_partition::initialize(
     const context::ptr_t & context, const table::ptr_t & table)
 {
     _persister->set_record_upkeep_callback(

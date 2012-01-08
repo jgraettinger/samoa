@@ -58,7 +58,6 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
     core::io_service_ptr_t io_srv,
     std::unique_ptr<ip::tcp::socket> & sock)
  : core::stream_protocol(io_srv, sock),
-   core::tasklet<client>(io_srv),
    _context(context),
    _protocol(protocol),
    _ready_for_read(true),
@@ -69,18 +68,19 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    _timeout_timer(*get_io_service())
 {
     LOG_DBG("created");
-
-    set_tasklet_name("client@<" + get_remote_address() + ":" +
-        boost::lexical_cast<std::string>(get_remote_port()) + ">"); 
 }
 
 client::~client()
 {
+	_context->drop_client(reinterpret_cast<size_t>(this));
     LOG_DBG("destroyed");
 }
 
-void client::run_tasklet()
+void client::initialize()
 {
+	_context->add_client(reinterpret_cast<size_t>(this),
+        shared_from_this());
+
     on_next_request();
 
     // start a timeout timer, waiting for requests from the client
@@ -90,7 +90,7 @@ void client::run_tasklet()
         &client::on_timeout, shared_from_this(), _1));
 }
 
-void client::halt_tasklet()
+void client::shutdown()
 {
     core::stream_protocol::close();
     _timeout_timer.cancel();

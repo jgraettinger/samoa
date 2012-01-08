@@ -3,7 +3,6 @@
 #include "samoa/server/context.hpp"
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/client/server_pool.hpp"
-#include "samoa/core/tasklet_group.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/future.hpp"
 #include <stdexcept>
@@ -92,10 +91,9 @@ void make_context_bindings()
         .def("get_server_hostname", &context::get_server_hostname,
             bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_server_port", &context::get_server_port)
-        .def("get_tasklet_group", &context::get_tasklet_group,
-            bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_cluster_state", &context::get_cluster_state)
-        .def("spawn_tasklets", &context::spawn_tasklets)
+        .def("initialize", &context::initialize)
+        .def("shutdown", &context::shutdown)
         .def("cluster_state_transaction", &py_cluster_state_transaction);
 }
 

@@ -6,7 +6,6 @@
 #include "samoa/server/context.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "samoa/datamodel/blob.hpp"
-#include "samoa/core/tasklet_group.hpp"
 #include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -186,7 +185,7 @@ uint64_t table::ring_position(const std::string & key) const
     return boost::hash<std::string>()(key);
 }
 
-void table::spawn_tasklets(const context::ptr_t & context)
+void table::initialize(const context::ptr_t & context)
 {
     for(auto it = _index.begin(); it != _index.end(); ++it)
     {
@@ -195,7 +194,7 @@ void table::spawn_tasklets(const context::ptr_t & context)
             // dropped partitions are nullptr to enforce uniqueness
         	continue;
         }
-        it->second->spawn_tasklets(context, shared_from_this());
+        it->second->initialize(context, shared_from_this());
     }
 }
 

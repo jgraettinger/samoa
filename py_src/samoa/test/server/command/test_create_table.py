@@ -68,7 +68,7 @@ class TestCreateTable(unittest.TestCase):
             self.assertEquals(table.get_consistency_horizon(), 300)
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)
@@ -118,7 +118,7 @@ class TestCreateTable(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)

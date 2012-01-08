@@ -96,7 +96,7 @@ class TestRequestMuxing(unittest.TestCase):
             functools.partial(self._make_request, 5, []),
             functools.partial(self._make_request, 6, [6, 4, 5]),
             functools.partial(self._validate_responses, [6, 4, 5]),
-            self.context.get_tasklet_group().cancel_group
+            self.context.shutdown
         ])
 
     def test_concurrency_limit(self):
@@ -138,7 +138,7 @@ class TestRequestMuxing(unittest.TestCase):
             yield self._validate_responses(release_order)
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.context.shutdown()
             yield
 
         Proactor.get_proactor().run_test([test, validate])

@@ -31,7 +31,7 @@ class TestPartitionUpkeep(unittest.TestCase):
 
         self.part_uuid_1 = self.cluster.add_partition(table_uuid, 'peer_1')
         self.part_uuid_2 = self.cluster.add_partition(table_uuid, 'peer_2')
-
+        assert False
         self.cluster.start_server_contexts()
 
         

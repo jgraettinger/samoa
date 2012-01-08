@@ -10,7 +10,6 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/system/error_code.hpp>
 
-
 namespace samoa {
 namespace server {
 
@@ -46,9 +45,9 @@ private:
     bool on_move_drop(bool);
 
     context_weak_ptr_t _weak_context;
-    core::uuid _table_uuid;
-    core::uuid _partition_uuid;
-    datamodel::prune_func_t _prune_func;
+    const core::uuid _table_uuid;
+    const core::uuid _partition_uuid;
+    const datamodel::prune_func_t _prune_func;
 };
 
 }

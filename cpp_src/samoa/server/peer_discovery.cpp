@@ -3,7 +3,6 @@
 #include "samoa/server/context.hpp"
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/server/peer_set.hpp"
-#include "samoa/core/tasklet_group.hpp"
 #include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -16,60 +15,77 @@ namespace server {
 
 namespace spb = samoa::core::protobuf;
 
-// default period of 1 minute
-boost::posix_time::time_duration peer_discovery::period = \
-    boost::posix_time::minutes(1);
-
 peer_discovery::peer_discovery(const context::ptr_t & context,
     const core::uuid & peer_uuid)
- : core::periodic_task<peer_discovery>(),
-   _weak_context(context),
+ : _weak_context(context->shared_from_this()), // pointer-from-python guard
    _peer_uuid(peer_uuid)
 {
-    LOG_DBG(peer_uuid);
-
-    {
-        std::stringstream tmp;
-        tmp << "peer_discovery<" << this << ">@" << peer_uuid;
-        set_tasklet_name(tmp.str());
-    }
 }
 
-void peer_discovery::begin_cycle()
+void peer_discovery::operator()()
 {
-    LOG_DBG("called " << get_tasklet_name());
+    auto noop_callback = [](const boost::system::error_code &) {};
+    this->operator()(noop_callback);
+}
 
-    context::ptr_t context = _weak_context.lock();
-    SAMOA_ASSERT(context);
-
-    if(!context->get_cluster_state()->get_peer_set()->has_server(_peer_uuid))
+void peer_discovery::operator()(callback_t && callback)
+{
     {
-        LOG_ERR("peer is unknown: " << _peer_uuid);
-        next_cycle(period);
+    	spinlock::guard guard(_lock);
+
+    	if(_context)
+        {
+            callback(boost::system::errc::make_error_code(
+                boost::system::errc::operation_in_progress));
+            return;
+        }
+
+        _context = _weak_context.lock();
+
+        if(!_context)
+        {
+            // shutdown race condition
+            callback(boost::system::errc::make_error_code(
+                boost::system::errc::operation_canceled));
+            return;
+        }
+    }
+
+    _callback = std::move(callback);
+
+    peer_set::ptr_t peer_set = _context->get_cluster_state()->get_peer_set();
+    if(!peer_set->has_server(_peer_uuid))
+    {
+        LOG_WARN("peer " << _peer_uuid << " is unknown (race condition?)");
+        finish(boost::system::errc::make_error_code(
+            boost::system::errc::operation_canceled));
         return;
     }
 
-    context->get_cluster_state()->get_peer_set()->schedule_request(
+    SAMOA_ASSERT(_context);
+    LOG_INFO("beginning discovery <" << _context->get_server_uuid() \
+        << " => " << _peer_uuid << ">");
+
+    peer_set->schedule_request(
         boost::bind(&peer_discovery::on_request,
-            shared_from_this(), _1, _2, context),
+            shared_from_this(), _1, _2),
         _peer_uuid);
 }
 
 void peer_discovery::on_request(
     const boost::system::error_code & ec,
-    samoa::client::server_request_interface & iface,
-    const context::ptr_t & context)
+    samoa::client::server_request_interface & iface)
 {
     if(ec)
     {
         LOG_ERR(ec.message());
-        next_cycle(period);
+        finish(ec);
         return;
     }
 
     // serialize current cluster-state protobuf description;
     core::zero_copy_output_adapter zco_adapter;
-    context->get_cluster_state()->get_protobuf_description(
+    _context->get_cluster_state()->get_protobuf_description(
         ).SerializeToZeroCopyStream(&zco_adapter);
 
     iface.get_message().set_type(spb::CLUSTER_STATE);
@@ -77,18 +93,17 @@ void peer_discovery::on_request(
 
     iface.flush_request(
         boost::bind(&peer_discovery::on_response,
-            shared_from_this(), _1, _2, context));
+            shared_from_this(), _1, _2));
 }
 
 void peer_discovery::on_response(
     const boost::system::error_code & ec,
-    samoa::client::server_response_interface & iface,
-    const context::ptr_t & context)
+    samoa::client::server_response_interface & iface)
 {
     if(ec)
     {
         LOG_ERR(ec.message());
-        next_cycle(period);
+        finish(ec);
         return;
     }
 
@@ -98,7 +113,8 @@ void peer_discovery::on_response(
             iface.get_message().error().ShortDebugString());
 
         iface.finish_response();
-        next_cycle(period);
+        finish(boost::system::errc::make_error_code(
+            boost::system::errc::protocol_error));
         return;
     }
 
@@ -109,29 +125,37 @@ void peer_discovery::on_response(
         iface.get_response_data_blocks()[0]);
     SAMOA_ASSERT(_remote_state.ParseFromZeroCopyStream(&zci_adapter));
 
-    context->cluster_state_transaction(
+    _context->cluster_state_transaction(
         boost::bind(&peer_discovery::on_state_transaction,
-            shared_from_this(), _1, context));
+            shared_from_this(), _1));
 
     iface.finish_response();
 }
 
-bool peer_discovery::on_state_transaction(spb::ClusterState & local_state,
-    const context::ptr_t & context)
+bool peer_discovery::on_state_transaction(
+    spb::ClusterState & local_state)
 {
     try
     {
-        bool result = context->get_cluster_state()->merge_cluster_state(
+        bool result = _context->get_cluster_state()->merge_cluster_state(
             _remote_state, local_state);
 
-        next_cycle(period);
+        finish(boost::system::error_code());
         return result;
     }
-    catch(...)
+    catch(const std::exception & exc)
     {
-        next_cycle(period);
+        LOG_ERR(exc.what());
+        finish(boost::system::errc::make_error_code(
+            boost::system::errc::bad_message));
         throw;
     }
+}
+
+void peer_discovery::finish(const boost::system::error_code & ec)
+{
+    _context.reset();
+    callback_t(std::move(_callback))(ec);
 }
 
 }

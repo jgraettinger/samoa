@@ -7,7 +7,6 @@
 #include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/stream_protocol.hpp"
-#include "samoa/core/tasklet.hpp"
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
 #include <list>
@@ -58,11 +57,12 @@ private:
 
 class client :
     public core::stream_protocol,
-    public core::tasklet<client>
+    public boost::enable_shared_from_this<client>
 {
 public:
 
-    using core::tasklet<client>::ptr_t;
+    typedef client_ptr_t ptr_t;
+    typedef client_weak_ptr_t weak_ptr_t;
 
     typedef client_response_callback_t response_callback_t;
     typedef client_response_interface response_interface;
@@ -75,7 +75,6 @@ public:
 
     ~client();
 
-    // both bases define equivalent methods; pick one
     using core::stream_protocol::get_io_service;
 
     const context_ptr_t & get_context() const
@@ -99,8 +98,9 @@ public:
      */
     void schedule_response(const response_callback_t &);
 
-    void run_tasklet();
-    void halt_tasklet();
+    void initialize();
+
+    void shutdown();
 
 private:
 

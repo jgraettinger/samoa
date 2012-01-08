@@ -51,7 +51,7 @@ public:
     const table_set_ptr_t & get_table_set() const
     { return _table_set; }
 
-    void spawn_tasklets(const context_ptr_t &);
+    void initialize(const context_ptr_t &);
 
     //! Merges a peer cluster_state description into the local description
     /*!

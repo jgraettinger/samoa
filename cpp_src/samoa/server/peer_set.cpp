@@ -4,15 +4,17 @@
 #include "samoa/server/partition.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/server/context.hpp"
-#include "samoa/core/tasklet_group.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/unordered_set.hpp>
 #include <boost/uuid/uuid_generators.hpp>
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {
+
+bool peer_set::_discovery_enabled = true;
 
 peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
 {
@@ -32,11 +34,11 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
         {
             set_connected_server(uuid, current->get_server(uuid));
 
-            _discovery_tasklets[uuid] = current->_discovery_tasklets[uuid];
+            _discovery_functors[uuid] = current->_discovery_functors[uuid];
         }
         else
         {
-            _discovery_tasklets[uuid] = peer_discovery::ptr_t();
+            _discovery_functors[uuid] = peer_discovery::ptr_t();
         }
     }
 
@@ -47,22 +49,24 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
     if(current && current->has_server(local_uuid))
     {
         set_connected_server(local_uuid, current->get_server(local_uuid));
-
-        // obviously, we don't run a discovery-tasklet against the loopback
     }
 }
 
-void peer_set::spawn_tasklets(const context::ptr_t & context)
+void peer_set::initialize(const context::ptr_t & context)
 {
-    for(discovery_tasklets_t::iterator it = _discovery_tasklets.begin();
-        it != _discovery_tasklets.end(); ++it)
+    for(discovery_functors_t::value_type & entry : _discovery_functors)
     {
-        // does a tasklet already exist?
-        if(it->second)
+        if(entry.second)
             continue;
 
-        it->second = boost::make_shared<peer_discovery>(context, it->first);
-        context->get_tasklet_group()->start_managed_tasklet(it->second);
+        entry.second = boost::make_shared<peer_discovery>(
+            context, entry.first);
+
+        if(!_discovery_enabled)
+        	continue;
+
+        // initiate discovery for new peer
+        (*entry.second)();
     }
 }
 
@@ -263,6 +267,30 @@ void peer_set::forward_request(const request::state::ptr_t & rstate)
             boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
             _1, _2, rstate),
         best_peer_uuid);
+}
+
+void peer_set::begin_peer_discovery()
+{
+	if(!_discovery_enabled)
+        return;
+
+    for(const discovery_functors_t::value_type & entry : _discovery_functors)
+    {
+        (*entry.second)();
+    }
+}
+
+void peer_set::begin_peer_discovery(const core::uuid & peer_uuid)
+{
+    discovery_functors_t::const_iterator it = \
+        _discovery_functors.find(peer_uuid);
+
+    SAMOA_ASSERT(it != _discovery_functors.end());
+
+	if(!_discovery_enabled)
+        return;
+
+    (*it->second)();
 }
 
 void peer_set::on_forwarded_request(

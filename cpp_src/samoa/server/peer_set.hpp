@@ -21,7 +21,7 @@ public:
 
     peer_set(const spb::ClusterState &, const ptr_t &);
 
-    void spawn_tasklets(const context_ptr_t &);
+    void initialize(const context_ptr_t &);
 
     void merge_peer_set(const spb::ClusterState & peer,
         spb::ClusterState & local) const;
@@ -34,11 +34,29 @@ public:
      */
     core::uuid select_best_peer(const request::state_ptr_t &);
 
-    /*! \brief Forwards the client request to a peer server
+    /*! \brief Forwards client request to the peer of select_best_peer()
     */
     void forward_request(const request::state_ptr_t &);
 
+    /*! \brief Begins a peer discovery operation against all peers
+     *  Called on startup, periodically (?), or when a local 
+     *   state change must be broadcast to peers
+     */
+    void begin_peer_discovery();
+
+    /*! \brief Begins a discovery operation against a specific peer
+     *  Silently ignored if an operation is in-progress
+     *  Called whenever a state discrepancy is detected
+     *  (ie, forward_request or replication fails due to route error)
+     */
+    void begin_peer_discovery(const core::uuid & peer_uuid);
+
+    static void set_discovery_enabled(bool enabled)
+    { _discovery_enabled = enabled; }
+
 private:
+
+    static bool _discovery_enabled;
 
     void on_forwarded_request(
         const boost::system::error_code &,
@@ -50,8 +68,8 @@ private:
         samoa::client::server_response_interface &,
         const request::state_ptr_t &);
 
-    typedef std::map<core::uuid, peer_discovery_ptr_t> discovery_tasklets_t;
-    discovery_tasklets_t _discovery_tasklets;
+    typedef std::map<core::uuid, peer_discovery_ptr_t> discovery_functors_t;
+    discovery_functors_t _discovery_functors;
 };
 
 }

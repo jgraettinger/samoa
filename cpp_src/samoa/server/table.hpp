@@ -61,8 +61,7 @@ public:
     /// The key's position on the hash-ring continuum
     uint64_t ring_position(const std::string & key) const;
 
-    //! Launches all tasklets required by the runtime table
-    void spawn_tasklets(const context_ptr_t &);
+    void initialize(const context_ptr_t &);
 
     //! Merges a peer table description into the local description
     /*!

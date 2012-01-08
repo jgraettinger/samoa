@@ -7,6 +7,7 @@
 #include "samoa/core/uuid.hpp"
 #include "samoa/spinlock.hpp"
 #include <boost/function.hpp>
+#include <unordered_map>
 #include <string>
 
 namespace samoa {
@@ -34,12 +35,11 @@ public:
     unsigned short get_server_port() const
     { return _port; }
 
-    const core::tasklet_group_ptr_t & get_tasklet_group() const
-    { return _tasklet_group; }
-
     cluster_state_ptr_t get_cluster_state() const;
 
-	void spawn_tasklets();
+	void initialize();
+
+    void shutdown();
 
     typedef boost::function<bool(spb::ClusterState &)
         > cluster_state_callback_t;
@@ -78,6 +78,14 @@ public:
     void cluster_state_transaction(
         const cluster_state_callback_t &);
 
+    void add_listener(size_t listener_id, const listener_ptr_t &);
+
+    void drop_listener(size_t listener_id);
+
+    void add_client(size_t client_id, const client_ptr_t &);
+
+    void drop_client(size_t client_id);
+
 private:
 
     void on_cluster_state_transaction(const cluster_state_callback_t &);
@@ -88,10 +96,15 @@ private:
 
     const core::proactor_ptr_t   _proactor;
     const core::io_service_ptr_t _io_srv;
-    const core::tasklet_group_ptr_t _tasklet_group;
 
     mutable spinlock _cluster_state_lock;
     cluster_state_ptr_t _cluster_state;
+
+    typedef std::unordered_map<size_t, listener_ptr_t> listeners_t;
+    listeners_t _listeners;
+
+    typedef std::unordered_map<size_t, client_weak_ptr_t> clients_t;
+    clients_t _clients;
 };
 
 }

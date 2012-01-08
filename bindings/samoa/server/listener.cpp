@@ -3,7 +3,6 @@
 #include "samoa/server/listener.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/protocol.hpp"
-#include "samoa/core/tasklet.hpp"
 #include <string>
 
 namespace samoa {
@@ -14,8 +13,7 @@ using namespace std;
 
 void make_listener_bindings()
 {
-    bpl::class_<listener, listener::ptr_t, boost::noncopyable,
-        bpl::bases<core::tasklet_base> >("Listener",
+    bpl::class_<listener, listener::ptr_t, boost::noncopyable>("Listener",
             bpl::init<const context::ptr_t &, const protocol::ptr_t &>(
                 bpl::args("context", "protocol")))
         .def("get_address", &listener::get_address)
@@ -24,6 +22,7 @@ void make_listener_bindings()
             bpl::return_value_policy<bpl::copy_const_reference>())
         .def("get_protocol", &listener::get_protocol,
             bpl::return_value_policy<bpl::copy_const_reference>())
+        .def("initialize", &listener::initialize)
         ;
 }
 

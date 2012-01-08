@@ -19,20 +19,10 @@ class PeeredCluster(object):
         self.fixtures = {}
         self.partitions = []
 
-        # select the first server as the server other servers peer against
-        root_fixture = None
-
         for name in server_names:
 
             module = TestModule()
             module.fixture = common_fixture.clone_peer()
-
-            if root_fixture is None:
-                root_fixture = module.fixture
-            else:
-                module.fixture.add_peer(
-                    uuid = root_fixture.server_uuid,
-                    port = root_fixture.server_port)
 
             self.injectors[name] = module.configure(getty.Injector())
             self.fixtures[name] = module.fixture
@@ -41,6 +31,12 @@ class PeeredCluster(object):
         self.listeners = None
         self.contexts = None
         self.persisters = None
+
+    def set_known_peer(self, server_name, peer_name):
+
+        self.fixtures[server_name].add_peer(
+            uuid = self.fixtures[peer_name].server_uuid,
+            port = self.fixtures[peer_name].server_port)
 
     def add_partition(self, table_uuid, server_name):
 
@@ -73,7 +69,7 @@ class PeeredCluster(object):
     def stop_server_contexts(self):
 
         for context in self.contexts.values():
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
 
     def get_connection(self, name):
 

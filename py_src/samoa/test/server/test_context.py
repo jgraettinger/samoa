@@ -61,7 +61,7 @@ class TestContext(unittest.TestCase):
             part = table.get_partition(UUID.from_name('new_part'))
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)

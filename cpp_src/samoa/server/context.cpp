@@ -1,9 +1,10 @@
 
 #include "samoa/server/context.hpp"
 #include "samoa/server/cluster_state.hpp"
+#include "samoa/server/listener.hpp"
+#include "samoa/server/client.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/core/uuid.hpp"
-#include "samoa/core/tasklet_group.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
@@ -17,8 +18,7 @@ context::context(const spb::ClusterState & state)
    _hostname(state.local_hostname()),
    _port(state.local_port()),
    _proactor(core::proactor::get_proactor()),
-   _io_srv(_proactor->serial_io_service()),
-   _tasklet_group(boost::make_shared<core::tasklet_group>())
+   _io_srv(_proactor->serial_io_service())
 {
     SAMOA_ASSERT(state.IsInitialized());
 
@@ -43,9 +43,28 @@ cluster_state_ptr_t context::get_cluster_state() const
     return _cluster_state;
 }
 
-void context::spawn_tasklets()
+void context::initialize()
 {
-    _cluster_state->spawn_tasklets(shared_from_this());
+    _cluster_state->initialize(shared_from_this());
+}
+
+void context::shutdown()
+{
+    for(const listeners_t::value_type & entry : _listeners)
+    {
+    	entry.second->shutdown();
+    }
+    _listeners.clear();
+
+    for(const clients_t::value_type & entry : _clients)
+    {
+        client::ptr_t client(entry.second.lock());
+
+        if(client)
+        {
+        	client->shutdown();
+        }
+    }
 }
 
 void context::cluster_state_transaction(
@@ -53,6 +72,33 @@ void context::cluster_state_transaction(
 {
     _io_srv->post(boost::bind(&context::on_cluster_state_transaction,
         shared_from_this(), callback));
+}
+
+void context::add_client(size_t client_id, const client::ptr_t & client)
+{
+    SAMOA_ASSERT(_clients.insert(
+        std::make_pair(client_id, client)).second);
+}
+
+void context::drop_client(size_t client_id)
+{
+    clients_t::iterator it = _clients.find(client_id);
+    SAMOA_ASSERT(it != _clients.end());
+    _clients.erase(it);
+}
+
+void context::add_listener(size_t listener_id,
+    const listener::ptr_t & listener)
+{
+    SAMOA_ASSERT(_listeners.insert(
+        std::make_pair(listener_id, listener)).second);
+}
+
+void context::drop_listener(size_t listener_id)
+{
+    listeners_t::iterator it = _listeners.find(listener_id);
+    SAMOA_ASSERT(it != _listeners.end());
+    _listeners.erase(it);
 }
 
 void context::on_cluster_state_transaction(
@@ -74,7 +120,7 @@ void context::on_cluster_state_transaction(
     cluster_state::ptr_t next_state = boost::make_shared<cluster_state>(
         std::move(next_pb_state), _cluster_state);
 
-    next_state->spawn_tasklets(shared_from_this());
+    next_state->initialize(shared_from_this());
 
     // TODO(johng) commit next_cluster_state to disk
 

@@ -55,7 +55,7 @@ class TestDropPartition(unittest.TestCase):
                 [p.get_uuid() for p in table.get_ring()])
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)
@@ -86,7 +86,7 @@ class TestDropPartition(unittest.TestCase):
                 [p.get_uuid() for p in table.get_ring()])
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)
@@ -136,7 +136,7 @@ class TestDropPartition(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            self.context.get_tasklet_group().cancel_group()
+            self.context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)

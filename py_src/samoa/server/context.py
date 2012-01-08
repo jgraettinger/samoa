@@ -10,5 +10,5 @@ class Context(_server.Context):
         cluster_state = samoa.core.protobuf.ClusterState)
     def __init__(self, cluster_state):
         _server.Context.__init__(self, cluster_state)
-        self.spawn_tasklets()
+        self.initialize()
 

@@ -30,7 +30,13 @@ inline bool next(const boost::python::object & iter, boost::python::object & o)
     PyObject * py_ptr = PyIter_Next(iter.ptr());
 
     if(!py_ptr)
+    {
+        if(PyErr_Occurred())
+        {
+            boost::python::throw_error_already_set();
+        }
         return false;
+    }
 
     o = boost::python::object(boost::python::handle<>(py_ptr));
     return true;

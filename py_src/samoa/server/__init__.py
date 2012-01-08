@@ -2,3 +2,4 @@
 import samoa.core._core
 import samoa.client._client
 import samoa.request._request
+import samoa.persistence._persistence

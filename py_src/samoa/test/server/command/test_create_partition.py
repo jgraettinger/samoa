@@ -66,7 +66,7 @@ class TestCreatePartition(unittest.TestCase):
             self.assertEquals(ring_layer.index_size(), 1234)
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)
@@ -123,7 +123,7 @@ class TestCreatePartition(unittest.TestCase):
             response.finish_response()
 
             # cleanup
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)

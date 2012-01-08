@@ -12,5 +12,5 @@ class Listener(_server.Listener):
         protocol = protocol.Protocol)
     def __init__(self, context, protocol):
         _server.Listener.__init__(self, context, protocol)
-        context.get_tasklet_group().start_managed_tasklet(self)
+        self.initialize()
 

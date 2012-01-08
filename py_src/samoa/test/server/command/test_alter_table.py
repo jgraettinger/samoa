@@ -64,7 +64,7 @@ class TestAlterTable(unittest.TestCase):
             self.assertEquals(table.get_replication_factor(), 3)
             self.assertEquals(table.get_consistency_horizon(), 1234)
 
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)
@@ -99,7 +99,7 @@ class TestAlterTable(unittest.TestCase):
             self.assertEquals(response.get_error_code(), 400)
             response.finish_response()
 
-            context.get_tasklet_group().cancel_group()
+            context.shutdown()
             yield
 
         Proactor.get_proactor().run_test(test)

@@ -2,19 +2,21 @@
 #define SAMOA_SERVER_LISTENER_HPP
 
 #include "samoa/core/fwd.hpp"
-#include "samoa/core/tasklet.hpp"
 #include "samoa/server/fwd.hpp"
+#include <boost/smart_ptr/enable_shared_from_this.hpp>
+#include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 #include <string>
 
 namespace samoa {
 namespace server {
 
-class listener : public core::tasklet<listener>
+class listener :
+    public boost::enable_shared_from_this<listener>
 {
 public:
 
-    using core::tasklet<listener>::ptr_t;
+    typedef listener_ptr_t ptr_t;
 
     listener(const context_ptr_t &, const protocol_ptr_t &);
 
@@ -29,12 +31,17 @@ public:
     const protocol_ptr_t & get_protocol() const
     { return _protocol; }
 
-    void run_tasklet();
-    void halt_tasklet();
+    void initialize();
+
+    void shutdown();
 
 private:
 
     void on_accept(const boost::system::error_code & ec);
+
+    // proactor & io-service lifetime management
+    const core::proactor_ptr_t _proactor;
+    const core::io_service_ptr_t _io_service;
 
     const context_ptr_t  _context;
     const protocol_ptr_t _protocol;

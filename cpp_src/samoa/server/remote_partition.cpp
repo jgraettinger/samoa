@@ -24,7 +24,7 @@ bool remote_partition::merge_partition(
     return true;
 }
 
-void remote_partition::spawn_tasklets(
+void remote_partition::initialize(
     const context_ptr_t &, const table_ptr_t &)
 { }
 
