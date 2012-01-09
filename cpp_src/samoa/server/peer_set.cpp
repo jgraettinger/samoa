@@ -266,7 +266,7 @@ void peer_set::forward_request(const request::state::ptr_t & rstate)
     schedule_request(
         boost::bind(&peer_set::on_forwarded_request,
             boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-            _1, _2, rstate),
+            _1, _2, rstate, best_peer_uuid),
         best_peer_uuid);
 }
 
@@ -297,7 +297,8 @@ void peer_set::begin_peer_discovery(const core::uuid & peer_uuid)
 void peer_set::on_forwarded_request(
     const boost::system::error_code & ec,
     samoa::client::server_request_interface & iface,
-    const request::state::ptr_t & rstate)
+    const request::state::ptr_t & rstate,
+    const core::uuid & peer_uuid)
 {
     if(ec)
     {
@@ -317,13 +318,14 @@ void peer_set::on_forwarded_request(
     iface.flush_request(
         boost::bind(&peer_set::on_forwarded_response,
             boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-            _1, _2, rstate));
+            _1, _2, rstate, peer_uuid));
 }
 
 void peer_set::on_forwarded_response(
     const boost::system::error_code & ec,
     samoa::client::server_response_interface & iface,
-    const request::state::ptr_t & rstate)
+    const request::state::ptr_t & rstate,
+    const core::uuid & peer_uuid)
 {
     if(ec)
     {
@@ -341,6 +343,12 @@ void peer_set::on_forwarded_response(
     }
 
     rstate->flush_response();
+
+    if(iface.get_error_code() == 404)
+    {
+        // cluster-state may be inconsistent
+        begin_peer_discovery(peer_uuid);    
+    }
     iface.finish_response();
 }
 

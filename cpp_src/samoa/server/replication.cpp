@@ -31,7 +31,8 @@ void replication::repaired_read(
                 // wrap with request's io-service to synchronize callbacks
                 rstate->get_io_service()->wrap(
                     boost::bind(&replication::on_peer_read_request,
-                        _1, _2, callback, rstate, partition)),
+                        _1, _2, callback, rstate,
+                        partition->get_server_uuid(), partition->get_uuid())),
                 partition->get_server_uuid());
         }
     }
@@ -47,7 +48,8 @@ void replication::replicated_write(
             // wrap with request's io-service to synchronize callbacks
             rstate->get_io_service()->wrap(
                 boost::bind(&replication::on_peer_write_request,
-                    _1, _2, callback, rstate, partition)),
+                    _1, _2, callback, rstate,
+                    partition->get_server_uuid(), partition->get_uuid())),
             partition->get_server_uuid());
     }
 }
@@ -55,7 +57,7 @@ void replication::replicated_write(
 void replication::build_peer_request(
     samoa::client::server_request_interface & iface,
     const request::state::ptr_t & rstate,
-    const partition::ptr_t & peer_part)
+    const core::uuid & part_uuid)
 {
     spb::SamoaRequest & samoa_request = iface.get_message();
 
@@ -66,26 +68,25 @@ void replication::build_peer_request(
     samoa_request.set_requested_quorum(1);
 
     samoa_request.mutable_table_uuid()->assign(
-        rstate->get_table_uuid().begin(),
-        rstate->get_table_uuid().end());
+        std::begin(rstate->get_table_uuid()),
+        std::end(rstate->get_table_uuid()));
 
     // assign remote partition as primary partition_uuid
     samoa_request.mutable_partition_uuid()->assign(
-        peer_part->get_uuid().begin(),
-        peer_part->get_uuid().end());
+        std::begin(part_uuid), std::end(part_uuid));
 
     // assign our local partition as a peer_partition_uuid
     samoa_request.add_peer_partition_uuid()->assign(
-        rstate->get_primary_partition_uuid().begin(),
-        rstate->get_primary_partition_uuid().end());
+        std::begin(rstate->get_primary_partition_uuid()),
+        std::end(rstate->get_primary_partition_uuid()));
 
     // assign _other_ remote partitions as peer_partition_uuid
-    for(const core::uuid & part_uuid : rstate->get_peer_partition_uuids())
+    for(const core::uuid & other_uuid : rstate->get_peer_partition_uuids())
     {
-        if(part_uuid != peer_part->get_uuid())
+        if(other_uuid != part_uuid)
         {
             samoa_request.add_peer_partition_uuid()->assign(
-                std::begin(part_uuid), std::end(part_uuid));
+                std::begin(other_uuid), std::end(other_uuid));
         }
     }
 }
@@ -124,7 +125,8 @@ void replication::on_peer_read_request(
     samoa::client::server_request_interface iface,
     const replication::read_callback_t & callback,
     const request::state::ptr_t & rstate,
-    const partition::ptr_t & peer_part)
+    const core::uuid & peer_uuid,
+    const core::uuid & part_uuid)
 {
     if(ec)
     {
@@ -144,20 +146,21 @@ void replication::on_peer_read_request(
         return;
     }
 
-    build_peer_request(iface, rstate, peer_part);
+    build_peer_request(iface, rstate, part_uuid);
 
     iface.flush_request(
         rstate->get_io_service()->wrap(
             // wrap with request's io-service to synchronize callbacks
             boost::bind(&replication::on_peer_read_response,
-                _1, _2, callback, rstate)));
+                _1, _2, callback, rstate, peer_uuid)));
 }
 
 void replication::on_peer_read_response(
     const boost::system::error_code & ec,
     samoa::client::server_response_interface iface,
     const replication::read_callback_t & callback,
-    const request::state::ptr_t & rstate)
+    const request::state::ptr_t & rstate,
+    const core::uuid & peer_uuid)
 {
     if(ec || iface.get_error_code())
     {
@@ -170,6 +173,11 @@ void replication::on_peer_read_response(
             LOG_WARN("remote error on replicated read: " << \
                 iface.get_message().error().ShortDebugString());
 
+            if(iface.get_error_code() == 404)
+            {
+                // cluster-state may be inconsistent
+                rstate->get_peer_set()->begin_peer_discovery(peer_uuid);
+            }
             iface.finish_response();
         }
 
@@ -217,13 +225,13 @@ void replication::on_local_read_repair(
     callback(ec, found);
 }
 
-
 void replication::on_peer_write_request(
     const boost::system::error_code & ec,
     samoa::client::server_request_interface iface,
     const replication::write_callback_t & callback,
     const request::state::ptr_t & rstate,
-    const partition::ptr_t & peer_part)
+    const core::uuid & peer_uuid,
+    const core::uuid & part_uuid)
 {
     if(ec)
     {
@@ -236,7 +244,7 @@ void replication::on_peer_write_request(
         return;
     }
 
-    build_peer_request(iface, rstate, peer_part);
+    build_peer_request(iface, rstate, part_uuid);
 
     // serialize local record to the peer
     core::zero_copy_output_adapter zco_adapter;
@@ -248,14 +256,15 @@ void replication::on_peer_write_request(
         rstate->get_io_service()->wrap(
             // wrap with request's io-service to synchronize callbacks
             boost::bind(&replication::on_peer_write_response,
-                _1, _2, callback, rstate)));
+                _1, _2, callback, rstate, peer_uuid)));
 }
 
 void replication::on_peer_write_response(
     const boost::system::error_code & ec,
     samoa::client::server_response_interface iface,
     const replication::write_callback_t & callback,
-    const request::state::ptr_t & rstate)
+    const request::state::ptr_t & rstate,
+    const core::uuid & peer_uuid)
 {
     if(ec || iface.get_error_code())
     {
@@ -268,6 +277,11 @@ void replication::on_peer_write_response(
             LOG_WARN("remote error on replicated write: " << \
                 iface.get_message().error().ShortDebugString());
 
+            if(iface.get_error_code() == 404)
+            {
+                // cluster-state may be inconsistent
+                rstate->get_peer_set()->begin_peer_discovery(peer_uuid);
+            }
             iface.finish_response();
         }
 

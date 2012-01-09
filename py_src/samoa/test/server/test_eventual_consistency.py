@@ -16,7 +16,7 @@ from samoa.test.peered_cluster import PeeredCluster
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 
-class TestPartitionUpkeep(unittest.TestCase):
+class TestEventualConsistency(unittest.TestCase):
 
     def _test_basic(self):
 

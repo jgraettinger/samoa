@@ -61,12 +61,14 @@ private:
     void on_forwarded_request(
         const boost::system::error_code &,
         samoa::client::server_request_interface &,
-        const request::state_ptr_t &);
+        const request::state_ptr_t &,
+        const core::uuid &);
 
     void on_forwarded_response(
         const boost::system::error_code &,
         samoa::client::server_response_interface &,
-        const request::state_ptr_t &);
+        const request::state_ptr_t &,
+        const core::uuid &);
 
     typedef std::map<core::uuid, peer_discovery_ptr_t> discovery_functors_t;
     discovery_functors_t _discovery_functors;

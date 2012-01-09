@@ -33,7 +33,7 @@ private:
     static void build_peer_request(
         samoa::client::server_request_interface &,
         const request::state_ptr_t &,
-        const partition_ptr_t &);
+        const core::uuid & peer_uuid);
 
     static void peer_reads_finished(
         const read_callback_t &,
@@ -44,13 +44,15 @@ private:
         samoa::client::server_request_interface,
         const read_callback_t &,
         const request::state_ptr_t &,
-        const partition_ptr_t &);
+        const core::uuid & peer_uuid,
+        const core::uuid & part_uuid);
 
     static void on_peer_read_response(
         const boost::system::error_code & ec,
         samoa::client::server_response_interface,
         const read_callback_t &,
-        const request::state_ptr_t &);
+        const request::state_ptr_t &,
+        const core::uuid & peer_uuid);
 
     static void on_local_read_repair(
         const boost::system::error_code & ec,
@@ -61,14 +63,15 @@ private:
         samoa::client::server_request_interface,
         const write_callback_t &,
         const request::state_ptr_t &,
-        const partition_ptr_t &);
+        const core::uuid & peer_uuid,
+        const core::uuid & part_uuid);
 
     static void on_peer_write_response(
         const boost::system::error_code & ec,
         samoa::client::server_response_interface,
         const write_callback_t &,
-        const request::state_ptr_t &);
-
+        const request::state_ptr_t &,
+        const core::uuid & peer_uuid);
 };
 
 }
