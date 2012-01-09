@@ -42,6 +42,7 @@ listener::listener(const context_ptr_t & context,
 
 listener::~listener()
 {
+    _context->drop_listener(reinterpret_cast<size_t>(this));
     LOG_DBG("");
 }
 
@@ -65,8 +66,6 @@ void listener::shutdown()
     LOG_DBG("");
     _accept_sock.close();
     _next_sock.reset();
-
-    _context->drop_listener(reinterpret_cast<size_t>(this));
 }
 
 void listener::on_accept(const boost::system::error_code & ec)

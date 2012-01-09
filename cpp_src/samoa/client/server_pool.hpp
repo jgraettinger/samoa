@@ -23,11 +23,14 @@ public:
     server_pool();
     virtual ~server_pool();
 
-    /// Submits the request via server::schedule_request to a
-    ///  connected server instance. If none is available, a
-    ///  connection is first established.
-    void schedule_request(const server::request_callback_t &,
-        const core::uuid & server_uuid);
+    /// A server address must be declared before requests can
+    ///  be submitted under the server uuid.
+    void set_server_address(const core::uuid & server_uid,
+        const std::string & host, unsigned short port);
+
+    /// Adds an existing, connected server instance to the pool.
+    void set_connected_server(const core::uuid & server_uid,
+        const server::ptr_t & server);
 
     /// Returns true if the server UUID is known
     bool has_server(const core::uuid &);
@@ -43,20 +46,20 @@ public:
     /// Precondition: has_server(uuid) is True
     unsigned short get_server_port(const core::uuid &);
 
+    /// Begins connection attempt for any un-connected servers
+    void connect();
+
+    /// Submits the request via server::schedule_request to a
+    ///  connected server instance. If none is available, a
+    ///  connection is first established.
+    void schedule_request(const server::request_callback_t &,
+        const core::uuid & server_uuid);
+
     // Closes all currently-connected server instances
     //   Connections being established are unaffected, and
     //   further use of schedule_request() will result in
     //   connections being re-established
     void close();
-
-    /// A server address must be declared before requests can
-    ///  be submitted under the server uuid.
-    void set_server_address(const core::uuid & server_uid,
-        const std::string & host, unsigned short port);
-
-    /// Adds an existing, connected server instance to the pool.
-    void set_connected_server(const core::uuid & server_uid,
-        const server::ptr_t & server);
 
 private:
 

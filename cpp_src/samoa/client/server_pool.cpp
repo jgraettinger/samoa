@@ -34,44 +34,6 @@ void server_pool::set_connected_server(const core::uuid & uuid,
     _servers[uuid] = server;
 }
 
-void server_pool::schedule_request(
-    const server::request_callback_t & callback,
-    const core::uuid & uuid)
-{
-    spinlock::guard guard(_lock);
-
-    // already have a connected server?
-    {
-        server_map_t::const_iterator it = _servers.find(uuid);
-
-        if(it != _servers.end() && it->second && it->second->is_open())
-        {
-            it->second->schedule_request(callback);
-            return;
-        }
-    }
-
-    address_map_t::const_iterator addr_it = _addresses.find(uuid);
-
-    SAMOA_ASSERT(addr_it != _addresses.end());
-
-    // lookup list of request callbacks waiting on this server
-    std::list<server::request_callback_t> & pending_callbacks(
-        _connecting[uuid]);
-
-    // empty list? this is the first attempt to use this server
-    if(pending_callbacks.empty())
-    {
-        //  start a new connection
-        server::connect_to(
-            boost::bind(&server_pool::on_connect, shared_from_this(),
-                _1, _2, uuid),
-            addr_it->second.first,
-            addr_it->second.second);
-    }
-    pending_callbacks.push_back(callback);
-}
-
 bool server_pool::has_server(const core::uuid & uuid)
 {
     spinlock::guard guard(_lock);
@@ -110,6 +72,76 @@ unsigned short server_pool::get_server_port(const core::uuid & uuid)
     SAMOA_ASSERT(it != _addresses.end());
 
     return it->second.second;
+}
+
+void server_pool::connect()
+{
+    spinlock::guard guard(_lock);
+
+    for(address_map_t::value_type & entry : _addresses)
+    {
+        const core::uuid & uuid = entry.first;
+        server_map_t::const_iterator it = _servers.find(uuid);
+
+        if(it != _servers.end() && it->second && it->second->is_open())
+        {
+            // already connected
+            continue;
+        }
+
+        if(_connecting.find(uuid) != _connecting.end())
+        {
+            // connection already in-progress
+            continue;   
+        }
+
+        server::connect_to(
+            boost::bind(&server_pool::on_connect, shared_from_this(),
+                _1, _2, uuid),
+            entry.second.first, entry.second.second);
+
+        // implicit insert
+        _connecting[uuid];
+    }
+}
+
+void server_pool::schedule_request(
+    const server::request_callback_t & callback,
+    const core::uuid & uuid)
+{
+    spinlock::guard guard(_lock);
+
+    // already have a connected server?
+    {
+        server_map_t::const_iterator it = _servers.find(uuid);
+
+        if(it != _servers.end() && it->second && it->second->is_open())
+        {
+            it->second->schedule_request(callback);
+            return;
+        }
+    }
+
+    address_map_t::const_iterator addr_it = _addresses.find(uuid);
+
+    SAMOA_ASSERT(addr_it != _addresses.end());
+
+    // lookup queue of requests pending on this server's connection
+    connecting_map_t::iterator conn_it = _connecting.find(uuid);
+
+    // no connection attempt is in progress; start one
+    if(conn_it == _connecting.end())
+    {
+        server::connect_to(
+            boost::bind(&server_pool::on_connect, shared_from_this(),
+                _1, _2, uuid),
+            addr_it->second.first,
+            addr_it->second.second);
+
+        _connecting[uuid].push_back(callback);
+    }
+    else
+        conn_it->second.push_back(callback);
 }
 
 void server_pool::close()

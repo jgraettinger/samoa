@@ -17,6 +17,7 @@ typedef boost::shared_ptr<protocol> protocol_ptr_t;
 
 class listener;
 typedef boost::shared_ptr<listener> listener_ptr_t;
+typedef boost::weak_ptr<listener> listener_weak_ptr_t;
 
 class client;
 typedef boost::shared_ptr<client> client_ptr_t;

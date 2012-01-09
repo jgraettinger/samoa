@@ -21,7 +21,8 @@ class TestClusterState(unittest.TestCase):
             common_fixture.add_table().uuid)
 
         self.cluster = PeeredCluster(common_fixture,
-            server_names = ['peer_A', 'peer_B'])
+            server_names = ['peer_A', 'peer_B'],
+            set_peers = False)
 
         # divergent partitions
         self.part_A = self.cluster.add_partition(self.table_uuid, 'peer_A')

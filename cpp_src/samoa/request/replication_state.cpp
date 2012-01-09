@@ -10,7 +10,8 @@ replication_state::replication_state()
  :  _replication_factor(0),
     _quorum_count(0),
     _failure_count(0),
-    _success_count(0)
+    _success_count(0),
+    _peer_read_hit(false)
 { }
 
 replication_state::~replication_state()

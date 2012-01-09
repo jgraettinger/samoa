@@ -53,6 +53,9 @@ void peer_discovery::operator()(callback_t && callback)
 
     _callback = std::move(callback);
 
+    LOG_INFO("beginning discovery <" << _context->get_server_uuid() \
+        << " => " << _peer_uuid << ">");
+
     peer_set::ptr_t peer_set = _context->get_cluster_state()->get_peer_set();
     if(!peer_set->has_server(_peer_uuid))
     {
@@ -61,10 +64,6 @@ void peer_discovery::operator()(callback_t && callback)
             boost::system::errc::operation_canceled));
         return;
     }
-
-    SAMOA_ASSERT(_context);
-    LOG_INFO("beginning discovery <" << _context->get_server_uuid() \
-        << " => " << _peer_uuid << ">");
 
     peer_set->schedule_request(
         boost::bind(&peer_discovery::on_request,

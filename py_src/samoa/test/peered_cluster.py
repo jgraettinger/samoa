@@ -13,11 +13,13 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class PeeredCluster(object):
 
-    def __init__(self, common_fixture, server_names, random_seed = None):
+    def __init__(self, common_fixture, server_names, set_peers = True):
 
         self.injectors = {}
         self.fixtures = {}
         self.partitions = []
+
+        last_fixture = None
 
         for name in server_names:
 
@@ -26,6 +28,13 @@ class PeeredCluster(object):
 
             self.injectors[name] = module.configure(getty.Injector())
             self.fixtures[name] = module.fixture
+
+            if last_fixture and set_peers:
+                self.fixtures[name].add_peer(
+                    uuid = last_fixture.server_uuid,
+                    port = last_fixture.server_port)
+
+            last_fixture = self.fixtures[name]
 
         # not accessible until start_server_contexts is called
         self.listeners = None

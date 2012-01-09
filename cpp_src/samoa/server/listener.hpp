@@ -17,6 +17,7 @@ class listener :
 public:
 
     typedef listener_ptr_t ptr_t;
+    typedef listener_weak_ptr_t weak_ptr_t;
 
     listener(const context_ptr_t &, const protocol_ptr_t &);
 

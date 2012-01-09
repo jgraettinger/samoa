@@ -54,6 +54,8 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
 
 void peer_set::initialize(const context::ptr_t & context)
 {
+    server_pool::connect();
+
     for(discovery_functors_t::value_type & entry : _discovery_functors)
     {
         if(entry.second)
@@ -242,7 +244,7 @@ core::uuid peer_set::select_best_peer(const request::state::ptr_t & rstate)
             peer_latency = 0;
         }
 
-        if(peer_latency < best_peer_latency)
+        if(peer_latency < best_peer_latency || best_peer_uuid.is_nil())
         {
             best_peer_uuid = peer_uuid;
         }

@@ -67,13 +67,13 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
    _timeout_ms(default_timeout_ms),
    _timeout_timer(*get_io_service())
 {
-    LOG_DBG("created");
+    LOG_DBG("");
 }
 
 client::~client()
 {
 	_context->drop_client(reinterpret_cast<size_t>(this));
-    LOG_DBG("destroyed");
+    LOG_DBG("");
 }
 
 void client::initialize()

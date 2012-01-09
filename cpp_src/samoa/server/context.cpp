@@ -50,19 +50,28 @@ void context::initialize()
 
 void context::shutdown()
 {
-    for(const listeners_t::value_type & entry : _listeners)
     {
-    	entry.second->shutdown();
-    }
-    _listeners.clear();
-
-    for(const clients_t::value_type & entry : _clients)
-    {
-        client::ptr_t client(entry.second.lock());
-
-        if(client)
+        spinlock::guard guard(_listener_lock);
+        for(const listeners_t::value_type & entry : _listeners)
         {
-        	client->shutdown();
+            listener::ptr_t listener(entry.second.lock());
+
+            if(listener)
+            {
+                listener->shutdown();
+            }
+        }
+    }
+    {
+        spinlock::guard guard(_client_lock);
+        for(const clients_t::value_type & entry : _clients)
+        {
+            client::ptr_t client(entry.second.lock());
+
+            if(client)
+            {
+            	client->shutdown();
+            }
         }
     }
 }
@@ -76,12 +85,16 @@ void context::cluster_state_transaction(
 
 void context::add_client(size_t client_id, const client::ptr_t & client)
 {
+    spinlock::guard guard(_client_lock);
+
     SAMOA_ASSERT(_clients.insert(
         std::make_pair(client_id, client)).second);
 }
 
 void context::drop_client(size_t client_id)
 {
+    spinlock::guard guard(_client_lock);
+
     clients_t::iterator it = _clients.find(client_id);
     SAMOA_ASSERT(it != _clients.end());
     _clients.erase(it);
@@ -90,12 +103,16 @@ void context::drop_client(size_t client_id)
 void context::add_listener(size_t listener_id,
     const listener::ptr_t & listener)
 {
+    spinlock::guard guard(_listener_lock);
+
     SAMOA_ASSERT(_listeners.insert(
         std::make_pair(listener_id, listener)).second);
 }
 
 void context::drop_listener(size_t listener_id)
 {
+    spinlock::guard guard(_listener_lock);
+
     listeners_t::iterator it = _listeners.find(listener_id);
     SAMOA_ASSERT(it != _listeners.end());
     _listeners.erase(it);
@@ -120,8 +137,6 @@ void context::on_cluster_state_transaction(
     cluster_state::ptr_t next_state = boost::make_shared<cluster_state>(
         std::move(next_pb_state), _cluster_state);
 
-    next_state->initialize(shared_from_this());
-
     // TODO(johng) commit next_cluster_state to disk
 
     // 'commit' transaction by atomically updating held instance
@@ -129,6 +144,8 @@ void context::on_cluster_state_transaction(
         spinlock::guard guard(_cluster_state_lock);
         _cluster_state = next_state;
     }
+
+    initialize();
 }
 
 }

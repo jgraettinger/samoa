@@ -18,7 +18,7 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestPartitionUpkeep(unittest.TestCase):
 
-    def test_basic(self):
+    def _test_basic(self):
 
         common_fixture = ClusterStateFixture()
         table_uuid = UUID(

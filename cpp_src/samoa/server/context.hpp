@@ -100,9 +100,11 @@ private:
     mutable spinlock _cluster_state_lock;
     cluster_state_ptr_t _cluster_state;
 
-    typedef std::unordered_map<size_t, listener_ptr_t> listeners_t;
+    spinlock _listener_lock;
+    typedef std::unordered_map<size_t, listener_weak_ptr_t> listeners_t;
     listeners_t _listeners;
 
+    spinlock _client_lock;
     typedef std::unordered_map<size_t, client_weak_ptr_t> clients_t;
     clients_t _clients;
 };

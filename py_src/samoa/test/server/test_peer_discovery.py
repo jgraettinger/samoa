@@ -29,7 +29,8 @@ class TestPeerDiscovery(unittest.TestCase):
             common_fixture.add_table().uuid)
 
         cluster = PeeredCluster(common_fixture,
-            server_names = ['peer_A', 'peer_B'])
+            server_names = ['peer_A', 'peer_B'],
+            set_peers = False)
 
         cluster.set_known_peer('peer_A', 'peer_B')
 
@@ -63,7 +64,8 @@ class TestPeerDiscovery(unittest.TestCase):
     def test_extended(self):
 
         cluster = PeeredCluster(ClusterStateFixture(),
-            server_names = ['peer_A', 'peer_B', 'peer_C', 'peer_D'])
+            server_names = ['peer_A', 'peer_B', 'peer_C', 'peer_D'],
+            set_peers = False)
 
         cluster.set_known_peer('peer_D', 'peer_C')
         cluster.set_known_peer('peer_C', 'peer_B')

@@ -84,15 +84,7 @@ class ClusterStateFixture(object):
         return UUID.from_name(self.generate_name())
 
     def generate_port(self):
-        while True:
-            port = self.rnd.randint(1024, 65536)
-
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.bind(('', port))
-                return port
-            except:
-                continue
+        return self.rnd.randint(1024, 65536)
 
     def add_peer(self, uuid = None, hostname = 'localhost',
         port = None, seed = False):

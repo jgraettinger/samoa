@@ -16,8 +16,8 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 class TestReplicate(unittest.TestCase):
 
     def setUp(self):
-        
-        common_fixture = ClusterStateFixture(random_seed = 10)
+
+        common_fixture = ClusterStateFixture()
         self.table_uuid = UUID(
             common_fixture.add_table(
                 data_type = DataType.BLOB_TYPE,
@@ -42,10 +42,7 @@ class TestReplicate(unittest.TestCase):
         def test():
 
             response = yield self._make_request(True, True, 1)
-            self.assertFalse(response.get_error_code())
-            yield
-
-        def validate():
+            response.finish_response()
 
             # key & value exist under peer_A only
             record = yield self.persisters[self.part_B].get(self.key)
@@ -58,17 +55,14 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test([test, validate])
+        Proactor.get_proactor().run_test(test)
 
-    def test_forwarded_quorum_write(self):
+    def test_direct_quorum_write(self):
 
         def test():
 
-            response = yield self._make_request(False, True, 2)
-            self.assertFalse(response.get_error_code())
-            yield
-
-        def validate():
+            response = yield self._make_request(True, True, 2)
+            response.finish_response()
 
             # key & value exist under both peers
             record = yield self.persisters[self.part_B].get(self.key)
@@ -81,42 +75,21 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test([test, validate])
+        Proactor.get_proactor().run_test(test)
 
-    def _test_forwarded_reads(self):
+    def test_forwarded_quorum_write(self):
 
         def test():
 
-            import pdb; pdb.set_trace()
+            response = yield self._make_request(False, True, 2)
+            response.finish_response()
 
-            print "part_A", self.part_A
-            print "part_B", self.part_B
+            # key & value exist under both peers
+            record = yield self.persisters[self.part_B].get(self.key)
+            self.assertEquals(record.blob_value[0], self.value_A)
 
-            for name in ['forwarder', 'peer_A', 'peer_B']:
-            	print name, "CONTEXT"
-                print self.cluster.contexts[name].get_cluster_state().get_protobuf_description()
-
-            # create divergent fixtures under both peers
-            record = PersistedRecord()
-            record.add_blob_value(self.value_A)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
-
-            yield self.persisters[self.part_A].put(None, self.key, record)
-
-            record = PersistedRecord()
-            record.add_blob_value(self.value_B)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_B)
-
-            yield self.persisters[self.part_B].put(None, self.key, record)
-
-            # non-quorum read; will retrieve one or the other
-            response = yield self._make_request(False, False, 1)
-
-            record = PersistedRecord()
-            record.ParseFromBytes(response.get_response_data_blocks()[0])
-
-            self.assertEquals(len(record.blob_value), 1)
-            self.assertIn(record.blob_value[0], [self.value_B, self.value_B])
+            record = yield self.persisters[self.part_A].get(self.key)
+            self.assertEquals(record.blob_value[0], self.value_A)
 
             # cleanup
             self.cluster.stop_server_contexts()
@@ -124,6 +97,87 @@ class TestReplicate(unittest.TestCase):
 
         Proactor.get_proactor().run_test(test)
 
+    def test_direct_simple_read(self):
+
+        def test():
+            yield self._set_value_fixtures()
+
+            response = yield self._make_request(True, False, 1)
+
+            record = PersistedRecord()
+            record.ParseFromBytes(response.get_response_data_blocks()[0])
+            response.finish_response()
+
+            self.assertEquals(len(record.blob_value), 1)
+            self.assertEquals(record.blob_value[0], self.value_A)
+
+            # cleanup
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def test_direct_quorum_read(self):
+
+        def test():
+            yield self._set_value_fixtures()
+
+            response = yield self._make_request(True, False, 2)
+
+            record = PersistedRecord()
+            record.ParseFromBytes(response.get_response_data_blocks()[0])
+            response.finish_response()
+
+            self.assertEquals(len(record.blob_value), 2)
+            self.assertItemsEqual(record.blob_value,
+                [self.value_A, self.value_B])
+
+            # cleanup
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def test_forwarded_simple_read(self):
+
+        def test():
+            yield self._set_value_fixtures()
+
+            response = yield self._make_request(False, False, 1)
+
+            record = PersistedRecord()
+            record.ParseFromBytes(response.get_response_data_blocks()[0])
+            response.finish_response()
+
+            self.assertEquals(len(record.blob_value), 1)
+            self.assertTrue(record.blob_value[0] in [self.value_A, self.value_B])
+
+            # cleanup
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def test_forwarded_quorum_read(self):
+
+        def test():
+            yield self._set_value_fixtures()
+
+            response = yield self._make_request(False, False, 2)
+
+            record = PersistedRecord()
+            record.ParseFromBytes(response.get_response_data_blocks()[0])
+            response.finish_response()
+
+            self.assertEquals(len(record.blob_value), 2)
+            self.assertItemsEqual(record.blob_value,
+                [self.value_A, self.value_B])
+
+            # cleanup
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(test)
 
     def _make_request(self, is_direct, is_write, quorum):
 
@@ -150,5 +204,22 @@ class TestReplicate(unittest.TestCase):
             request.add_data_block(record.SerializeToBytes())
 
         response = yield request.flush_request()
+        self.assertFalse(response.get_error_code())
         yield response
+
+    def _set_value_fixtures(self):
+
+        # create divergent fixtures under both peers
+        record = PersistedRecord()
+        record.add_blob_value(self.value_A)
+        ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
+
+        yield self.persisters[self.part_A].put(None, self.key, record)
+
+        record = PersistedRecord()
+        record.add_blob_value(self.value_B)
+        ClockUtil.tick(record.mutable_cluster_clock(), self.part_B)
+
+        yield self.persisters[self.part_B].put(None, self.key, record)
+        yield
 
