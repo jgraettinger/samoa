@@ -26,20 +26,19 @@ peer_set::peer_set(const spb::ClusterState & state, const ptr_t & current)
         SAMOA_ASSERT(it == last_it || last_it->uuid() < it->uuid());
         last_it = it;
 
-        core::uuid uuid = core::parse_uuid(it->uuid());
+        core::uuid peer_uuid = core::parse_uuid(it->uuid());
 
-        set_server_address(uuid, it->hostname(), it->port());
+        set_server_address(peer_uuid, it->hostname(), it->port());
 
-        if(current && current->has_server(uuid))
+        if(current && current->has_server(peer_uuid))
         {
-            set_connected_server(uuid, current->get_server(uuid));
+            set_connected_server(peer_uuid, current->get_server(peer_uuid));
 
-            _discovery_functors[uuid] = current->_discovery_functors[uuid];
+            _discovery_functors[peer_uuid] = \
+                current->_discovery_functors[peer_uuid];
         }
         else
-        {
-            _discovery_functors[uuid] = peer_discovery::ptr_t();
-        }
+            _discovery_functors[peer_uuid] = peer_discovery::ptr_t();
     }
 
     // also set the loop-back server address

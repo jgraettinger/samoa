@@ -150,7 +150,7 @@ void coroutine::on_reenter(const bpl::object & t_arg)
                     "but got:\n\t" + msg + "\n<frame was " + f_msg + ">");
             }
         }
-        catch(bpl::error_already_set err)
+        catch(const bpl::error_already_set & err)
         {
 /*
             //TODO(johng) - Current semantics allow use of generators

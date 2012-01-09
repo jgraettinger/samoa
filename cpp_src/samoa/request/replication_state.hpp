@@ -76,7 +76,7 @@ public:
     bool is_replication_finished() const;
 
     //! Returns whether a replicated read returned content
-    bool had_peer_read_hit()
+    bool had_peer_read_hit() const
     { return _peer_read_hit; }
 
     //! Marks that a replicated read returned content

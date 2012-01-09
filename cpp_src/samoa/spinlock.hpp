@@ -2,6 +2,7 @@
 #define SAMOA_SPINLOCK_HPP
 
 #include "samoa/error.hpp"
+#include "samoa/log.hpp"
 #include <pthread.h>
 
 namespace samoa {
@@ -18,7 +19,10 @@ public:
 
     ~spinlock()
     {
-        SAMOA_ABORT_ERRNO(pthread_spin_destroy(&_lock));
+        if(!pthread_spin_destroy(&_lock))
+        {
+            LOG_ERR("pthread_spin_destroy failed");
+        }
     }
 
     void acquire()

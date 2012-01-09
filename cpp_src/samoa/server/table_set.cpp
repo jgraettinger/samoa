@@ -29,14 +29,14 @@ table_set::table_set(const spb::ClusterState & state,
             continue;
         }
 
-        core::uuid uuid = core::parse_uuid(it->uuid());
+        core::uuid tbl_uuid = core::parse_uuid(it->uuid());
 
         table::ptr_t tbl, old_tbl;
 
         if(current)
         {
             uuid_index_t::const_iterator t_it = \
-                current->_uuid_index.find(uuid);
+                current->_uuid_index.find(tbl_uuid);
 
             if(t_it != current->_uuid_index.end())
                 old_tbl = t_it->second;
@@ -45,7 +45,7 @@ table_set::table_set(const spb::ClusterState & state,
         tbl = boost::make_shared<table>(*it, local_uuid, old_tbl);
 
         // index table on uuid
-        SAMOA_ASSERT(_uuid_index.insert(std::make_pair(uuid, tbl)).second);
+        SAMOA_ASSERT(_uuid_index.insert(std::make_pair(tbl_uuid, tbl)).second);
 
         if(!_name_index.insert(std::make_pair(tbl->get_name(), tbl)).second)
         {
