@@ -19,7 +19,7 @@ public:
 
     ~spinlock()
     {
-        if(!pthread_spin_destroy(&_lock))
+        if(pthread_spin_destroy(&_lock))
         {
             LOG_ERR("pthread_spin_destroy failed");
         }

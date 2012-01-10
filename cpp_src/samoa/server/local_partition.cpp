@@ -5,6 +5,7 @@
 #include "samoa/persistence/persister.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
+#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {
@@ -58,10 +59,15 @@ bool local_partition::merge_partition(
 void local_partition::initialize(
     const context::ptr_t & context, const table::ptr_t & table)
 {
+    // slightly convoluted, but we need the binder to hold a shared-
+    //  pointer for lifetime management of the functor.
+    // without that requirement, a stack eventual_consistency
+    //  could be directly passed-by-value as the callback
     _persister->set_record_upkeep_callback(
-        eventual_consistency(context,
-            table->get_uuid(), get_uuid(),
-            table->get_consistent_prune()));
+        boost::bind(&eventual_consistency::operator(),
+            boost::make_shared<eventual_consistency>(context,
+                table->get_uuid(), get_uuid(),
+                table->get_consistent_prune()), _1));
 }
 
 }

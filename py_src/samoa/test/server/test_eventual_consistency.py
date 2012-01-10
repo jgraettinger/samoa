@@ -18,36 +18,10 @@ from samoa.test.cluster_state_fixture import ClusterStateFixture
 
 class TestEventualConsistency(unittest.TestCase):
 
-    def _test_basic(self):
+    def test_basic_consistency(self):
 
-        common_fixture = ClusterStateFixture()
-        table_uuid = UUID(
-            common_fixture.add_table(
-                data_type = DataType.BLOB_TYPE,
-                replication_factor = 1).uuid)
-
-        self.cluster = PeeredCluster(common_fixture,
-            server_names = ['peer_1', 'peer_2'])
-
-        self.part_uuid_1 = self.cluster.add_partition(table_uuid, 'peer_1')
-        self.part_uuid_2 = self.cluster.add_partition(table_uuid, 'peer_2')
-        assert False
-        self.cluster.start_server_contexts()
-
-        
-        
-        
-
-
-
-"""
-    def _build_fixture(self):
-        "" "
-        Builds a test-table with a single partition, and two peers:
-
-        main: has a partition with preset value
-        forwarder: has no partition
-        "" "
+        # two-peer fixture with divergent values
+        # postcondition: peers have synchronized
 
         common_fixture = ClusterStateFixture()
         table_uuid = UUID(
@@ -55,37 +29,220 @@ class TestEventualConsistency(unittest.TestCase):
                 data_type = DataType.BLOB_TYPE,
                 replication_factor = 2).uuid)
 
-        self.cluster = PeeredCluster(common_fixture,
-            server_names = ['peer_1', 'peer_2', 'peer_3'])
+        cluster = PeeredCluster(common_fixture,
+            server_names = ['peer_A', 'peer_B'])
 
-        self.partition_1 = self.cluster.add_partition(table_uuid, 'peer_1')
-        self.partition_2 = self.cluster.add_partition(table_uuid, 'peer_2')
-        self.partition_3 = self.cluster.add_partition(table_uuid, 'peer_3')
+        part_A = cluster.add_partition(table_uuid, 'peer_A')
+        part_B = cluster.add_partition(table_uuid, 'peer_B')
 
-        self.cluster.start_server_contexts()
+        # shared key with divergent values
+        key = common_fixture.generate_bytes()
+        value_A = common_fixture.generate_bytes()
+        value_B = common_fixture.generate_bytes()
 
+        cluster.start_server_contexts()
 
-        for i in xrange(100):
-            key = 'key-%d' % i
-
-            record = PersistedRecord()
-            record.add_blob_value('peer_1-value')
-            ClockUtil.tick(record.mutable_cluster_clock(),
-                self.partition1_uuid)
-
-            raw_record = self.peer1_hash.prepare_record(key,
-                record.ByteSize())
-            raw_record.set_value(record.SerializeToBytes())
-            self.peer1_hash.commit_record()
+        def populate():
 
             record = PersistedRecord()
-            record.add_blob_value('peer_2-value')
-            ClockUtil.tick(record.mutable_cluster_clock(),
-                self.partition2_uuid)
+            record.add_blob_value(value_A)
+            ClockUtil.tick(record.mutable_cluster_clock(), part_A)
+            yield cluster.persisters[part_A].put(None, key, record)
 
-            raw_record = self.peer2_hash.prepare_record(key,
-                record.ByteSize())
-            raw_record.set_value(record.SerializeToBytes())
-            self.peer2_hash.commit_record()
-"""
+            record = PersistedRecord()
+            record.add_blob_value(value_B)
+            ClockUtil.tick(record.mutable_cluster_clock(), part_B)
+            yield cluster.persisters[part_B].put(None, key, record)
+            yield
+
+        def compact():
+            yield cluster.persisters[part_A].bottom_up_compaction()
+            yield
+
+        def validate():
+
+            for part_uuid in part_A, part_B:
+                record = yield cluster.persisters[part_uuid].get(key)
+
+                # peers are now consistent
+                self.assertEquals(len(record.blob_value), 2)
+                self.assertItemsEqual(record.blob_value,
+                    [value_A, value_B])
+
+            cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test([populate, compact, validate])
+
+    def test_move_succeeds_dropped_partition(self):
+
+        # three-peer fixture (factor of 2), where the record
+        #  fixture is placed on a dropped partition
+        # postcondition: two live partitions have the record
+        #  fixture; dropped partition doesn't
+
+        common_fixture = ClusterStateFixture()
+        table_uuid = UUID(
+            common_fixture.add_table(
+                data_type = DataType.BLOB_TYPE,
+                replication_factor = 2).uuid)
+
+        cluster = PeeredCluster(common_fixture,
+            server_names = ['peer_drop', 'peer_A', 'peer_B'])
+
+        part_drop = cluster.add_partition(table_uuid, 'peer_drop')
+        part_A = cluster.add_partition(table_uuid, 'peer_A')
+        part_B = cluster.add_partition(table_uuid, 'peer_B')
+
+        cluster.fixtures['peer_drop'].get_partition(
+            table_uuid, part_drop).set_dropped(1)
+
+        key = common_fixture.generate_bytes()
+        value = common_fixture.generate_bytes()
+
+        cluster.start_server_contexts()
+
+        def populate():
+            record = PersistedRecord()
+            record.add_blob_value(value)
+            ClockUtil.tick(record.mutable_cluster_clock(), part_drop)
+            yield cluster.persisters[part_drop].put(None, key, record)
+            yield
+
+        def compact():
+            yield cluster.persisters[part_drop].bottom_up_compaction()
+            yield
+
+        def validate():
+            for part_uuid in part_A, part_B:
+                # part_A & part_B have part_drop's value
+                record = yield cluster.persisters[part_uuid].get(key)
+                self.assertItemsEqual(record.blob_value, [value])
+
+            # part_drop no longer does
+            record = yield cluster.persisters[part_drop].get(key)
+            self.assertIsNone(record)
+
+            cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test([populate, compact, validate])
+
+    def test_move_fails_dropped_partition(self):
+
+        # three-peer fixture (factor of 2), where the record
+        #  fixture is placed on a dropped partition; one
+        #  of the peers is additionally unreachable
+        # postcondition: fixture is on both remaining live
+        #  and dropped partition (insufficient quorum to move)
+
+        common_fixture = ClusterStateFixture()
+        table_uuid = UUID(
+            common_fixture.add_table(
+                data_type = DataType.BLOB_TYPE,
+                replication_factor = 2).uuid)
+
+        # unreachable remote partition
+        common_fixture.add_remote_partition(table_uuid)
+
+        cluster = PeeredCluster(common_fixture,
+            server_names = ['peer_drop', 'peer_A'])
+
+        part_drop = cluster.add_partition(table_uuid, 'peer_drop')
+        part_A = cluster.add_partition(table_uuid, 'peer_A')
+
+        cluster.fixtures['peer_drop'].get_partition(
+            table_uuid, part_drop).set_dropped(1)
+
+        key = common_fixture.generate_bytes()
+        value = common_fixture.generate_bytes()
+
+        cluster.start_server_contexts()
+
+        def populate():
+            record = PersistedRecord()
+            record.add_blob_value(value)
+            ClockUtil.tick(record.mutable_cluster_clock(), part_drop)
+            yield cluster.persisters[part_drop].put(None, key, record)
+            yield
+
+        def compact():
+            yield cluster.persisters[part_drop].bottom_up_compaction()
+            yield
+
+        def validate():
+
+            # both part_A & part_drop should have part_drop's value
+            for part_uuid in part_A, part_drop:
+                record = yield cluster.persisters[part_uuid].get(key)
+                self.assertItemsEqual(record.blob_value, [value])
+
+            cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test([populate, compact, validate])
+
+    def test_move_succeeds_with_divergent_partitions(self):
+
+        # three-peer fixture (factor of 2), where each peer
+        #  has a divergent fixture record
+        # postcondition: two of three have merged records;
+        #  one has no value
+
+        common_fixture = ClusterStateFixture()
+        table_uuid = UUID(
+            common_fixture.add_table(
+                data_type = DataType.BLOB_TYPE,
+                replication_factor = 2).uuid)
+
+        cluster = PeeredCluster(common_fixture,
+            server_names = ['peer_A', 'peer_B', 'peer_C'])
+
+        part_A = cluster.add_partition(table_uuid, 'peer_A')
+        part_B = cluster.add_partition(table_uuid, 'peer_B')
+        part_C = cluster.add_partition(table_uuid, 'peer_C')
+
+        key = common_fixture.generate_bytes()
+        part_values = dict((p, common_fixture.generate_bytes()) \
+            for p in [part_A, part_B, part_C])
+
+        cluster.start_server_contexts()
+
+        def populate():
+            for part_uuid, val in part_values.items():
+
+                # place divergent fixtures under each peer partition
+                record = PersistedRecord()
+                record.add_blob_value(val)
+                ClockUtil.tick(record.mutable_cluster_clock(), part_uuid)
+                yield cluster.persisters[part_uuid].put(None, key, record)
+            yield
+
+        def compact():
+            for part_uuid in part_values.keys():
+                yield cluster.persisters[part_uuid].bottom_up_compaction()
+            yield
+
+        def validate():
+
+            # two of three peers (replication factor) should have
+            #  all values, and one shouldn't have the key
+            record_count = 0
+            for part_uuid in part_values.keys():
+                record = yield cluster.persisters[part_uuid].get(key)
+
+                if record is None: continue
+
+                self.assertItemsEqual(set(record.blob_value),
+                    part_values.values())
+
+                record_count += 1
+
+            self.assertEquals(record_count, 2)
+
+            cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(
+            [populate, compact, validate])
 

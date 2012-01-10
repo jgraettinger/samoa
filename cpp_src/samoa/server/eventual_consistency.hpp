@@ -42,7 +42,7 @@ private:
         samoa::client::server_response_interface,
         const request::state_ptr_t &);
 
-    bool on_move_drop(bool);
+    bool on_move_drop(bool, const request::state_ptr_t &);
 
     context_weak_ptr_t _weak_context;
     const core::uuid _table_uuid;

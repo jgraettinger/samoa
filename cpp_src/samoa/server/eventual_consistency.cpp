@@ -50,14 +50,14 @@ bool eventual_consistency::operator()(
     rstate->set_table_uuid(_table_uuid);
     rstate->load_table_state();
 
-    // quorum is all responsible partitions
-    rstate->set_quorum_count(0);
-    rstate->load_replication_state();
-
     // assume common case, that this key still belongs here
     rstate->set_primary_partition_uuid(_partition_uuid);
     try {
         rstate->load_route_state();
+
+        // quorum is all responsible partitions
+        rstate->set_quorum_count(0);
+        rstate->load_replication_state();
 
         // replicate value to peers
         rstate->peer_replication_success();
@@ -116,7 +116,7 @@ void eventual_consistency::on_move_request(
 
     // serialize remote record to the peer
     core::zero_copy_output_adapter zco_adapter;
-    SAMOA_ASSERT(rstate->get_remote_record(
+    SAMOA_ASSERT(rstate->get_local_record(
         ).SerializeToZeroCopyStream(&zco_adapter));
     iface.add_data_block(zco_adapter.output_regions());
 
@@ -146,7 +146,9 @@ void eventual_consistency::on_move_response(
     if(iface.get_message().replication_success() != \
         rstate->get_table()->get_replication_factor())
     {
-        LOG_WARN("failed to meet quorum while moving " << rstate->get_key());
+        LOG_WARN("failed to meet quorum while moving " << \
+            log::ascii_escape(rstate->get_key()));
+
         iface.finish_response();
         return;
     }
@@ -158,11 +160,12 @@ void eventual_consistency::on_move_response(
 
     partition->get_persister()->drop(
         boost::bind(&eventual_consistency::on_move_drop,
-            shared_from_this(), _1),
+            shared_from_this(), _1, rstate),
         rstate->get_key(), rstate->get_local_record());
 }
 
-bool eventual_consistency::on_move_drop(bool found)
+bool eventual_consistency::on_move_drop(bool found,
+    const request::state_ptr_t & /* guard */)
 {
     SAMOA_ASSERT(found);
     return true;

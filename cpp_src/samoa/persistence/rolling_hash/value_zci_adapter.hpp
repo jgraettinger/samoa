@@ -22,7 +22,8 @@ public:
 
     bool Next(const void ** data, int * size)
     {
-        SAMOA_ASSERT(_next_packet);
+        if(_next_packet == nullptr)
+            return false;
 
         if(_next_offset == _next_packet->value_length())
         {

@@ -19,6 +19,9 @@ namespace log {
 
 unsigned gettid();
 
+// produces representations compatible with python's repr
+std::string ascii_escape(const std::string &);
+
 }
 }
 
