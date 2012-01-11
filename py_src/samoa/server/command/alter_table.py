@@ -76,8 +76,8 @@ class AlterTableHandler(CommandHandler):
                 functools.partial(self._transaction, rstate))
 
             if commit:
-                # TODO: notify peers of change
-                pass
+                # notify peers of the change
+                rstate.get_peer_set().begin_peer_discovery()
 
             rstate.flush_response()
             yield

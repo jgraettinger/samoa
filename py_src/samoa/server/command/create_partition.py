@@ -63,7 +63,9 @@ class CreatePartitionHandler(CommandHandler):
             yield rstate.get_context().cluster_state_transaction(
                 functools.partial(self._transaction, rstate))
 
-            # TODO: notify peers of change
+            # notify peers of the change
+            rstate.get_peer_set().begin_peer_discovery()
+
             rstate.flush_response()
             yield
 
