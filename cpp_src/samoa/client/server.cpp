@@ -1,7 +1,8 @@
 
 #include "samoa/client/server.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/core/connection_factory.hpp"
-#include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
@@ -119,7 +120,7 @@ void server_request_interface::flush_request(
     _srv->_samoa_request.set_request_id(request_id);
 
     // serialize & reset SamoaRequest
-    core::zero_copy_output_adapter zco_adapter;
+    core::protobuf::zero_copy_output_adapter zco_adapter;
     _srv->_samoa_request.SerializeToZeroCopyStream(&zco_adapter);
     _srv->_samoa_request.Clear();
 
@@ -248,7 +249,7 @@ void server::on_response_body(const boost::system::error_code & ec,
         return;
     }
 
-    core::zero_copy_input_adapter zci_adapter(read_body);
+    core::protobuf::zero_copy_input_adapter zci_adapter(read_body);
     if(!_samoa_response.ParseFromZeroCopyStream(&zci_adapter))
     {
         // our transport is corrupted

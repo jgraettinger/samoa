@@ -149,9 +149,12 @@ message PersistedRecord
     optional ClusterClock cluster_clock = 1;
 
     repeated bytes blob_value = 2;
-    repeated int64 count_value = 3;
+    repeated bytes consistent_blob_value = 3;
 
-    optional uint64 expire_timestamp = 4;
+    repeated int64 counter_value = 4;
+    optional int64 consistent_counter_value = 5 [default = 0];
+
+    optional uint64 expire_timestamp = 6;
 };
 
 // Union container type
@@ -202,5 +205,7 @@ message SamoaResponse {
     optional uint32 replication_failure = 9 [default = 0];
 
     optional ClusterClock cluster_clock = 10;
+
+    optional int64 counter_value = 11;
 };
 

@@ -10,6 +10,8 @@
 #include "samoa/persistence/persister.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/lexical_cast.hpp>
@@ -46,7 +48,7 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
         }
 
         // parse into remote-record
-        core::zero_copy_input_adapter zci_adapter(
+        core::protobuf::zero_copy_input_adapter zci_adapter(
             rstate->get_request_data_blocks()[0]);
         SAMOA_ASSERT(rstate->get_remote_record(
             ).ParseFromZeroCopyStream(&zci_adapter));
@@ -112,7 +114,7 @@ void replicate_handler::on_read(const boost::system::error_code & ec,
 
     if(found)
     {
-        core::zero_copy_output_adapter zco_adapter;
+        core::protobuf::zero_copy_output_adapter zco_adapter;
         SAMOA_ASSERT(rstate->get_local_record(
             ).SerializeToZeroCopyStream(&zco_adapter));
 

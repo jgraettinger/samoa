@@ -4,6 +4,8 @@
 #include "samoa/server/client.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/request/request_state.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
 
@@ -35,7 +37,7 @@ bool cluster_state_handler::on_state_transaction(
     spb::ClusterState & local_state,
     const request::state::ptr_t & rstate)
 {
-    core::zero_copy_input_adapter zci_adapter(
+    core::protobuf::zero_copy_input_adapter zci_adapter(
         rstate->get_request_data_blocks()[0]);
 
     spb::ClusterState remote_state;
@@ -51,7 +53,7 @@ bool cluster_state_handler::on_state_transaction(
 
 void cluster_state_handler::on_complete(const request::state::ptr_t & rstate)
 {
-    core::zero_copy_output_adapter zco_adapter;
+    core::protobuf::zero_copy_output_adapter zco_adapter;
 
     // respond with the current cluster-state, rather than the request::state's
     SAMOA_ASSERT(rstate->get_context()->get_cluster_state(

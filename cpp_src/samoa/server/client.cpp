@@ -6,6 +6,7 @@
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
 #include "samoa/core/stream_protocol.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
@@ -150,7 +151,7 @@ void client::on_request_body(const boost::system::error_code & ec,
     request::client_state & client_state = \
         rstate->initialize_from_client(shared_from_this());
 
-    core::zero_copy_input_adapter zci_adapter(read_body);
+    core::protobuf::zero_copy_input_adapter zci_adapter(read_body);
     if(!client_state.mutable_samoa_request(
         ).ParseFromZeroCopyStream(&zci_adapter))
     {

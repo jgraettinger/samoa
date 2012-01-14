@@ -3,7 +3,8 @@
 #include "samoa/server/context.hpp"
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/server/peer_set.hpp"
-#include "samoa/core/protobuf_helpers.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
@@ -83,7 +84,7 @@ void peer_discovery::on_request(
     }
 
     // serialize current cluster-state protobuf description;
-    core::zero_copy_output_adapter zco_adapter;
+    core::protobuf::zero_copy_output_adapter zco_adapter;
     _context->get_cluster_state()->get_protobuf_description(
         ).SerializeToZeroCopyStream(&zco_adapter);
 
@@ -120,7 +121,7 @@ void peer_discovery::on_response(
     // parse returned ClusterState protobuf message
     SAMOA_ASSERT(iface.get_response_data_blocks().size() == 1);
 
-    core::zero_copy_input_adapter zci_adapter(
+    core::protobuf::zero_copy_input_adapter zci_adapter(
         iface.get_response_data_blocks()[0]);
     SAMOA_ASSERT(_remote_state.ParseFromZeroCopyStream(&zci_adapter));
 

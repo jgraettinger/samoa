@@ -6,6 +6,8 @@
 #include "samoa/server/table.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/request/request_state.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
@@ -195,7 +197,7 @@ void replication::on_peer_read_response(
         // parse into local-record (used here as scratch space)
         SAMOA_ASSERT(iface.get_response_data_blocks().size() == 1);
 
-        core::zero_copy_input_adapter zci_adapter(
+        core::protobuf::zero_copy_input_adapter zci_adapter(
             iface.get_response_data_blocks()[0]);
 
         SAMOA_ASSERT(rstate->get_local_record().ParseFromZeroCopyStream(
@@ -247,7 +249,7 @@ void replication::on_peer_write_request(
     build_peer_request(iface, rstate, part_uuid);
 
     // serialize local record to the peer
-    core::zero_copy_output_adapter zco_adapter;
+    core::protobuf::zero_copy_output_adapter zco_adapter;
     SAMOA_ASSERT(rstate->get_local_record(
         ).SerializeToZeroCopyStream(&zco_adapter));
     iface.add_data_block(zco_adapter.output_regions());

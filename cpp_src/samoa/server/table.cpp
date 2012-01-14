@@ -6,6 +6,7 @@
 #include "samoa/server/context.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "samoa/datamodel/blob.hpp"
+#include "samoa/datamodel/counter.hpp"
 #include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -131,11 +132,19 @@ table::table(const spb::ClusterState::Table & ptable,
         _ring.push_back(partition);
     }
 
+    // set appropriate merge & prune functors for the datamodel 
     if(_data_type == datamodel::BLOB_TYPE)
     {
-        _consistent_merge = boost::bind(&datamodel::blob::consistent_merge,
+        _consistent_merge = boost::bind(&datamodel::blob::merge,
             _1, _2, _consistency_horizon);
-        _consistent_prune = boost::bind(&datamodel::blob::consistent_prune,
+        _consistent_prune = boost::bind(&datamodel::blob::prune,
+            _1, _consistency_horizon);
+    }
+    else if(_data_type == datamodel::COUNTER_TYPE)
+    {
+        _consistent_merge = boost::bind(&datamodel::counter::merge,
+            _1, _2, _consistency_horizon);
+        _consistent_prune = boost::bind(&datamodel::counter::prune,
             _1, _consistency_horizon);
     }
 }

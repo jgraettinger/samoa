@@ -7,6 +7,8 @@
 #include "samoa/persistence/persister.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -115,7 +117,7 @@ void eventual_consistency::on_move_request(
         rstate->get_table_uuid().end());
 
     // serialize remote record to the peer
-    core::zero_copy_output_adapter zco_adapter;
+    core::protobuf::zero_copy_output_adapter zco_adapter;
     SAMOA_ASSERT(rstate->get_local_record(
         ).SerializeToZeroCopyStream(&zco_adapter));
     iface.add_data_block(zco_adapter.output_regions());

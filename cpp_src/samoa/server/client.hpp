@@ -4,7 +4,6 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/request/fwd.hpp"
 #include "samoa/core/fwd.hpp"
-#include "samoa/core/protobuf_helpers.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/stream_protocol.hpp"
 #include "samoa/spinlock.hpp"

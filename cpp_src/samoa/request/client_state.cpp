@@ -4,6 +4,7 @@
 #include "samoa/request/state_exception.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/core/uuid.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include <boost/bind.hpp>
 
 namespace samoa {
@@ -107,7 +108,7 @@ void client_state::on_response(server::client::response_interface iface,
     }
 
     // serlialize & queue core::protobuf::SamoaResponse for writing
-    core::zero_copy_output_adapter zco_adapter;
+    core::protobuf::zero_copy_output_adapter zco_adapter;
     _samoa_response.SerializeToZeroCopyStream(&zco_adapter);
 
     SAMOA_ASSERT(zco_adapter.ByteCount() < (1<<16));

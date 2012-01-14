@@ -9,8 +9,7 @@ namespace datamodel {
 enum data_type {
 
     BLOB_TYPE,
-    COUNT_TYPE,
-    MAP_TYPE
+    COUNTER_TYPE
 };
 
 // throws on conversion failure

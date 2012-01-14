@@ -4,6 +4,7 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/ref_buffer.hpp"
 #include "samoa/core/buffer_region.hpp"
+#include "samoa/core/buffer_ring.hpp"
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
 #include <boost/regex.hpp>

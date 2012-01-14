@@ -21,8 +21,7 @@ void make_clock_util_bindings()
         .def("compare", &clock_util::compare,
             (bpl::arg("lhs"),
              bpl::arg("rhs"),
-             bpl::arg("consistency_horizon") = 0,
-             bpl::arg("merged_clock_out") = bpl::object()))
+             bpl::arg("consistency_horizon")))
         .staticmethod("compare")
         .def_readwrite("clock_jitter_bound", &clock_util::clock_jitter_bound)
         ;

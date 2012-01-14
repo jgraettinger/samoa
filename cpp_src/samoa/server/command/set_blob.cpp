@@ -44,14 +44,10 @@ void set_blob_handler::handle(const request::state::ptr_t & rstate)
 
     spb::PersistedRecord & record = rstate->get_remote_record();
 
-    // assume the key doesn't exist; initial clock tick for first write
-    datamodel::clock_util::tick(*record.mutable_cluster_clock(),
-        rstate->get_primary_partition_uuid());
-
-    // assign client's value
-    record.add_blob_value()->assign(
-        boost::asio::buffers_begin(rstate->get_request_data_blocks()[0]),
-        boost::asio::buffers_end(rstate->get_request_data_blocks()[0]));
+    // assume the key doesn't exist, and we're creating a new record
+    datamodel::blob::update(record,
+        rstate->get_primary_partition_uuid(),
+        rstate->get_request_data_blocks()[0]);
 
     rstate->get_primary_partition()->get_persister()->put(
         boost::bind(&set_blob_handler::on_put,
@@ -65,7 +61,7 @@ void set_blob_handler::handle(const request::state::ptr_t & rstate)
 
 datamodel::merge_result set_blob_handler::on_merge(
     spb::PersistedRecord & local_record,
-    const spb::PersistedRecord & remote_record,
+    const spb::PersistedRecord &,
     const request::state::ptr_t & rstate)
 {
     datamodel::merge_result result;
@@ -73,12 +69,13 @@ datamodel::merge_result set_blob_handler::on_merge(
     result.remote_is_stale = false;
 
     // if request included a cluster clock, validate
-    //  _exact_ equality against the stored cluster clock
+    //  equality against the stored cluster clock
     if(rstate->get_samoa_request().has_cluster_clock())
     {
         if(datamodel::clock_util::compare(
                 local_record.cluster_clock(),
-                rstate->get_samoa_request().cluster_clock()
+                rstate->get_samoa_request().cluster_clock(),
+                rstate->get_table()->get_consistency_horizon()
             ) != datamodel::clock_util::EQUAL)
         {
             // clock doesn't match: abort
@@ -87,15 +84,14 @@ datamodel::merge_result set_blob_handler::on_merge(
     }
 
     // clocks match, or the request doesn't have a clock (implicit match)
-    //   tick the local clock to reflect this operation
+    //   update the record to 'repair' any divergence with the new value
 
-    datamodel::clock_util::tick(*local_record.mutable_cluster_clock(),
-        rstate->get_primary_partition_uuid());
+    datamodel::blob::update(local_record,
+        rstate->get_primary_partition_uuid(),
+        rstate->get_request_data_blocks()[0]);
 
-    datamodel::clock_util::prune_record(local_record,
+    datamodel::blob::prune(local_record,
         rstate->get_table()->get_consistency_horizon());
-
-    local_record.mutable_blob_value()->CopyFrom(remote_record.blob_value());
 
     result.local_was_updated = true;
     result.remote_is_stale = true;
