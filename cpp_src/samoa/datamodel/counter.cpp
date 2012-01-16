@@ -70,7 +70,7 @@ merge_result counter::merge(
     counter_values_t::iterator lhs_it = begin(lhs_values);
     counter_values_t::const_iterator rhs_it = begin(rhs_values);
 
-    auto update = [&](clock_util::merge_compare state) -> void
+    auto update = [&](clock_util::merge_step state) -> void
     {
     	if(state == clock_util::LHS_RHS_EQUAL)
         {
@@ -107,17 +107,15 @@ merge_result counter::merge(
         update);
 }
 
-void counter::send_counter_value(const request::state::ptr_t & rstate,
-    const spb::PersistedRecord & record)
+int64_t counter::value(const spb::PersistedRecord & record)
 {
-	int64_t global_value = record.consistent_counter_value();
+	int64_t aggregate = record.consistent_counter_value();
 
     for(int64_t value : record.counter_value())
     {
-        global_value += value; 
+        aggregate += value; 
     }
-    rstate->get_samoa_response().set_counter_value(global_value);
-    rstate->flush_response();
+    return aggregate;
 }
 
 }

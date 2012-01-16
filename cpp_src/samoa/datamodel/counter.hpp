@@ -27,8 +27,7 @@ public:
         const spb::PersistedRecord & remote_record,
         unsigned consistency_horizon);
 
-    static void send_counter_value(const request::state_ptr_t &,
-        const spb::PersistedRecord &);
+    static int64_t value(const spb::PersistedRecord &);
 };
 
 }

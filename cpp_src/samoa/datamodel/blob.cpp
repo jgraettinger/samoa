@@ -16,6 +16,7 @@ void blob::update(spb::PersistedRecord & record,
     const core::buffer_regions_t & new_value)
 {
 	// any previous divergence has been repaired
+    record.clear_consistent_blob_value();
     for(std::string & value : *record.mutable_blob_value())
     {
     	value.clear();
@@ -99,7 +100,7 @@ merge_result blob::merge(
     blob_values_t::iterator lhs_it = begin(lhs_values);
     blob_values_t::const_iterator rhs_it = begin(rhs_values);
 
-    auto update = [&](clock_util::merge_compare state) -> void
+    auto update = [&](clock_util::merge_step state) -> void
     {
     	if(state == clock_util::LHS_RHS_EQUAL)
         {
@@ -141,27 +142,6 @@ merge_result blob::merge(
         remote_record.cluster_clock(),
         consistency_horizon,
         update);
-}
-
-void blob::send_blob_value(const request::state::ptr_t & rstate,
-    const spb::PersistedRecord & record)
-{
-    rstate->get_samoa_response().mutable_cluster_clock()->CopyFrom(
-        record.cluster_clock());
-
-    for(const std::string & value : record.consistent_blob_value())
-    {
-        SAMOA_ASSERT(value.size());
-        rstate->add_response_data_block(std::begin(value), std::end(value));
-    }
-    for(const std::string & value : record.blob_value())
-    {
-        if(!value.size())
-        	continue;
-
-        rstate->add_response_data_block(std::begin(value), std::end(value));
-    }
-    rstate->flush_response();
 }
 
 }

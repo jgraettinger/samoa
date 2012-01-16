@@ -19,6 +19,8 @@ namespace server {
 namespace command {
 
 namespace spb = samoa::core::protobuf;
+using std::begin;
+using std::end;
 
 void get_blob_handler::handle(const request::state::ptr_t & rstate)
 {
@@ -50,13 +52,19 @@ void get_blob_handler::on_repaired_read(
         return;
     }
 
-    rstate->get_samoa_response().set_replication_success(
-        rstate->get_peer_success_count());
-    rstate->get_samoa_response().set_replication_failure(
-        rstate->get_peer_failure_count());
+    spb::SamoaResponse & response = rstate->get_samoa_response();
 
-    datamodel::blob::send_blob_value(rstate,
-        rstate->get_local_record());
+    response.set_replication_success(rstate->get_peer_success_count());
+    response.set_replication_failure(rstate->get_peer_failure_count());
+
+    response.mutable_cluster_clock()->CopyFrom(
+        rstate->get_local_record().cluster_clock());
+
+    datamodel::blob::value(rstate->get_local_record(),
+        [&](const std::string & value)
+        { rstate->add_response_data_block(begin(value), end(value)); });
+
+    rstate->flush_response();
 }
 
 }

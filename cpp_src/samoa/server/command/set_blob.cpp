@@ -21,6 +21,8 @@ namespace server {
 namespace command {
 
 namespace spb = samoa::core::protobuf;
+using std::begin;
+using std::end;
 
 void set_blob_handler::handle(const request::state::ptr_t & rstate)
 {
@@ -76,7 +78,7 @@ datamodel::merge_result set_blob_handler::on_merge(
                 local_record.cluster_clock(),
                 rstate->get_samoa_request().cluster_clock(),
                 rstate->get_table()->get_consistency_horizon()
-            ) != datamodel::clock_util::EQUAL)
+            ) != datamodel::clock_util::CLOCKS_EQUAL)
         {
             // clock doesn't match: abort
             return result;
@@ -111,9 +113,17 @@ void set_blob_handler::on_put(
 
     if(!merge_result.local_was_updated)
     {
-        rstate->get_samoa_response().set_success(false);
-        datamodel::blob::send_blob_value(rstate,
-            rstate->get_local_record());
+        spb::SamoaResponse & response = rstate->get_samoa_response();
+
+        response.set_success(false);
+        response.mutable_cluster_clock()->CopyFrom(
+            rstate->get_local_record().cluster_clock());
+
+        datamodel::blob::value(rstate->get_local_record(),
+            [&](const std::string & value)
+            { rstate->add_response_data_block(begin(value), end(value)); });
+
+        rstate->flush_response();
         return;
     }
 

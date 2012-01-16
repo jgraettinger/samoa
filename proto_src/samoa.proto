@@ -136,7 +136,7 @@ message PartitionClock
 {
     required bytes  partition_uuid = 1;
     required uint64 unix_timestamp = 2;
-    required uint32 lamport_tick = 3;
+    optional uint32 lamport_tick = 3 [default = 0];
 };
 
 message ClusterClock

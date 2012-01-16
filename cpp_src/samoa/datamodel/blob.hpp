@@ -33,12 +33,18 @@ public:
         const spb::PersistedRecord & remote_record,
         unsigned consistency_horizon);
 
-    static void send_blob_value(const request::state_ptr_t &,
-        const spb::PersistedRecord &);
+    /*!
+     * ValueCallback is a concept with signature void(const std::string &),
+     *  which is called for each divergent blob_value of the record
+     */
+    template<typename ValueCallback>
+    static void value(const spb::PersistedRecord &, const ValueCallback &);
 };
 
 }
 }
+
+#include "samoa/datamodel/blob.impl.hpp"
 
 #endif
 

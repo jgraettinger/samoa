@@ -1,6 +1,7 @@
 
 #include "samoa/core/protobuf/sequence_util.hpp"
 #include "samoa/core/server_time.hpp"
+#include "samoa/log.hpp"
 
 namespace samoa {
 namespace datamodel {
@@ -27,17 +28,25 @@ inline bool uuid_comparator::operator()(
 inline bool uuid_comparator::operator()(
     const spb::PartitionClock & lhs, const core::uuid & rhs) const
 {
+    // reinterpret as unsigned
+    const uint8_t * lhs_uuid = reinterpret_cast<const uint8_t*>(
+        lhs.partition_uuid().data());
+
     return std::lexicographical_compare(
-        begin(lhs.partition_uuid()), end(lhs.partition_uuid()),
+        lhs_uuid, lhs_uuid + lhs.partition_uuid().size(),
         begin(rhs), end(rhs));
 }
 
 inline bool uuid_comparator::operator()(
     const core::uuid & lhs, const spb::PartitionClock & rhs) const
 {
+    // reinterpret as unsigned
+    const uint8_t * rhs_uuid = reinterpret_cast<const uint8_t*>(
+        rhs.partition_uuid().data());
+
     return std::lexicographical_compare(
         begin(lhs), end(lhs),
-        begin(rhs.partition_uuid()), end(rhs.partition_uuid()));
+        rhs_uuid, rhs_uuid + rhs.partition_uuid().size());
 }
 
 template<typename DatamodelUpdate>
@@ -49,27 +58,40 @@ void clock_util::tick(spb::ClusterClock & cluster_clock,
     clocks_t::iterator it = std::lower_bound(clocks.begin(), clocks.end(),
         partition_uuid, uuid_comparator());
 
+    bool is_equal = false;
+    if(it != end(clocks))
+    {
+        SAMOA_ASSERT(it->partition_uuid().size() == sizeof(core::uuid));
+
+        // reinterpret string uuid as unsigned
+        is_equal = std::equal(begin(partition_uuid), end(partition_uuid),
+            reinterpret_cast<const uint8_t*>(it->partition_uuid().data()));
+    }
+
     size_t ind = std::distance(clocks.begin(), it);
 
-    SAMOA_ASSERT(it == clocks.end() || \
-        it->partition_uuid().size() == sizeof(core::uuid));
-
-    // no current clock for this partition? add one
-    if(it == clocks.end() || std::equal(
-    	begin(it->partition_uuid()), end(it->partition_uuid()),
-    	begin(partition_uuid)))
+    if(!is_equal)
     {
+        // no current clock for this partition; add one
         spb::PartitionClock & new_clock = insert_before(clocks, it);
         new_clock.mutable_partition_uuid()->assign(
             begin(partition_uuid), end(partition_uuid));
 
+        new_clock.set_unix_timestamp(core::server_time::get_time());
         datamodel_update(true, ind);
     }
     else
-        datamodel_update(false, ind);
+    {
+        if(it->unix_timestamp() < core::server_time::get_time())
+        {
+            it->set_unix_timestamp(core::server_time::get_time());
+            it->clear_lamport_tick();
+        }
+        else
+            it->set_lamport_tick(it->lamport_tick() + 1);
 
-    it->set_unix_timestamp(core::server_time::get_time());
-    it->set_lamport_tick(it->lamport_tick() + 1);
+        datamodel_update(false, ind);
+    }
 }
 
 template<typename DatamodelUpdate>
@@ -159,6 +181,9 @@ merge_result clock_util::merge(
             }
             else if(l_it->unix_timestamp() < r_it->unix_timestamp())
             {
+                l_it->set_unix_timestamp(r_it->unix_timestamp());
+                l_it->set_lamport_tick(r_it->lamport_tick());
+
                 result.local_was_updated = true;
                 datamodel_update(RHS_NEWER);
             }
@@ -171,6 +196,8 @@ merge_result clock_util::merge(
                 }
                 else if(l_it->lamport_tick() < r_it->lamport_tick())
                 {
+                    l_it->set_lamport_tick(r_it->lamport_tick());
+
                 	result.local_was_updated = true;
                 	datamodel_update(RHS_NEWER);
                 }
