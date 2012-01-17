@@ -40,7 +40,7 @@ void remove_before(Sequence & seq, typename Sequence::iterator & iter)
     SAMOA_ASSERT(ind);
 
     // bubble to tail, and remove
-    for(size_t i = ind + 1; i != (size_t) seq.size(); ++i)
+    for(size_t i = ind; i != (size_t) seq.size(); ++i)
     {
         seq.SwapElements(i, i - 1);
     }

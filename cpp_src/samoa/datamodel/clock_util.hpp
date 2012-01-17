@@ -31,12 +31,39 @@ public:
      *    if a partition clock is at least this old, it's considered
      *    prunable on the assumption that all other peers will see
      *    the clock as at least ignore_ts old
+     *
+     *  ClusterClock's has_pruned_clock field also requires explanation:
+     *
+     *    An issue with clock pruning, is it introduces edge cases where
+     *    an record at least consistency_horizon old in the cluster exists,
+     *    but a partition handling a write doesn't have it & creates a new
+     *    record.
+     *
+     *    During a naive reconcilliation, elements have the potential to
+     *    be dropped (eg, because a remote element is older than ignore_ts);
+     *    it also introduces ambiguity in a datamodel's treatment of
+     *    consistent value representations.
+     *
+     *    ClockUtil therefore introduces the notion of clock 'consistency',
+     *    which means the clock is at least consistency_horizon old, and
+     *    can therefore trace it's lineage to the initial write of the key.
+     *
+     *    A clock is considered 'consistent' if it has a partition clock
+     *    at least ignore_ts old, or if has_pruned_clock is true.
      */
 
     static unsigned clock_jitter_bound /* = 3600 */;
 
     /// Returns whether the ClusterClock is well-formed
     static bool validate(const spb::ClusterClock &);
+
+    /*! \brief Determines whether the clock should be considered consistent
+     *
+     * A clock is consistent if a PartitionClock is at least
+     *  ignore_ts old, or if has_pruned_clock is true.
+     */
+    static bool is_consistent(const spb::ClusterClock &,
+        unsigned consistency_horizon);
 
     /*! \brief Ticks the clock of the named partition
      *
@@ -62,7 +89,24 @@ public:
         CLOCKS_DIVERGE = 3
     };
 
-    /// Determines the relative ordering of two cluster clocks
+    /*! \brief Determines the relative ordering of two cluster clocks
+     *
+     * Clocks are equal iff they share identical partition clocks
+     *  and clock consistency.
+     *
+     * A clock is more recent than the other iff it has all partition clocks
+     *  of the other clock, where each clock is at least as-current, and any of:
+     *    - it is consistent, and the other is not
+     *    - one of it's partition clocks is newer
+     *    - one of it's partition clocks isn't present in the other
+     *
+     * If clocks are unequal and neither is strictly newer than the other,
+     *  then they are divergent.
+     *
+     * If the local clock is consistent, than any missing remote partition
+     *  clocks older than prune_ts are assumed to have been pruned, and
+     *  not to indicate a divergence.
+     */
     static clock_ancestry compare(
         const spb::ClusterClock & local_clock,
         const spb::ClusterClock & remote_clock,
@@ -71,10 +115,10 @@ public:
     /*! \brief Prunes elements of the clock which are older than prune_ts
      *
      * Additionally calls a DatamodelUpdate callable, where DatamodelUpdate
-     *  is a concept with the following signature, and signals the element
-     *  at the specified index should be removed.
+     *  is a concept with the signature void(unsigned index). A call signals
+     *  the element at the specified index should be removed.
      *
-     * void(unsigned index):
+     * If an element is pruned, has_pruned_clock is set.
      */
     template<typename DatamodelUpdate>
     static void prune(spb::PersistedRecord &,
@@ -121,9 +165,7 @@ public:
      *  or more recent than both pre-operation local_clock and remote_clock.
      *
      * Additionally calls a DatamodelUpdate callable, where DatamodelUpdate
-     *  is a concept with the following signature:
-     *
-     * void(merge_step);
+     *  is a concept with the signature void(merge_step)
      *
      * The update functor is called for every partition clock in local_clock
      *  and remote_clock in strictly increasing partition-uuid order, and
@@ -133,6 +175,14 @@ public:
      *  iterators into the local and remote partition elements, which are
      *  updated after each call following the semantics documented in the
      *  merge_step enum. See merge_step for details.
+     *
+     * If the local clock is consistent, than any missing remote partition
+     *  clocks older than prune_ts are assumed to have been pruned, and
+     *  not to indicate a divergence (RHS_SKIP is passed to the datamodel).
+     *
+     * If local_clock isn't consistent and remote_clock is, then
+     *  local_was_updated will always be set, and local_clock will become
+     *  consistent.
      */
     template<typename DatamodelUpdate>
     static merge_result merge(

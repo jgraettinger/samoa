@@ -35,17 +35,18 @@ void counter::update(spb::PersistedRecord & record,
 bool counter::prune(spb::PersistedRecord & record,
     unsigned consistency_horizon)
 {
-    auto update = [&](unsigned index) -> void
+    auto update = [&record](unsigned index) -> bool
     {
     	if(record.counter_value(index))
         {
         	// fold into consistent count value
-        	record.set_consistent_counter_value(
-        	    record.consistent_counter_value() + \
+        	record.set_counter_consistent_value(
+        	    record.counter_consistent_value() + \
         	    record.counter_value(index));
         }
         core::protobuf::remove_before(
             *record.mutable_counter_value(), index + 1);
+        return true;
     };
     clock_util::prune(record, consistency_horizon, update);
 
@@ -109,7 +110,7 @@ merge_result counter::merge(
 
 int64_t counter::value(const spb::PersistedRecord & record)
 {
-	int64_t aggregate = record.consistent_counter_value();
+	int64_t aggregate = record.counter_consistent_value();
 
     for(int64_t value : record.counter_value())
     {

@@ -7,7 +7,7 @@ template<typename ValueCallback>
 void blob::value(const spb::PersistedRecord & record,
     const ValueCallback & callback)
 {
-    for(const std::string & value : record.consistent_blob_value())
+    for(const std::string & value : record.blob_consistent_value())
     {
         SAMOA_ASSERT(value.size());
         callback(value);

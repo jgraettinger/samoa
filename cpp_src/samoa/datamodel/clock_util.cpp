@@ -17,15 +17,15 @@ bool clock_util::validate(const spb::ClusterClock & cluster_clock)
     const clocks_t & clocks = cluster_clock.partition_clock();
 
     clocks_t::const_iterator it = begin(clocks);
-    clocks_t::const_iterator last_it = it++;
+    clocks_t::const_iterator last_it = it;
 
-    while(last_it != clocks.end() && it != clocks.end())
+    while(it != clocks.end())
     {
     	if(it->partition_uuid().size() != sizeof(core::uuid))
         {
     		return false;
         }
-        if(!uuid_comparator()(*last_it, *it))
+        if(it != begin(clocks) && !uuid_comparator()(*last_it, *it))
         {
             return false;
         }
@@ -34,22 +34,49 @@ bool clock_util::validate(const spb::ClusterClock & cluster_clock)
     return true;
 }
 
+bool clock_util::is_consistent(const spb::ClusterClock & clock,
+    unsigned consistency_horizon)
+{
+    if(clock.clock_is_pruned())
+    {
+        // pruning implies clock element reached prune_ts
+        return true;
+    }
+
+    uint64_t ignore_ts = core::server_time::get_time() - consistency_horizon;
+
+    for(const spb::PartitionClock & part_clock : clock.partition_clock())
+    {
+        if(part_clock.unix_timestamp() <= ignore_ts)
+            return true;
+    }
+    return false;
+}
+
 clock_util::clock_ancestry clock_util::compare(
-    const spb::ClusterClock & local_clock,
-    const spb::ClusterClock & remote_clock,
+    const spb::ClusterClock & local_cluster_clock,
+    const spb::ClusterClock & remote_cluster_clock,
     unsigned consistency_horizon)
 {
     uint64_t ignore_ts = core::server_time::get_time() - consistency_horizon;
     uint64_t prune_ts = ignore_ts - clock_jitter_bound;
 
-    const clocks_t & local = local_clock.partition_clock();
-    const clocks_t & remote = remote_clock.partition_clock();
+    const clocks_t & local = local_cluster_clock.partition_clock();
+    const clocks_t & remote = remote_cluster_clock.partition_clock();
+
+    bool local_is_consistent = is_consistent(local_cluster_clock,
+        consistency_horizon);
+    bool remote_is_consistent = is_consistent(remote_cluster_clock,
+        consistency_horizon);
 
     clocks_t::const_iterator l_it = begin(local);
     clocks_t::const_iterator r_it = begin(remote);
 
     bool local_more_recent = false;
     bool remote_more_recent = false;
+
+    if(local_is_consistent && !remote_is_consistent)
+        local_more_recent = true;
 
     while(l_it != local.end() && r_it != remote.end())
     {
@@ -62,7 +89,7 @@ clock_util::clock_ancestry clock_util::compare(
         }
         else if(l_it->partition_uuid() > r_it->partition_uuid())
         {
-            if(r_it->unix_timestamp() > prune_ts)
+            if(!local_is_consistent || r_it->unix_timestamp() > prune_ts)
                 remote_more_recent = true;
 
             ++r_it;
@@ -100,10 +127,16 @@ clock_util::clock_ancestry clock_util::compare(
     }
     while(r_it != remote.end())
     {
-        if(r_it->unix_timestamp() > ignore_ts)
+        if(!local_is_consistent || r_it->unix_timestamp() > prune_ts)
         	remote_more_recent = true;
 
         ++r_it;
+    }
+
+    if(!local_cluster_clock.clock_is_pruned() && \
+        remote_cluster_clock.clock_is_pruned())
+    {
+        remote_more_recent = true;
     }
 
     if(local_more_recent && remote_more_recent)

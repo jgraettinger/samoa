@@ -11,29 +11,28 @@ namespace datamodel {
 
 namespace spb = samoa::core::protobuf;
 
-void blob::update(spb::PersistedRecord & record,
+template<typename AssignValue>
+void update_common(spb::PersistedRecord & record,
     const core::uuid & partition_uuid,
-    const core::buffer_regions_t & new_value)
+    const AssignValue & assign_value)
 {
 	// any previous divergence has been repaired
-    record.clear_consistent_blob_value();
+    record.clear_blob_consistent_value();
     for(std::string & value : *record.mutable_blob_value())
     {
-    	value.clear();
+        value.clear();
     }
 
     auto update = [&](bool insert_before, unsigned index) -> void
     {
         if(insert_before)
         {
-        	core::copy_regions_into(new_value,
-        	    core::protobuf::insert_before(
-        	        *record.mutable_blob_value(), index));
+            assign_value(core::protobuf::insert_before(
+                *record.mutable_blob_value(), index));
         }
         else
         {
-        	core::copy_regions_into(new_value,
-        	    *record.mutable_blob_value(index));
+            assign_value(*record.mutable_blob_value(index));
         }
     };
     clock_util::tick(*record.mutable_cluster_clock(),
@@ -42,22 +41,24 @@ void blob::update(spb::PersistedRecord & record,
 
 void blob::update(spb::PersistedRecord & record,
     const core::uuid & partition_uuid,
+    const core::buffer_regions_t & new_value)
+{
+    auto assign_value = [&](std::string & out)
+    {
+        core::copy_regions_into(new_value, out);
+    };
+    update_common(record, partition_uuid, assign_value);
+}
+
+void blob::update(spb::PersistedRecord & record,
+    const core::uuid & partition_uuid,
     const std::string & value)
 {
-    auto update = [&](bool insert_before, unsigned index) -> void
+    auto assign_value = [&](std::string & out)
     {
-        if(insert_before)
-        {
-        	core::protobuf::insert_before(
-        	    *record.mutable_blob_value(), index) = value;
-        }
-        else
-        {
-            record.set_blob_value(index, value);
-        }
+        out = value;
     };
-    clock_util::tick(*record.mutable_cluster_clock(),
-        partition_uuid, update);
+    update_common(record, partition_uuid, assign_value);
 }
 
 bool blob::prune(spb::PersistedRecord & record,
@@ -68,7 +69,7 @@ bool blob::prune(spb::PersistedRecord & record,
         if(record.blob_value(index).size())
         {
         	// fold into consistent blob values
-            record.add_consistent_blob_value(record.blob_value(index));
+            record.add_blob_consistent_value(record.blob_value(index));
         }
         core::protobuf::remove_before(
             *record.mutable_blob_value(), index + 1);
@@ -106,12 +107,12 @@ merge_result blob::merge(
         {
         	if(!rhs_it->size())
             {
-            	// if rhs is clear, implication is that remote
-            	//  has already read-repaired this value;
-            	//  we can thus discard it
+                // a read-repair has occurred which included this value
         		lhs_it->clear();
-            }
 
+                // consistent values were also implicitly included in the repair
+                local_record.clear_blob_consistent_value();
+            }
             ++lhs_it; ++rhs_it;
         }
         else if(state == clock_util::LHS_ONLY)

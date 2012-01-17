@@ -3,6 +3,7 @@ import getty
 import unittest
 
 from samoa.core.uuid import UUID
+from samoa.core.server_time import ServerTime
 from samoa.core.protobuf import PersistedRecord, ClusterClock
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 from samoa.datamodel.blob import Blob
@@ -11,6 +12,87 @@ from samoa.test.module import TestModule
 
 
 class TestBlob(unittest.TestCase):
+
+    def test_update(self):
+
+        record = PersistedRecord()
+
+        # initial value fixture
+        record.add_consistent_blob_value('value')
+
+        self.assertItemsEqual(Blob.value(record), ['value'])
+
+        A = UUID.from_random()
+        B = UUID.from_random()
+
+        Blob.update(record, A, 'value-A')
+        self.assertItemsEqual(record.blob_value, ['value-A'])
+        self.assertItemsEqual(Blob.value(record), ['value-A'])
+
+        Blob.update(record, A, 'value-A-2')
+        self.assertItemsEqual(record.blob_value, ['value-A-2'])
+        self.assertItemsEqual(Blob.value(record), ['value-A-2'])
+
+        Blob.update(record, B, 'value-B')
+        self.assertItemsEqual(record.blob_value, ['value-B', ''])
+        self.assertItemsEqual(Blob.value(record), ['value-B'])
+
+    def test_prune(self):
+
+        record = PersistedRecord()
+
+        Blob.update(record, UUID.from_random(), 'replaced')
+        Blob.update(record, UUID.from_random(), 'prune_value')
+
+        ServerTime.set_time(ServerTime.get_time() + \
+            ClockUtil.clock_jitter_bound + 1)
+
+        # non-empty prunable value => value moved consistent_blob_value
+        self.assertFalse(Blob.prune(record, 1))
+
+        self.assertItemsEqual(record.blob_value, [])
+        self.assertItemsEqual(record.consistent_blob_value, ['prune_value'])
+
+        Blob.update(record, UUID.from_random(), 'new_value')
+
+        # current clock => prune takes no action
+        self.assertFalse(Blob.prune(record, 1))
+
+        self.assertItemsEqual(record.consistent_blob_value, [])
+        self.assertItemsEqual(record.blob_value, ['new_value'])
+
+        # put empty string, to mark as deleted
+        Blob.update(record, UUID.from_random(), '')
+
+        ServerTime.set_time(ServerTime.get_time() + \
+            ClockUtil.clock_jitter_bound + 1)
+
+        # empty prunable value => prune() is True and record is cleared
+        self.assertTrue(Blob.prune(record, 1))
+        self.assertItemsEqual(record.blob_value, [])
+        self.assertItemsEqual(record.consistent_blob_value, [])
+
+        # record is expired => prune() is True
+        Blob.update(record, UUID.from_random(), 'foobar')
+        record.set_expire_timestamp(ServerTime.get_time() - 1)
+
+        self.assertTrue(Blob.prune(record, 1))
+
+    def test_merge(self):
+
+        # fixtures:
+
+        # one with two pruned values (no clocks)
+        # one with one pruned, and one clock < prune_ts
+        # one with two clocks < prune_ts
+        # one 'new' write of value-A
+        # one 'new' write of value-B
+
+
+
+
+        local_record = PersistedRecord()
+        remote_record = PersistedRecord()
 
     def test_merge_no_clocks(self):
 

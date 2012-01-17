@@ -15,6 +15,7 @@ public:
 
     typedef boost::shared_ptr<record_state> ptr_t;
 
+    record_state();
     virtual ~record_state();
 
     spb::PersistedRecord & get_local_record()
@@ -23,11 +24,7 @@ public:
     spb::PersistedRecord & get_remote_record()
     { return _remote_record; }
 
-    void reset_record_state()
-    {
-        _local_record.Clear();
-        _remote_record.Clear();
-    }
+    void reset_record_state();
 
 private:
 

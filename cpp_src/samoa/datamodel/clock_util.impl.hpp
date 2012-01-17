@@ -108,24 +108,28 @@ void clock_util::prune(spb::PersistedRecord & record,
     clocks_t::iterator it = clocks.begin();
     clocks_t::iterator last_it = it;
 
-    while(it != clocks.end())
+    while(it != end(clocks))
     {
         SAMOA_ASSERT(last_it == it || uuid_comparator()(*last_it, *it));
 
-        if(it->unix_timestamp() < prune_ts)
+        if(it->unix_timestamp() <= prune_ts)
         {
-        	datamodel_update(std::distance(clocks.begin(), it));
+            datamodel_update(std::distance(clocks.begin(), it));
 
-            ++it;
-            core::protobuf::remove_before(clocks, it);
+            core::protobuf::remove_before(clocks, ++it);
+            last_it = (it == begin(clocks)) ? it : it - 1;
+
+            if(cluster_clock.has_clock_is_pruned())
+            {
+                cluster_clock.clear_clock_is_pruned();
+            }
         }
         else
-        	last_it = it++;
+            last_it = it++;
     }
-
-    if(clocks.size() == 0)
+    if(clocks.size() == 0 && cluster_clock.clock_is_pruned())
     {
-    	record.clear_cluster_clock();
+        record.clear_cluster_clock();
     }
 }
 
@@ -147,6 +151,14 @@ merge_result clock_util::merge(
 
     merge_result result = {false, false};
 
+    bool local_is_consistent = is_consistent(local_cluster_clock,
+        consistency_horizon);
+    bool remote_is_consistent = is_consistent(remote_cluster_clock,
+        consistency_horizon);
+
+    if(local_is_consistent && !remote_is_consistent)
+        result.remote_is_stale = true;
+
     while(l_it != local.end() && r_it != remote.end())
     {
         if(l_it->partition_uuid() < r_it->partition_uuid())
@@ -159,7 +171,7 @@ merge_result clock_util::merge(
         }
         else if(l_it->partition_uuid() > r_it->partition_uuid())
         {
-            if(r_it->unix_timestamp() > prune_ts)
+            if(!local_is_consistent || r_it->unix_timestamp() > prune_ts)
             {
                 result.local_was_updated = true;
 
@@ -168,7 +180,7 @@ merge_result clock_util::merge(
             }
             else
             {
-            	datamodel_update(RHS_SKIP);
+                datamodel_update(RHS_SKIP);
             }
             ++r_it;
         }
@@ -191,15 +203,15 @@ merge_result clock_util::merge(
             {
                 if(l_it->lamport_tick() > r_it->lamport_tick())
                 {
-                	result.remote_is_stale = true;
+                    result.remote_is_stale = true;
                     datamodel_update(LHS_NEWER);
                 }
                 else if(l_it->lamport_tick() < r_it->lamport_tick())
                 {
                     l_it->set_lamport_tick(r_it->lamport_tick());
 
-                	result.local_was_updated = true;
-                	datamodel_update(RHS_NEWER);
+                    result.local_was_updated = true;
+                    datamodel_update(RHS_NEWER);
                 }
                 else
                 {
@@ -219,7 +231,7 @@ merge_result clock_util::merge(
     }
     while(r_it != remote.end())
     {
-        if(r_it->unix_timestamp() > prune_ts)
+        if(!local_is_consistent || r_it->unix_timestamp() > prune_ts)
         {
             result.local_was_updated = true;
 
@@ -228,9 +240,16 @@ merge_result clock_util::merge(
         }
         else
         {
-        	datamodel_update(RHS_SKIP);
+            datamodel_update(RHS_SKIP);
         }
         ++r_it;
+    }
+
+    if(!local_cluster_clock.clock_is_pruned() && \
+        remote_cluster_clock.clock_is_pruned())
+    {
+        result.local_was_updated = true;
+        local_cluster_clock.clear_clock_is_pruned();
     }
     return result;
 }
