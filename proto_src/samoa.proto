@@ -132,18 +132,18 @@ message CreatePartitionRequest {
 
 // *INTERNAL* Datamodel serialization
 
-message PartitionClock
+message AuthorClock
 {
-    required bytes  partition_uuid = 1;
+    required fixed64 author_id = 1;
     required uint64 unix_timestamp = 2;
     optional uint32 lamport_tick = 3 [default = 0];
 };
 
 message ClusterClock
 {
-    repeated PartitionClock partition_clock = 1;
+    repeated AuthorClock author_clock = 1;
 
-    // whether a PartitionClock has at some point been removed due to age
+    // whether a AuthorClock has at some point been removed due to age
     optional bool clock_is_pruned = 2 [default = true];
 };
 

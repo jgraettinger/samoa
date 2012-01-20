@@ -17,12 +17,10 @@ class blob
 {
 public:
 
-    static void update(spb::PersistedRecord &,
-        const core::uuid & partition_uuid,
+    static void update(spb::PersistedRecord &, uint64_t author_id,
         const core::buffer_regions_t & value);
 
-    static void update(spb::PersistedRecord &,
-        const core::uuid & partition_uuid,
+    static void update(spb::PersistedRecord &, uint64_t author_id,
         const std::string & value); 
 
     static bool prune(spb::PersistedRecord &,

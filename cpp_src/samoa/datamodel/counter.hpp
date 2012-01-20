@@ -15,8 +15,7 @@ class counter
 {
 public:
 
-    static void update(spb::PersistedRecord &,
-        const core::uuid & partition_uuid,
+    static void update(spb::PersistedRecord &, uint64_t author_id,
         int64_t increment);
 
     static bool prune(spb::PersistedRecord &,

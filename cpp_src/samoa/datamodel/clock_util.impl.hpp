@@ -11,72 +11,33 @@ namespace spb = samoa::core::protobuf;
 using std::begin;
 using std::end;
 
-struct uuid_comparator
+struct author_id_comparator
 {
-    bool operator()(const spb::PartitionClock &,
-        const spb::PartitionClock &) const;
-    bool operator()(const spb::PartitionClock &, const core::uuid &) const;
-    bool operator()(const core::uuid &, const spb::PartitionClock &) const;
+    bool operator()(const spb::AuthorClock & lhs, const spb::AuthorClock & rhs)
+    { return lhs.author_id() < rhs.author_id(); }
+
+    bool operator()(const spb::AuthorClock & lhs, uint64_t rhs)
+    { return lhs.author_id() < rhs; }
+
+    bool operator()(uint64_t lhs, const spb::AuthorClock & rhs)
+    { return lhs < rhs.author_id(); }
 };
-
-inline bool uuid_comparator::operator()(
-    const spb::PartitionClock & lhs, const spb::PartitionClock & rhs) const
-{
-    return lhs.partition_uuid() < rhs.partition_uuid();
-}
-
-inline bool uuid_comparator::operator()(
-    const spb::PartitionClock & lhs, const core::uuid & rhs) const
-{
-    // reinterpret as unsigned
-    const uint8_t * lhs_uuid = reinterpret_cast<const uint8_t*>(
-        lhs.partition_uuid().data());
-
-    return std::lexicographical_compare(
-        lhs_uuid, lhs_uuid + lhs.partition_uuid().size(),
-        begin(rhs), end(rhs));
-}
-
-inline bool uuid_comparator::operator()(
-    const core::uuid & lhs, const spb::PartitionClock & rhs) const
-{
-    // reinterpret as unsigned
-    const uint8_t * rhs_uuid = reinterpret_cast<const uint8_t*>(
-        rhs.partition_uuid().data());
-
-    return std::lexicographical_compare(
-        begin(lhs), end(lhs),
-        rhs_uuid, rhs_uuid + rhs.partition_uuid().size());
-}
 
 template<typename DatamodelUpdate>
 void clock_util::tick(spb::ClusterClock & cluster_clock,
-    const core::uuid & partition_uuid,
-    const DatamodelUpdate & datamodel_update)
+    uint64_t author_id, const DatamodelUpdate & datamodel_update)
 {
-    clocks_t & clocks = *cluster_clock.mutable_partition_clock();
-    clocks_t::iterator it = std::lower_bound(clocks.begin(), clocks.end(),
-        partition_uuid, uuid_comparator());
+    author_clocks_t & clocks = *cluster_clock.mutable_author_clock();
+    author_clocks_t::iterator it = std::lower_bound(
+        clocks.begin(), clocks.end(), author_id, author_id_comparator());
 
-    bool is_equal = false;
-    if(it != end(clocks))
-    {
-        SAMOA_ASSERT(it->partition_uuid().size() == sizeof(core::uuid));
+    size_t ind = std::distance(begin(clocks), it);
 
-        // reinterpret string uuid as unsigned
-        is_equal = std::equal(begin(partition_uuid), end(partition_uuid),
-            reinterpret_cast<const uint8_t*>(it->partition_uuid().data()));
-    }
-
-    size_t ind = std::distance(clocks.begin(), it);
-
-    if(!is_equal)
+    if(it == end(clocks) || it->author_id() != author_id)
     {
         // no current clock for this partition; add one
-        spb::PartitionClock & new_clock = insert_before(clocks, it);
-        new_clock.mutable_partition_uuid()->assign(
-            begin(partition_uuid), end(partition_uuid));
-
+        spb::AuthorClock & new_clock = insert_before(clocks, it);
+        new_clock.set_author_id(author_id);
         new_clock.set_unix_timestamp(core::server_time::get_time());
         datamodel_update(true, ind);
     }
@@ -96,31 +57,31 @@ void clock_util::tick(spb::ClusterClock & cluster_clock,
 
 template<typename DatamodelUpdate>
 void clock_util::prune(spb::PersistedRecord & record,
-    unsigned consistency_horizon,
-    const DatamodelUpdate & datamodel_update)
+    unsigned consistency_horizon, const DatamodelUpdate & datamodel_update)
 {
     uint64_t ignore_ts = core::server_time::get_time() - consistency_horizon;
     uint64_t prune_ts = ignore_ts - clock_jitter_bound;
 
     spb::ClusterClock & cluster_clock = *record.mutable_cluster_clock();
-    clocks_t & clocks = *cluster_clock.mutable_partition_clock();
+    author_clocks_t & clocks = *cluster_clock.mutable_author_clock();
 
-    clocks_t::iterator it = clocks.begin();
-    clocks_t::iterator last_it = it;
+    author_clocks_t::iterator it = clocks.begin();
+    author_clocks_t::iterator last_it = it;
 
     while(it != end(clocks))
     {
-        SAMOA_ASSERT(last_it == it || uuid_comparator()(*last_it, *it));
+        SAMOA_ASSERT(last_it == it || author_id_comparator()(*last_it, *it));
 
         if(it->unix_timestamp() <= prune_ts)
         {
-            datamodel_update(std::distance(clocks.begin(), it));
+            datamodel_update(std::distance(begin(clocks), it));
 
             core::protobuf::remove_before(clocks, ++it);
             last_it = (it == begin(clocks)) ? it : it - 1;
 
-            if(cluster_clock.has_clock_is_pruned())
+            if(!cluster_clock.clock_is_pruned())
             {
+            	// effectively sets to true
                 cluster_clock.clear_clock_is_pruned();
             }
         }
@@ -129,59 +90,86 @@ void clock_util::prune(spb::PersistedRecord & record,
     }
     if(clocks.size() == 0 && cluster_clock.clock_is_pruned())
     {
+    	// no need to serialize the default cluster clock
         record.clear_cluster_clock();
     }
 }
 
-template<typename DatamodelUpdate>
+inline bool clock_util::has_timestamp_reached(const spb::ClusterClock & clock,
+    uint64_t timestamp)
+{
+    for(const spb::AuthorClock & author_clock : clock)
+    {
+        if(author_clock.unix_timestamp() <= timestamp)
+        	return true;
+    }
+    return false;
+}
+
+template<typename DatamodelMergeStep>
 merge_result clock_util::merge(
     spb::ClusterClock & local_cluster_clock,
     const spb::ClusterClock & remote_cluster_clock,
     unsigned consistency_horizon,
-    const DatamodelUpdate & datamodel_update)
+    const DatamodelMergeStep & datamodel_merge_step)
 {
     uint64_t ignore_ts = core::server_time::get_time() - consistency_horizon;
     uint64_t prune_ts = ignore_ts - clock_jitter_bound;
 
-    clocks_t & local = *local_cluster_clock.mutable_partition_clock();
-    const clocks_t & remote = remote_cluster_clock.partition_clock();
+    bool local_is_legacy = local_cluster_clock.clock_is_pruned() || \
+        has_timestamp_reached(local_cluster_clock, ignore_ts);
+    bool remote_is_legacy = remote_cluster_clock.clock_is_pruned() || \
+        has_timestamp_reached(remote_cluster_clock, ignore_ts);
 
-    clocks_t::iterator l_it = begin(local);
-    clocks_t::const_iterator r_it = begin(remote);
+    merge_result result;
+    result.local_was_updated = remote_is_legacy && !local_is_legacy;
+    result.remote_is_stale = local_is_legacy && !remote_is_legacy;
 
-    merge_result result = {false, false};
-
-    bool local_is_consistent = is_consistent(local_cluster_clock,
-        consistency_horizon);
-    bool remote_is_consistent = is_consistent(remote_cluster_clock,
-        consistency_horizon);
-
-    if(local_is_consistent && !remote_is_consistent)
-        result.remote_is_stale = true;
-
-    while(l_it != local.end() && r_it != remote.end())
+    if(remote_is_legacy && !local_is_legacy)
     {
-        if(l_it->partition_uuid() < r_it->partition_uuid())
+    	// inherit legacy status by setting clock_is_pruned to true (default)
+        //  datamodel is responsible for inheriting non-versioned content
+    	local_cluster_clock.clear_clock_is_pruned();
+    }
+
+    author_clocks_t & local_authors = \
+        *local_cluster_clock.mutable_author_clock();
+    const author_clocks_t & remote_authors = \
+        remote_cluster_clock.author_clock();
+
+    clocks_t::iterator l_it = begin(local_authors);
+    clocks_t::const_iterator r_it = begin(remote_authors);
+
+    while(l_it != end(local_authors) && r_it != end(remote_authors))
+    {
+        if(l_it->author_id() < r_it->author_id())
         {
             if(l_it->unix_timestamp() > ignore_ts)
-                result.remote_is_stale = true;
-
-            datamodel_update(LHS_ONLY);
-            ++l_it;
-        }
-        else if(l_it->partition_uuid() > r_it->partition_uuid())
-        {
-            if(!local_is_consistent || r_it->unix_timestamp() > prune_ts)
             {
-                result.local_was_updated = true;
-
-                core::protobuf::insert_before(local, l_it) = *r_it;
-                datamodel_update(RHS_ONLY);
+                result.remote_is_stale = true;
+                datamodel_update(LAUTH_ONLY,
+                    local_is_legacy, remote_is_legacy);
             }
             else
+            	datamodel_update(RAUTH_PRUNED,
+                    local_is_legacy, remote_is_legacy);
+
+            ++l_it;
+        }
+        else if(l_it->author_id() > r_it->author_id())
+        {
+            if(r_it->unix_timestamp() > prune_ts)
             {
-                datamodel_update(RHS_SKIP);
+                result.local_was_updated = true;
+                datamodel_update(RAUTH_ONLY,
+                    local_is_legacy, remote_is_legacy);
+
+                core::protobuf::insert_before(local_authors, l_it) = *r_it;
             }
+            else
+                datamodel_update(LAUTH_PRUNED,
+                    local_is_legacy, remote_is_legacy);
+
             ++r_it;
         }
         else
@@ -189,33 +177,42 @@ merge_result clock_util::merge(
             if(l_it->unix_timestamp() > r_it->unix_timestamp())
             {
                 result.remote_is_stale = true;
-                datamodel_update(LHS_NEWER);
+                datamodel_update(LAUTH_NEWER,
+                    local_is_legacy, remote_is_legacy);
             }
             else if(l_it->unix_timestamp() < r_it->unix_timestamp())
             {
-                l_it->set_unix_timestamp(r_it->unix_timestamp());
-                l_it->set_lamport_tick(r_it->lamport_tick());
-
                 result.local_was_updated = true;
-                datamodel_update(RHS_NEWER);
+                datamodel_update(RAUTH_NEWER,
+                    local_is_legacy, remote_is_legacy);
+
+                l_it->set_unix_timestamp(r_it->unix_timestamp());
+
+                if(r_it->has_lamport_tick())
+                    l_it->set_lamport_tick(r_it->lamport_tick());
+                else
+                	l_it->clear_lamport_tick();
             }
             else
             {
                 if(l_it->lamport_tick() > r_it->lamport_tick())
                 {
                     result.remote_is_stale = true;
-                    datamodel_update(LHS_NEWER);
+                    datamodel_update(LAUTH_NEWER,
+                        local_is_legacy, remote_is_legacy);
                 }
                 else if(l_it->lamport_tick() < r_it->lamport_tick())
                 {
-                    l_it->set_lamport_tick(r_it->lamport_tick());
-
                     result.local_was_updated = true;
-                    datamodel_update(RHS_NEWER);
+                    datamodel_update(RAUTH_NEWER,
+                        local_is_legacy, remote_is_legacy);
+
+                    l_it->set_lamport_tick(r_it->lamport_tick());
                 }
                 else
                 {
-                    datamodel_update(LHS_RHS_EQUAL);
+                    datamodel_update(LAUTH_RAUTH_EQUAL,
+                        local_is_legacy, remote_is_legacy);
                 }
             }
             ++l_it; ++r_it;
@@ -224,33 +221,34 @@ merge_result clock_util::merge(
     while(l_it != local.end())
     {
         if(l_it->unix_timestamp() > ignore_ts)
+        {
             result.remote_is_stale = true;
+            datamodel_update(LAUTH_ONLY,
+                local_is_legacy, remote_is_legacy);
+        }
+        else
+        	datamodel_update(RAUTH_PRUNED,
+                local_is_legacy, remote_is_legacy);
 
-        datamodel_update(LHS_ONLY);
         ++l_it;
     }
     while(r_it != remote.end())
     {
-        if(!local_is_consistent || r_it->unix_timestamp() > prune_ts)
+        if(r_it->unix_timestamp() > prune_ts)
         {
             result.local_was_updated = true;
+            datamodel_update(RAUTH_ONLY,
+                local_is_legacy, remote_is_legacy);
 
-            core::protobuf::insert_before(local, l_it) = *r_it;
-            datamodel_update(RHS_ONLY);
+            core::protobuf::insert_before(local_authors, l_it) = *r_it;
         }
         else
-        {
-            datamodel_update(RHS_SKIP);
-        }
+            datamodel_update(LAUTH_PRUNED,
+                local_is_legacy, remote_is_legacy);
+
         ++r_it;
     }
 
-    if(!local_cluster_clock.clock_is_pruned() && \
-        remote_cluster_clock.clock_is_pruned())
-    {
-        result.local_was_updated = true;
-        local_cluster_clock.clear_clock_is_pruned();
-    }
     return result;
 }
 

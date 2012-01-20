@@ -10,39 +10,45 @@ namespace samoa {
 namespace datamodel {
 
 namespace spb = samoa::core::protobuf;
+using std::begin;
+using std::end;
 
-void counter::update(spb::PersistedRecord & record,
-    const core::uuid & partition_uuid,
+void counter::update(spb::PersistedRecord & record, uint64_t author_id,
     int64_t increment)
 {
     auto update = [&](bool insert_before, unsigned index) -> void
     {
-    	if(insert_before)
+        if(insert_before)
         {
             core::protobuf::insert_before(
                 *record.mutable_counter_value(), index) += increment;
         }
         else
         {
-        	record.set_counter_value(index,
-        	    record.counter_value(index) + increment);
+            record.set_counter_value(index,
+                record.counter_value(index) + increment);
         }
     };
-    clock_util::tick(*record.mutable_cluster_clock(),
-        partition_uuid, update);
+    clock_util::tick(*record.mutable_cluster_clock(), author_id, update);
 }
 
 bool counter::prune(spb::PersistedRecord & record,
     unsigned consistency_horizon)
 {
+    if(record.has_expire_timestamp() && \
+       record.expire_timestamp() < core::server_time::get_time())
+    {
+        return true;
+    }
+
     auto update = [&record](unsigned index) -> bool
     {
-    	if(record.counter_value(index))
+        if(record.counter_value(index))
         {
-        	// fold into consistent count value
-        	record.set_counter_consistent_value(
-        	    record.counter_consistent_value() + \
-        	    record.counter_value(index));
+            // fold into consistent count value
+            record.set_counter_consistent_value(
+                record.counter_consistent_value() + \
+                record.counter_value(index));
         }
         core::protobuf::remove_before(
             *record.mutable_counter_value(), index + 1);
@@ -50,11 +56,6 @@ bool counter::prune(spb::PersistedRecord & record,
     };
     clock_util::prune(record, consistency_horizon, update);
 
-    if(record.has_expire_timestamp() && \
-       record.expire_timestamp() < core::server_time::get_time())
-    {
-        return true;
-    }
     return false;
 }
 
@@ -65,52 +66,80 @@ merge_result counter::merge(
 {
     typedef google::protobuf::RepeatedField<int64_t> counter_values_t;
 
-    counter_values_t & lhs_values = *local_record.mutable_counter_value();
-    const counter_values_t & rhs_values = remote_record.counter_value();
+    bool is_legacy_merge = false;
 
-    counter_values_t::iterator lhs_it = begin(lhs_values);
-    counter_values_t::const_iterator rhs_it = begin(rhs_values);
+    counter_values_t & local_values = *local_record.mutable_counter_value();
+    const counter_values_t & remote_values = remote_record.counter_value();
 
-    auto update = [&](clock_util::merge_step state) -> void
+    counter_values_t::iterator l_it = begin(local_values);
+    counter_values_t::const_iterator r_it = begin(remote_values);
+
+    int64_t debug_delta = 0;
+
+    auto update = [&](clock_util::merge_step state,
+        bool local_is_legacy, bool remote_is_legacy) -> void
     {
-    	if(state == clock_util::LHS_RHS_EQUAL)
+        if(!is_legacy_merge && !local_is_legacy && remote_is_legacy)
         {
-            SAMOA_ASSERT(*lhs_it == *rhs_it);
-            ++lhs_it; ++rhs_it;
+            is_legacy_merge = true;
+            local_record.set_counter_consistent_value(
+                remote_record.counter_consistent_value());
         }
-        else if(state == clock_util::LHS_ONLY)
+
+        if(state == clock_util::LAUTH_RAUTH_EQUAL)
         {
-        	++lhs_it;
+            SAMOA_ASSERT(*l_it == *r_it);
+            ++l_it; ++r_it;
         }
-        else if(state == clock_util::RHS_ONLY)
+        else if(state == clock_util::RAUTH_PRUNED)
+        {
+            ++l_it;
+        }
+        else if(state == clock_util::LAUTH_PRUNED)
+        {
+            if(is_legacy_merge)
+            {
+                // as this is a legacy merge, we didn't know about
+                //  this value & haven't pruned it; fold it in now
+                local_record.set_blob_consistent_value(
+                    local_record.blob_consistent_value() + *l_it);
+            }
+            ++r_it;
+        }
+        else if(state == clock_util::LAUTH_ONLY)
+        {
+            debug_delta -= *l_it;
+            ++l_it;
+        }
+        else if(state == clock_util::RAUTH_ONLY)
         {
             spb::insert_before(lhs_values, lhs_it) = *rhs_it;
-            ++rhs_it;
+            ++r_it;
         }
-        else if(state == clock_util::LHS_NEWER)
+        else if(state == clock_util::LAUTH_NEWER)
         {
-        	++lhs_it; ++rhs_it;
+            debug_delta -= *l_it - *r_it;
+            ++l_it; ++r_it;
         }
-        else if(state == clock_util::RHS_NEWER)
+        else if(state == clock_util::RAUTH_NEWER)
         {
-        	*lhs_it = *rhs_it;
-        	++lhs_it; ++rhs_it;
-        }
-        else if(state == clock_util::RHS_SKIP)
-        {
-            ++rhs_it;
+            *lhs_it = *rhs_it;
+            ++lhs_it; ++rhs_it;
         }
     };
-    return clock_util::merge(
+    merge_result result = clock_util::merge(
         *local_record.mutable_cluster_clock(),
         remote_record.cluster_clock(),
         consistency_horizon,
         update);
+
+    SAMOA_ASSERT(value(local_record) + debug_delta == value(remote_record));
+    return result;
 }
 
 int64_t counter::value(const spb::PersistedRecord & record)
 {
-	int64_t aggregate = record.counter_consistent_value();
+    int64_t aggregate = record.counter_consistent_value();
 
     for(int64_t value : record.counter_value())
     {
