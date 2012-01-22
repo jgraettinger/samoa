@@ -9,11 +9,10 @@ namespace datamodel {
 
 namespace bpl = boost::python;
 
-void py_tick(spb::ClusterClock & clock,
-    const core::uuid & partition_uuid,
+void py_tick(spb::ClusterClock & clock, uint64_t author_id,
     const bpl::object & py_update)
 {
-    clock_util::tick(clock, partition_uuid, py_update);
+    clock_util::tick(clock, author_id, py_update);
 }
 
 void py_prune(spb::PersistedRecord & record,
@@ -37,11 +36,12 @@ void make_clock_util_bindings()
     bpl::class_<clock_util>("ClockUtil", bpl::init<>())
         .def_readwrite("clock_jitter_bound", &clock_util::clock_jitter_bound)
         .def("validate", &clock_util::validate).staticmethod("validate")
-        .def("is_consistent", &clock_util::is_consistent).staticmethod("is_consistent")
         .def("tick", &py_tick).staticmethod("tick")
         .def("compare", &clock_util::compare).staticmethod("compare")
         .def("prune", &py_prune).staticmethod("prune")
         .def("merge", &py_merge).staticmethod("merge")
+        .def("generate_author_id", &clock_util::generate_author_id)
+        .staticmethod("generate_author_id")
         ;
 
     bpl::enum_<clock_util::clock_ancestry>("ClockAncestry")
@@ -52,12 +52,13 @@ void make_clock_util_bindings()
         ;
 
     bpl::enum_<clock_util::merge_step>("MergeStep")
-        .value("LHS_RHS_EQUAL", clock_util::LHS_RHS_EQUAL)
-        .value("LHS_ONLY", clock_util::LHS_ONLY)
-        .value("RHS_ONLY", clock_util::RHS_ONLY)
-        .value("LHS_NEWER", clock_util::LHS_NEWER)
-        .value("RHS_NEWER", clock_util::RHS_NEWER)
-        .value("RHS_SKIP", clock_util::RHS_SKIP)
+        .value("LAUTH_RAUTH_EQUAL", clock_util::LAUTH_RAUTH_EQUAL)
+        .value("RAUTH_PRUNED", clock_util::RAUTH_PRUNED)
+        .value("LAUTH_PRUNED", clock_util::LAUTH_PRUNED)
+        .value("RAUTH_ONLY", clock_util::RAUTH_ONLY)
+        .value("LAUTH_ONLY", clock_util::LAUTH_ONLY)
+        .value("RAUTH_NEWER", clock_util::RAUTH_NEWER)
+        .value("LAUTH_NEWER", clock_util::LAUTH_NEWER)
         ;
 }
 

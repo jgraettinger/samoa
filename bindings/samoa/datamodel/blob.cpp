@@ -19,8 +19,8 @@ bpl::list py_value(const spb::PersistedRecord & record)
 
 void make_blob_bindings()
 {
-    void(*update_ptr)(spb::PersistedRecord &,
-        const core::uuid &, const std::string &) = &blob::update;
+    void(*update_ptr)(spb::PersistedRecord &, uint64_t,
+        const std::string &) = &blob::update;
 
     bpl::class_<blob>("Blob", bpl::no_init)
         .def("update", update_ptr).staticmethod("update")

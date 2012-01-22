@@ -8,210 +8,323 @@ from samoa.core.protobuf import PersistedRecord, ClusterClock
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
 from samoa.datamodel.blob import Blob
 
-from samoa.test.module import TestModule
-
+HORIZON = 3600
 
 class TestBlob(unittest.TestCase):
 
+    def test_value(self):
+
+        cur_ts = ServerTime.get_time()
+
+        record = self._build_blob([
+                (ClockUtil.generate_author_id(), 1, cur_ts, 'value-1'),
+                (ClockUtil.generate_author_id(), 1, cur_ts, 'value-2'),
+                (ClockUtil.generate_author_id(), 1, cur_ts, ''),
+            ], ['old-value-1', 'old-value-2'])
+
+        self.assertItemsEqual(Blob.value(record),
+            ['value-1', 'value-2', 'old-value-1', 'old-value-2'])
+
     def test_update(self):
 
-        record = PersistedRecord()
+        auth_A = ClockUtil.generate_author_id()
+        auth_B = ClockUtil.generate_author_id()
 
-        # initial value fixture
-        record.add_consistent_blob_value('value')
+        cur_ts = ServerTime.get_time()
 
+        # update of empty record
+        record = self._build_blob([])
+        Blob.update(record, auth_A, 'value')
         self.assertItemsEqual(Blob.value(record), ['value'])
 
-        A = UUID.from_random()
-        B = UUID.from_random()
+        # update of record with one current value
+        record = self._build_blob([(auth_A, 1, cur_ts, 'old-value')])
+        Blob.update(record, auth_B, 'new-value')
+        self.assertItemsEqual(Blob.value(record), ['new-value'])
 
-        Blob.update(record, A, 'value-A')
-        self.assertItemsEqual(record.blob_value, ['value-A'])
-        self.assertItemsEqual(Blob.value(record), ['value-A'])
+        # update of record with one consistent value
+        record = self._build_blob([], consistent_values = ['old-value'])
+        Blob.update(record, auth_A, 'new-value')
+        self.assertItemsEqual(Blob.value(record), ['new-value'])
+        self.assertFalse(len(record.blob_consistent_value))
 
-        Blob.update(record, A, 'value-A-2')
-        self.assertItemsEqual(record.blob_value, ['value-A-2'])
-        self.assertItemsEqual(Blob.value(record), ['value-A-2'])
-
-        Blob.update(record, B, 'value-B')
-        self.assertItemsEqual(record.blob_value, ['value-B', ''])
-        self.assertItemsEqual(Blob.value(record), ['value-B'])
+        # update of record with multiple current & consistent values
+        record = self._build_blob([
+                (auth_A, 1, cur_ts, 'new-value-1'),
+                (auth_B, 1, cur_ts, 'new-value-2'),
+            ], consistent_values = ['old-value-1', 'old-value-2'])
+        Blob.update(record, auth_B, 'new-value')
+        self.assertItemsEqual(Blob.value(record), ['new-value'])
+        self.assertFalse(len(record.blob_consistent_value))
 
     def test_prune(self):
 
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts  = ignore_ts - ClockUtil.clock_jitter_bound
+
+        # prunable values are shifted to blob_consistent_value
+        record = self._build_blob([
+                (ClockUtil.generate_author_id(), 1, cur_ts, 'kept-value-1'),
+                (ClockUtil.generate_author_id(), 1, ignore_ts, 'kept-value-2'),
+                (ClockUtil.generate_author_id(), 1, prune_ts, 'prune-value-1'),
+                (ClockUtil.generate_author_id(), 1, prune_ts, 'prune-value-2'),
+                (ClockUtil.generate_author_id(), 1, prune_ts, '')])
+
+        self.assertFalse(Blob.prune(record, HORIZON))
+        self.assertItemsEqual(record.blob_value,
+            ['kept-value-1', 'kept-value-2'])
+        self.assertItemsEqual(record.blob_consistent_value,
+            ['prune-value-1', 'prune-value-2'])
+
+        # all authors prunable, setting a consistent value
+        record = self._build_blob([
+                (ClockUtil.generate_author_id(), 1, prune_ts, 'prune-value-1'),
+                (ClockUtil.generate_author_id(), 1, prune_ts, '')])
+
+        self.assertFalse(Blob.prune(record, HORIZON))
+        self.assertItemsEqual(record.blob_value, [])
+        self.assertItemsEqual(record.blob_consistent_value, ['prune-value-1'])
+
+        # all authors prunable with empty value & legacy consistent value 
+        record = self._build_blob([
+                (ClockUtil.generate_author_id(), 1, prune_ts, ''),
+            ], consistent_values = ['old-value-1'])
+
+        self.assertFalse(Blob.prune(record, HORIZON))
+        self.assertItemsEqual(record.blob_value, [])
+        self.assertItemsEqual(record.blob_consistent_value, ['old-value-1'])
+
+        # all authors prunable, & no consistent value
+        record = self._build_blob([
+                (ClockUtil.generate_author_id(), 1, prune_ts, '')])
+        self.assertTrue(Blob.prune(record, HORIZON))
+
+        # current value, but expiry has passed
+        record = self._build_blob([
+                (ClockUtil.generate_author_id(), 1, cur_ts, 'kept-value-1')])
+        record.set_expire_timestamp(prune_ts)
+        self.assertTrue(Blob.prune(record, HORIZON))
+
+    def test_merge_scenarios(self):
+
+        auth_A = ClockUtil.generate_author_id()
+        auth_B = ClockUtil.generate_author_id()
+        auth_C = ClockUtil.generate_author_id()
+
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts  = ignore_ts - ClockUtil.clock_jitter_bound
+
+        # local & remote equal
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, 'value-1'),
+                (auth_B, 1, cur_ts, 'value-2')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, 'value-1'),
+                (auth_B, 1, cur_ts, 'value-2')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['value-1', 'value-2'])
+        self.assertFalse(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # remote more-recent
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, 'value-1'),
+                (auth_B, 1, cur_ts, 'value-2')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, ''),
+                (auth_B, 2, cur_ts, 'new-value')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # remote more-recent (deletion)
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, 'value-1'),
+                (auth_B, 1, cur_ts, 'value-2')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, ''),
+                (auth_B, 2, cur_ts, '')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), [])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # local more-recent
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, ''),
+                (auth_B, 2, cur_ts, 'new-value')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, 'value-1'),
+                (auth_B, 1, cur_ts, 'value-2')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['new-value'])
+        self.assertFalse(result.local_was_updated)
+        self.assertTrue(result.remote_is_stale)
+
+        # local & remote have divergent current read-repair
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, ''),
+                (auth_B, 2, cur_ts, 'new-value-1'),
+                (auth_C, 1, cur_ts, 'old-value')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 2, cur_ts, 'new-value-2'),
+                (auth_B, 1, cur_ts, ''),
+                (auth_C, 1, cur_ts, '')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local),
+            ['new-value-1', 'new-value-2'])
+        self.assertTrue(result.local_was_updated)
+        self.assertTrue(result.remote_is_stale)
+
+        # consistent local; remote with current & pruneable
+        local = self._build_blob([], ['old-value'])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, prune_ts, 'old-value'),
+                (auth_B, 1, cur_ts, 'new-value')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['old-value', 'new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # consistent local; remote with current & consistent
+        local = self._build_blob([], ['old-value'])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, 'new-value')],
+                ['old-value']),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['old-value', 'new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # pruned local; remote with empty pruned & current
+        local = self._build_blob([], ['old-value'])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, 'new-value')],
+                []),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # ignorable local; remote with pruned & current
+        local = self._build_blob([
+                (auth_A, 1, ignore_ts, 'old-value')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_B, 1, cur_ts, 'new-value')],
+                ['old-value']),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['old-value', 'new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # ignorable local; remote with empty pruned & current
+        local = self._build_blob([
+                (auth_A, 1, ignore_ts, 'old-value')])
+
+        result = Blob.merge(local, self._build_blob([
+                (auth_B, 1, cur_ts, 'new-value')],
+                []),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertFalse(result.remote_is_stale)
+
+        # current new local; remote with pruned
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, 'new-value')])
+
+        result = Blob.merge(local,
+            self._build_blob([], ['old-value']),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local), ['old-value', 'new-value'])
+        self.assertTrue(result.local_was_updated)
+        self.assertTrue(result.remote_is_stale)
+
+        # legacy local, with one repaired & one divergent author,
+        #  new remote with newer & divergent author
+        local = self._build_blob([
+                (auth_A, 1, cur_ts, 'replaced-value'),
+                (auth_B, 1, cur_ts, 'new-value-1')],
+                ['old-value'])
+
+        resut = Blob.merge(local, self._build_blob([
+                (auth_A, 2, cur_ts, ''),
+                (auth_C, 1, cur_ts, 'new-value-2')]),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local),
+            ['old-value', 'new-value-1', 'new-value-2'])
+        self.assertTrue(result.local_was_updated)
+        self.assertTrue(result.remote_is_stale)
+
+        # legacy remote, with one repaired & one divergent author,
+        #  new local with newer & divergent author
+        local = self._build_blob([
+                (auth_A, 2, cur_ts, ''),
+                (auth_C, 1, cur_ts, 'new-value-2')])
+
+        resut = Blob.merge(local, self._build_blob([
+                (auth_A, 1, cur_ts, 'replaced-value'),
+                (auth_B, 1, cur_ts, 'new-value-1')],
+                ['old-value']),
+            HORIZON)
+
+        self.assertItemsEqual(Blob.value(local),
+            ['old-value', 'new-value-1', 'new-value-2'])
+        self.assertTrue(result.local_was_updated)
+        self.assertTrue(result.remote_is_stale)
+
+    def _build_blob(self, ticks, consistent_values = None):
+
         record = PersistedRecord()
+        cluster_clock = record.mutable_cluster_clock()
 
-        Blob.update(record, UUID.from_random(), 'replaced')
-        Blob.update(record, UUID.from_random(), 'prune_value')
+        if consistent_values is None:
+            cluster_clock.set_clock_is_pruned(False)
 
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound + 1)
+        author_value = {}
 
-        # non-empty prunable value => value moved consistent_blob_value
-        self.assertFalse(Blob.prune(record, 1))
+        def tick_noop(insert, index):
+            pass 
 
-        self.assertItemsEqual(record.blob_value, [])
-        self.assertItemsEqual(record.consistent_blob_value, ['prune_value'])
+        for author_id, tick_count, tick_ts, value in ticks:
+            restore_ts = ServerTime.get_time()
+            ServerTime.set_time(tick_ts)
 
-        Blob.update(record, UUID.from_random(), 'new_value')
+            for i in xrange(tick_count):
+                ClockUtil.tick(cluster_clock, author_id, tick_noop)
 
-        # current clock => prune takes no action
-        self.assertFalse(Blob.prune(record, 1))
+            author_value[author_id] = value
+            ServerTime.set_time(restore_ts)
 
-        self.assertItemsEqual(record.consistent_blob_value, [])
-        self.assertItemsEqual(record.blob_value, ['new_value'])
+        for author_clock in cluster_clock.author_clock:
+            record.add_blob_value(author_value[author_clock.author_id])
 
-        # put empty string, to mark as deleted
-        Blob.update(record, UUID.from_random(), '')
+        for consistent_value in (consistent_values or ()):
+            record.add_blob_consistent_value(consistent_value)
 
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound + 1)
-
-        # empty prunable value => prune() is True and record is cleared
-        self.assertTrue(Blob.prune(record, 1))
-        self.assertItemsEqual(record.blob_value, [])
-        self.assertItemsEqual(record.consistent_blob_value, [])
-
-        # record is expired => prune() is True
-        Blob.update(record, UUID.from_random(), 'foobar')
-        record.set_expire_timestamp(ServerTime.get_time() - 1)
-
-        self.assertTrue(Blob.prune(record, 1))
-
-    def test_merge(self):
-
-        # fixtures:
-
-        # one with two pruned values (no clocks)
-        # one with one pruned, and one clock < prune_ts
-        # one with two clocks < prune_ts
-        # one 'new' write of value-A
-        # one 'new' write of value-B
-
-
-
-
-        local_record = PersistedRecord()
-        remote_record = PersistedRecord()
-
-    def test_merge_no_clocks(self):
-
-        # server presumes it's copy is consistent
-        self._merge_test(None, None, 'no_change')
-
-    def test_merge_no_local_clock(self):
-
-        remote_clock = ClusterClock()
-        ClockUtil.tick(remote_clock, UUID.from_random())
-
-        self._merge_test(None, remote_clock, 'remote')
-
-    def test_merge_no_remote_clock(self):
-
-        local_clock = ClusterClock()
-        ClockUtil.tick(local_clock, UUID.from_random())
-
-        self._merge_test(local_clock, None, 'local')
-
-    def test_merge_clocks_equal(self):
-
-        A = UUID.from_random()
-
-        local_clock = ClusterClock()
-        ClockUtil.tick(local_clock, A)
-
-        remote_clock = ClusterClock()
-        ClockUtil.tick(remote_clock, A)
-
-        self._merge_test(local_clock, remote_clock, 'no_change')
-
-    def test_merge_local_more_recent(self):
-
-        A = UUID.from_random()
-
-        local_clock = ClusterClock()
-        ClockUtil.tick(local_clock, A)
-        ClockUtil.tick(local_clock, A)
-
-        remote_clock = ClusterClock()
-        ClockUtil.tick(remote_clock, A)
-
-        self._merge_test(local_clock, remote_clock, 'local')
-
-    def test_merge_remote_more_recent(self):
-
-        A = UUID.from_random()
-
-        local_clock = ClusterClock()
-        ClockUtil.tick(local_clock, A)
-
-        remote_clock = ClusterClock()
-        ClockUtil.tick(remote_clock, A)
-        ClockUtil.tick(remote_clock, A)
-
-        self._merge_test(local_clock, remote_clock, 'remote')
-
-    def test_merge_clocks_diverge(self):
-
-        local_clock = ClusterClock()
-        ClockUtil.tick(local_clock, UUID.from_random())
-
-        remote_clock = ClusterClock()
-        ClockUtil.tick(remote_clock, UUID.from_random())
-
-        self._merge_test(local_clock, remote_clock, 'both')
-
-    
-    def _merge_test(self, local_clock, remote_clock, expect):
-
-        # set the local record fixture
-        local_record = PersistedRecord()
-        local_record.add_blob_value('local-value')
-
-        if local_clock:
-            local_record.mutable_cluster_clock().CopyFrom(local_clock)
-
-        # set the remote record fixture
-        remote_record = PersistedRecord()
-        remote_record.add_blob_value('remote-value')
-
-        if remote_clock:
-            remote_record.mutable_cluster_clock().CopyFrom(remote_clock)
-
-        merged_record = PersistedRecord(local_record)
-        merge_result = Blob.consistent_merge(merged_record, remote_record, 1)
-
-        if expect == 'no_change':
-
-            self.assertFalse(merge_result.local_was_updated)
-            self.assertFalse(merge_result.remote_is_stale)
-
-            self.assertEquals(merged_record.SerializeToBytes(),
-                local_record.SerializeToBytes())
-
-        elif expect == 'local':
-
-            self.assertFalse(merge_result.local_was_updated)
-            self.assertTrue(merge_result.remote_is_stale)
-
-            self.assertEquals(merged_record.SerializeToBytes(),
-                local_record.SerializeToBytes())
-
-        elif expect == 'remote':
-
-            self.assertTrue(merge_result.local_was_updated)
-            self.assertFalse(merge_result.remote_is_stale)
-
-            self.assertEquals(merged_record.SerializeToBytes(),
-                remote_record.SerializeToBytes())
-
-        elif expect == 'both':
-
-            self.assertTrue(merge_result.local_was_updated)
-            self.assertTrue(merge_result.remote_is_stale)
-
-            self.assertEquals(len(merged_record.blob_value), 2)
-            self.assertEquals(
-                set(['local-value', 'remote-value']),
-                set([merged_record.blob_value[0], merged_record.blob_value[1]]))
+        return record
 

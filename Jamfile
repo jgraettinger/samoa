@@ -37,6 +37,7 @@ lib boost_system ;
 lib boost_python ;
 lib boost_regex ;
 lib boost_thread ;
+lib boost_random ;
 lib protobuf ;
 
 build-project proto_src ;

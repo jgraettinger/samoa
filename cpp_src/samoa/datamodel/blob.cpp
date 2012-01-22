@@ -68,7 +68,7 @@ bool blob::prune(spb::PersistedRecord & record,
         return true;
     }
 
-    auto update = [&](unsigned index) -> void
+    auto update = [&](unsigned index)
     {
         if(record.blob_value(index).size())
         {
@@ -80,7 +80,7 @@ bool blob::prune(spb::PersistedRecord & record,
     };
     clock_util::prune(record, consistency_horizon, update);
 
-    if(!record.blob_value_size() && !record.consistent_blob_value_size())
+    if(!record.blob_value_size() && !record.blob_consistent_value_size())
     {
         // clock horizon has passed on a deleted blob
         return true;
@@ -98,6 +98,11 @@ merge_result blob::merge(
 
     bool is_legacy_merge = false;
 
+    // we remove consistent values only if remote is legacy, has no
+    //  consistent values, and has no prunable non-empty values
+    bool prune_consistent_values = \
+        (remote_record.blob_consistent_value_size() == 0);
+
     blob_values_t & local_values = *local_record.mutable_blob_value();
     const blob_values_t & remote_values = remote_record.blob_value();
 
@@ -110,37 +115,42 @@ merge_result blob::merge(
         if(!is_legacy_merge && !local_is_legacy && remote_is_legacy)
         {
             is_legacy_merge = true;
-            local_record.blob_consistent_value().CopyFrom(
+            prune_consistent_values = false;
+
+            local_record.mutable_blob_consistent_value()->CopyFrom(
                 remote_record.blob_consistent_value());
         }
+        if(!remote_is_legacy)
+            prune_consistent_values = false;
 
         if(state == clock_util::LAUTH_RAUTH_EQUAL)
         {
             if(!r_it->size())
             {
-                // a remote repair/replace has occurred
+                // a remote repair of this specific value has occurred
                 l_it->clear();
-                local_record.clear_blob_consistent_value();
             }
             ++l_it; ++r_it;
         }
         else if(state == clock_util::RAUTH_PRUNED)
         {
-            if(remote_is_legacy && !remote_record.blob_consistent_value_size())
+            SAMOA_ASSERT(remote_is_legacy);
+
+            if(!remote_record.blob_consistent_value_size())
             {
-                // a remote repair/replace has occurred
+                // a remote repair of this specific value has occurred
                 l_it->clear();
-                local_record.clear_blob_consistent_value();
             }
             ++l_it;
         }
         else if(state == clock_util::LAUTH_PRUNED)
         {
-            if(is_legacy_merge && r_it->size())
+            SAMOA_ASSERT(!is_legacy_merge);
+
+            if(r_it->size())
             {
-                // as this is a legacy merge, we didn't know about
-                //  this value & haven't pruned it; fold it in now
-                local_record.add_blob_consistent_value(*r_it);
+                // implication is remote hasn't repaired consistent values
+                prune_consistent_values = false;
             }
             ++r_it;
         }
@@ -163,11 +173,18 @@ merge_result blob::merge(
             ++l_it; ++r_it;
         }
     };
-    return clock_util::merge(
+
+    merge_result result = clock_util::merge(
         *local_record.mutable_cluster_clock(),
         remote_record.cluster_clock(),
         consistency_horizon,
         update);
+
+    if(prune_consistent_values)
+    {
+        local_record.clear_blob_consistent_value();
+    }
+    return result;
 }
 
 }

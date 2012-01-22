@@ -30,6 +30,9 @@ public:
         uint64_t range_begin, uint64_t range_end,
         const ptr_t & current);
 
+    uint64_t get_author_id() const
+    { return _author_id; }
+
     const persistence::persister_ptr_t & get_persister()
     { return _persister; }
 
@@ -41,6 +44,7 @@ public:
 
 private:
 
+    uint64_t _author_id;
     persistence::persister_ptr_t _persister;
 };
 

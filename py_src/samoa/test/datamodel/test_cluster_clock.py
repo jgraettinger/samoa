@@ -7,403 +7,431 @@ from samoa.core.server_time import ServerTime
 from samoa.core.protobuf import ClusterClock, PersistedRecord
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry, MergeStep
 
+HORIZON = 3600
+MAX_HORIZON = (1 << 32) - 1
+
 class TestClusterClock(unittest.TestCase):
 
     def test_validate(self):
 
         clock = ClusterClock()
 
-        ClockUtil.tick(clock, UUID.from_random(), self._tick_noop)
-        ClockUtil.tick(clock, UUID.from_random(), self._tick_noop)
+        ClockUtil.tick(clock, ClockUtil.generate_author_id(), self._tick_noop)
+        ClockUtil.tick(clock, ClockUtil.generate_author_id(), self._tick_noop)
 
         # base clock is valid
         self.assertTrue(ClockUtil.validate(clock))
 
-        # bad partition uuid => invalid clock
+        # bad author_id order => invalid clock
         tmp = ClusterClock(clock)
-        tmp.partition_clock[0].set_partition_uuid(
-            tmp.partition_clock[0].partition_uuid[:-1])
+        tmp.author_clock.SwapElements(0, 1)
         self.assertFalse(ClockUtil.validate(tmp))
-
-        # bad uuid order => invalid clock
-        tmp = ClusterClock(clock)
-        tmp.partition_clock.SwapElements(0, 1)
-        self.assertFalse(ClockUtil.validate(tmp))
-
-    def test_is_consistent(self):
-
-        clock = ClusterClock()
-
-        # has a pruned clock => consistent
-        self.assertTrue(ClockUtil.is_consistent(clock, 1))
-
-        # no pruned clock => inconsistent
-        clock.set_clock_is_pruned(False)
-        self.assertFalse(ClockUtil.is_consistent(clock, 1))
-
-        # no pruned clock & recent tick => inconsistent
-        ClockUtil.tick(clock, UUID.from_random(), self._tick_noop)
-        self.assertFalse(ClockUtil.is_consistent(clock, 1))
-
-        # tick at least ignore_ts old => consistent
-        ServerTime.set_time(ServerTime.get_time() + 1)
-        self.assertTrue(ClockUtil.is_consistent(clock, 1))
 
     def test_tick(self):
 
-        A = UUID.from_random()
+        author_id = ClockUtil.generate_author_id()
         clock = ClusterClock()
 
         def validate(expected_lamport):
-            self.assertEquals(len(clock.partition_clock), 1)
-            part_clock = clock.partition_clock[0]
+            self.assertEquals(len(clock.author_clock), 1)
+            author_clock = clock.author_clock[0]
 
-            self.assertEquals(A.to_bytes(), part_clock.partition_uuid)
-            self.assertEquals(ServerTime.get_time(), part_clock.unix_timestamp)
-            self.assertEquals(expected_lamport, part_clock.lamport_tick)
+            self.assertEquals(author_id, author_clock.author_id)
+            self.assertEquals(ServerTime.get_time(),
+                author_clock.unix_timestamp)
+            self.assertEquals(expected_lamport, author_clock.lamport_tick)
 
-        ClockUtil.tick(clock, A, self._tick_noop)
+        ClockUtil.tick(clock, author_id, self._tick_noop)
         validate(0)
-        ClockUtil.tick(clock, A, self._tick_noop)
+        ClockUtil.tick(clock, author_id, self._tick_noop)
         validate(1)
-        ClockUtil.tick(clock, A, self._tick_noop)
+        ClockUtil.tick(clock, author_id, self._tick_noop)
         validate(2)
 
         ServerTime.set_time(ServerTime.get_time() + 1)
 
-        ClockUtil.tick(clock, A, self._tick_noop)
+        ClockUtil.tick(clock, author_id, self._tick_noop)
         validate(0)
-        ClockUtil.tick(clock, A, self._tick_noop)
+        ClockUtil.tick(clock, author_id, self._tick_noop)
         validate(1)
 
-        ClockUtil.tick(clock, UUID.from_random(), self._tick_noop)
-        self.assertEquals(len(clock.partition_clock), 2)
+        ClockUtil.tick(clock, ClockUtil.generate_author_id(), self._tick_noop)
+        self.assertEquals(len(clock.author_clock), 2)
 
     def test_tick_datamodel_update(self):
 
-        A, B, C = sorted(UUID.from_random() for i in xrange(3))
+        author_A, author_B, author_C = sorted(
+            ClockUtil.generate_author_id() for i in xrange(3))
         clock = ClusterClock()
 
-        ClockUtil.tick(clock, A,
+        ClockUtil.tick(clock, author_A,
             lambda insert, index: (
                 self.assertTrue(insert),
                 self.assertEquals(index, 0)))
 
-        ClockUtil.tick(clock, C,
+        ClockUtil.tick(clock, author_C,
             lambda insert, index: (
                 self.assertTrue(insert),
                 self.assertEquals(index, 1)))
 
-        ClockUtil.tick(clock, C,
+        ClockUtil.tick(clock, author_C,
             lambda insert, index: (
                 self.assertFalse(insert),
                 self.assertEquals(index, 1)))
 
-        ClockUtil.tick(clock, A,
+        ClockUtil.tick(clock, author_A,
             lambda insert, index: (
                 self.assertFalse(insert),
                 self.assertEquals(index, 0)))
 
-        ClockUtil.tick(clock, B,
+        ClockUtil.tick(clock, author_B,
             lambda insert, index: (
                 self.assertTrue(insert),
                 self.assertEquals(index, 1)))
 
-        ClockUtil.tick(clock, C,
+        ClockUtil.tick(clock, author_C,
             lambda insert, index: (
                 self.assertFalse(insert),
                 self.assertEquals(index, 2)))
 
-    def _compare_and_merge_validator_factory(self,
-        local_clock, remote_clock, expected_clock, horizon):
+    def _validate_merge(self, local, remote, expect, ancestry):
 
-        def validate(expected_ancestry):
+        local_clock  = self._build_clock(*local)
+        remote_clock = self._build_clock(*remote)
+        expect_clock = self._build_clock(*expect)
 
-            self.assertEquals(expected_ancestry,
-                ClockUtil.compare(local_clock, remote_clock, horizon))
+        self.assertEquals(ancestry,
+            ClockUtil.compare(local_clock, remote_clock, HORIZON))
 
-            merged_clock = ClusterClock(local_clock)
-            merge_result = ClockUtil.merge(
-                merged_clock, remote_clock, horizon, self._merge_noop)
+        merged_clock = ClusterClock(local_clock)
+        merge_result = ClockUtil.merge(merged_clock, remote_clock,
+            HORIZON, self._merge_noop)
 
-            if expected_ancestry == ClockAncestry.CLOCKS_EQUAL:
-                self.assertFalse(merge_result.local_was_updated)
-                self.assertFalse(merge_result.remote_is_stale)
+        if ancestry == ClockAncestry.CLOCKS_EQUAL:
+            self.assertFalse(merge_result.local_was_updated)
+            self.assertFalse(merge_result.remote_is_stale)
 
-            elif expected_ancestry == ClockAncestry.LOCAL_MORE_RECENT:
-                self.assertFalse(merge_result.local_was_updated)
-                self.assertTrue(merge_result.remote_is_stale)
+        elif ancestry == ClockAncestry.LOCAL_MORE_RECENT:
+            self.assertFalse(merge_result.local_was_updated)
+            self.assertTrue(merge_result.remote_is_stale)
 
-            elif expected_ancestry == ClockAncestry.REMOTE_MORE_RECENT:
-                self.assertTrue(merge_result.local_was_updated)
-                self.assertFalse(merge_result.remote_is_stale)
-            else:
-                self.assertTrue(merge_result.local_was_updated)
-                self.assertTrue(merge_result.remote_is_stale)
+        elif ancestry == ClockAncestry.REMOTE_MORE_RECENT:
+            self.assertTrue(merge_result.local_was_updated)
+            self.assertFalse(merge_result.remote_is_stale)
+        else:
+            self.assertTrue(merge_result.local_was_updated)
+            self.assertTrue(merge_result.remote_is_stale)
 
-            # ensure merged_clock equals expected_clock;
-            #  use a large horizon to check for exact equality
-            self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
-                ClockUtil.compare(merged_clock, expected_clock, (1<<30)))
+        #print "local"
+        #print local_clock.SerializeToText()
+        #print "remote"
+        #print remote_clock.SerializeToText()
+        #print "merged"
+        #print merged_clock.SerializeToText()
+        #print "expect"
+        #print expect_clock.SerializeToText()
 
-        return validate
+        # ensure merged_clock equals expected_clock;
+        #  use a large horizon to check for exact equality
+        self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
+            ClockUtil.compare(merged_clock, expect_clock, MAX_HORIZON))
 
-    def test_compare_and_merge(self):
+    def _build_clock(self, ticks, is_pruned = False):
+        clock = ClusterClock()
 
-        A = UUID.from_random()
-        B = UUID.from_random()
-        C = UUID.from_random()
-        IGNORE = UUID.from_random()
-        PRUNE = UUID.from_random()
+        if not is_pruned:
+            clock.set_clock_is_pruned(False)
 
-        local_clock = ClusterClock()
-        remote_clock = ClusterClock()
-        expected_clock = ClusterClock()
+        for author_id, tick_count, tick_ts in ticks:
+            restore_ts = ServerTime.get_time()
+            ServerTime.set_time(tick_ts)
 
-        validate = self._compare_and_merge_validator_factory(
-            local_clock, remote_clock, expected_clock, horizon = 10)
+            for i in xrange(tick_count):
+                ClockUtil.tick(clock, author_id, self._tick_noop)
 
-        # divergent remote tick, old enough to be pruned
-        ClockUtil.tick(remote_clock, PRUNE, self._tick_noop)
+            ServerTime.set_time(restore_ts)
 
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound)
+        return clock
 
-        # divergent local tick, old enough to be ignored
-        ClockUtil.tick(local_clock, IGNORE, self._tick_noop)
-        ClockUtil.tick(expected_clock, IGNORE, self._tick_noop)
+    def test_merge_scenario_fixtures(self):
 
-        ServerTime.set_time(ServerTime.get_time() + 10)
-        validate(ClockAncestry.CLOCKS_EQUAL)
+        auth_A = ClockUtil.generate_author_id()
+        auth_B = ClockUtil.generate_author_id()
+        auth_C = ClockUtil.generate_author_id()
 
-        # common tick of A
-        ClockUtil.tick(local_clock, A, self._tick_noop)
-        ClockUtil.tick(remote_clock, A, self._tick_noop)
-        ClockUtil.tick(expected_clock, A, self._tick_noop)
-        validate(ClockAncestry.CLOCKS_EQUAL)
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts = ignore_ts - ClockUtil.clock_jitter_bound
 
-        # remote tick of A
-        ClockUtil.tick(remote_clock, A, self._tick_noop)
-        ClockUtil.tick(expected_clock, A, self._tick_noop)
-        validate(ClockAncestry.REMOTE_MORE_RECENT)
+        # equal author clocks
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts)], False), 
+            remote = ([(auth_A, 1, cur_ts)], False),
+            expect = ([(auth_A, 1, cur_ts)], False),
+            ancestry = ClockAncestry.CLOCKS_EQUAL)
 
-        # local tick of B
-        ClockUtil.tick(local_clock, B, self._tick_noop)
-        ClockUtil.tick(expected_clock, B, self._tick_noop)
-        validate(ClockAncestry.CLOCKS_DIVERGE)
+        # local timestamp newer
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts)], False), 
+            remote = ([(auth_A, 1, cur_ts - 1)], False),
+            expect = ([(auth_A, 1, cur_ts)], False),
+            ancestry = ClockAncestry.LOCAL_MORE_RECENT)
 
-        # local tick of A (catching up)
-        ClockUtil.tick(local_clock, A, self._tick_noop)
-        validate(ClockAncestry.LOCAL_MORE_RECENT)
+        # remote timestamp newer
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts - 1)], False), 
+            remote = ([(auth_A, 1, cur_ts)], False),
+            expect = ([(auth_A, 1, cur_ts)], False),
+            ancestry = ClockAncestry.REMOTE_MORE_RECENT)
 
-        # remote tick of B (catching up)
-        ClockUtil.tick(remote_clock, B, self._tick_noop)
-        validate(ClockAncestry.CLOCKS_EQUAL)
+        # local lamport newer
+        self._validate_merge(
+            local  = ([(auth_A, 2, cur_ts)], False), 
+            remote = ([(auth_A, 1, cur_ts)], False),
+            expect = ([(auth_A, 2, cur_ts)], False),
+            ancestry = ClockAncestry.LOCAL_MORE_RECENT)
 
-        # tick again, to exercise timestamp ordering
-        ServerTime.set_time(ServerTime.get_time() + 1)
+        # remote lamport newer
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts)], False), 
+            remote = ([(auth_A, 2, cur_ts)], False),
+            expect = ([(auth_A, 2, cur_ts)], False),
+            ancestry = ClockAncestry.REMOTE_MORE_RECENT)
 
-        # remote tick of C
-        ClockUtil.tick(remote_clock, C, self._tick_noop)
-        ClockUtil.tick(expected_clock, C, self._tick_noop)
-        validate(ClockAncestry.REMOTE_MORE_RECENT)
+        # remote has new current author clock
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts)], False), 
+            remote = ([(auth_A, 1, cur_ts), (auth_B, 1, cur_ts)], False),
+            expect = ([(auth_A, 1, cur_ts), (auth_B, 1, cur_ts)], False),
+            ancestry = ClockAncestry.REMOTE_MORE_RECENT)
 
-        # remote tick of B
-        ClockUtil.tick(remote_clock, B, self._tick_noop)
-        ClockUtil.tick(expected_clock, B, self._tick_noop)
-        validate(ClockAncestry.REMOTE_MORE_RECENT)
+        # local has new current author clock
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts), (auth_B, 1, cur_ts)], False), 
+            remote = ([(auth_A, 1, cur_ts)], False),
+            expect = ([(auth_A, 1, cur_ts), (auth_B, 1, cur_ts)], False),
+            ancestry = ClockAncestry.LOCAL_MORE_RECENT)
 
-        # local tick of A
-        ClockUtil.tick(local_clock, A, self._tick_noop)
-        ClockUtil.tick(expected_clock, A, self._tick_noop)
-        validate(ClockAncestry.CLOCKS_DIVERGE)
+        # remote & local have divergent authors and tick counts
+        self._validate_merge(
+            local  = ([(auth_A, 2, cur_ts), (auth_C, 2, cur_ts)], False), 
+            remote = ([(auth_A, 1, cur_ts), (auth_B, 1, cur_ts)], False),
+            expect = ([(auth_A, 2, cur_ts), (auth_B, 1, cur_ts),
+                (auth_C, 2, cur_ts)], False),
+            ancestry = ClockAncestry.CLOCKS_DIVERGE)
 
-    def test_compare_and_merge_consistency(self):
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts), (auth_B, 1, cur_ts)], False), 
+            remote = ([(auth_A, 2, cur_ts), (auth_C, 2, cur_ts)], False),
+            expect = ([(auth_A, 2, cur_ts), (auth_B, 1, cur_ts),
+                (auth_C, 2, cur_ts)], False),
+            ancestry = ClockAncestry.CLOCKS_DIVERGE)
 
-        local_clock = ClusterClock()
-        local_clock.set_clock_is_pruned(False)
+    def test_legacy_merge_scenario_fixtures(self):
 
-        remote_clock = ClusterClock()
-        remote_clock.set_clock_is_pruned(False)
+        auth_A = ClockUtil.generate_author_id()
+        auth_B = ClockUtil.generate_author_id()
+        auth_C = ClockUtil.generate_author_id()
 
-        expected_clock = ClusterClock()
-        expected_clock.set_clock_is_pruned(False)
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts = ignore_ts - ClockUtil.clock_jitter_bound
 
-        validate = self._compare_and_merge_validator_factory(
-            local_clock, remote_clock, expected_clock, horizon = 1)
+        # unpruned empty remote & local
+        self._validate_merge(
+            local  = ([], False),
+            remote = ([], False),
+            expect = ([], False),
+            ancestry = ClockAncestry.CLOCKS_EQUAL)
 
-        COMMON = UUID.from_random()
-        ClockUtil.tick(local_clock, COMMON, self._tick_noop)
-        ClockUtil.tick(remote_clock, COMMON, self._tick_noop)
-        ClockUtil.tick(expected_clock, COMMON, self._tick_noop)
+        # pruned empty remote & local
+        self._validate_merge(
+            local  = ([], True),
+            remote = ([], True),
+            expect = ([], True),
+            ancestry = ClockAncestry.CLOCKS_EQUAL)
 
-        # all clocks are inconsistent & equal
-        validate(ClockAncestry.CLOCKS_EQUAL)
+        # pruned empty remote, non-empty ignorable local
+        self._validate_merge(
+            local  = ([(auth_A, 1, ignore_ts)], False),
+            remote = ([], True),
+            expect = ([(auth_A, 1, ignore_ts)], False),
+            ancestry = ClockAncestry.CLOCKS_EQUAL)
 
-        # local clock is consistent, while remote is not
-        local_clock.clear_clock_is_pruned()
-        expected_clock.clear_clock_is_pruned()
+        # non-empty prunable remote, pruned empty local
+        self._validate_merge(
+            local  = ([], True), 
+            remote = ([(auth_A, 1, prune_ts)], False),
+            expect = ([], True),
+            ancestry = ClockAncestry.CLOCKS_EQUAL)
 
-        validate(ClockAncestry.LOCAL_MORE_RECENT)
+        # non-empty prunable remote, unpruned empty local
+        self._validate_merge(
+            local  = ([], False), 
+            remote = ([(auth_A, 1, prune_ts)], False),
+            expect = ([(auth_A, 1, prune_ts)], False),
+            ancestry = ClockAncestry.REMOTE_MORE_RECENT)
 
-        # remote clock is consistent, while local is not
-        local_clock.set_clock_is_pruned(False)
-        remote_clock.clear_clock_is_pruned()
+        # pruned empty local, unpruned empty remote
+        self._validate_merge(
+            local  = ([], True),
+            remote = ([], False),
+            expect = ([], True),
+            ancestry = ClockAncestry.LOCAL_MORE_RECENT)
 
-        validate(ClockAncestry.REMOTE_MORE_RECENT)
+        # unpruned empty local, pruned empty remote
+        self._validate_merge(
+            local  = ([], False),
+            remote = ([], True),
+            expect = ([], True),
+            ancestry = ClockAncestry.REMOTE_MORE_RECENT) 
 
-        # remove local's COMMON tick (as it's age makes local consistent)
-        local_clock.Clear()
-        local_clock.set_clock_is_pruned(False)
+        # pruned empty local, unpruned current remote
+        self._validate_merge(
+            local  = ([], True), 
+            remote = ([(auth_A, 1, cur_ts)], False),
+            expect = ([(auth_A, 1, cur_ts)], True),
+            ancestry = ClockAncestry.CLOCKS_DIVERGE)
 
-        # a remote tick which would ordinarily be ignored
-        PRUNE = UUID.from_random()
-        ClockUtil.tick(remote_clock, PRUNE, self._tick_noop)
-        ClockUtil.tick(expected_clock, PRUNE, self._tick_noop)
+        # unpruned current local, pruned empty remote
+        self._validate_merge(
+            local  = ([(auth_A, 1, cur_ts)], False), 
+            remote = ([], True),
+            expect = ([(auth_A, 1, cur_ts)], True),
+            ancestry = ClockAncestry.CLOCKS_DIVERGE)
 
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound + 1)
-
-        validate(ClockAncestry.REMOTE_MORE_RECENT)
-
-        # a divergent local tick
-        LOCAL = UUID.from_random()
-        ClockUtil.tick(local_clock, LOCAL, self._tick_noop)
-        ClockUtil.tick(expected_clock, LOCAL, self._tick_noop)
-
-        validate(ClockAncestry.CLOCKS_DIVERGE)
+        # divergent prunable remote, ignorable local, & common author
+        self._validate_merge(
+            local  = ([(auth_A, 1, ignore_ts), (auth_C, 3, cur_ts)], True),
+            remote = ([(auth_B, 2, prune_ts),  (auth_C, 3, cur_ts)], True),
+            expect = ([(auth_A, 1, ignore_ts), (auth_C, 3, cur_ts)], True),
+            ancestry = ClockAncestry.CLOCKS_EQUAL)
 
     def test_merge_datamodel_update(self):
 
-        local_clock = ClusterClock()
-        remote_clock = ClusterClock()
+        auth_equal = ClockUtil.generate_author_id()
+        auth_remote_prune = ClockUtil.generate_author_id()
+        auth_local_prune  = ClockUtil.generate_author_id()
+        auth_remote_only = ClockUtil.generate_author_id()
+        auth_local_only = ClockUtil.generate_author_id()
+        auth_remote_newer_ts = ClockUtil.generate_author_id()
+        auth_local_newer_ts = ClockUtil.generate_author_id()
+        auth_remote_newer_tick = ClockUtil.generate_author_id()
+        auth_local_newer_tick = ClockUtil.generate_author_id()
 
-        # partitions to represent each of the possible merge cases
-        REMOTE_PRUNE = UUID.from_random()
-        LOCAL_IGNORE = UUID.from_random()
-        REMOTE_NEWER_TS = UUID.from_random()
-        LOCAL_NEWER_TS = UUID.from_random()
-        REMOTE_NEWER_TICK = UUID.from_random()
-        LOCAL_NEWER_TICK = UUID.from_random()
-        LOCAL_ONLY = UUID.from_random()
-        REMOTE_ONLY = UUID.from_random()
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts = ignore_ts - ClockUtil.clock_jitter_bound
 
-        # prunable remote-only partition
-        ClockUtil.tick(remote_clock, REMOTE_PRUNE, self._tick_noop)
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound)
+        local_clock = self._build_clock([
+            (auth_equal, 1, cur_ts),
+            (auth_remote_prune, 1, ignore_ts),
+            (auth_local_only, 1, cur_ts),
+            (auth_remote_newer_ts, 1, cur_ts - 1),
+            (auth_local_newer_ts, 1, cur_ts),
+            (auth_remote_newer_tick, 1, cur_ts),
+            (auth_local_newer_tick, 2, cur_ts),
+            ], True)
 
-        # ignorable local-only partition
-        ClockUtil.tick(local_clock, LOCAL_IGNORE, self._tick_noop)
-        ServerTime.set_time(ServerTime.get_time() + 10)
-
-        # 'old' ticks for timestamp-divergent partitions
-        ClockUtil.tick(local_clock,  REMOTE_NEWER_TS, self._tick_noop)
-        ClockUtil.tick(remote_clock, REMOTE_NEWER_TS, self._tick_noop)
-        ClockUtil.tick(local_clock,  LOCAL_NEWER_TS, self._tick_noop)
-        ClockUtil.tick(remote_clock, LOCAL_NEWER_TS, self._tick_noop)
-
-        ServerTime.set_time(ServerTime.get_time() + 1)
-
-        # 'new' ticks for timestamp-divergent partitions
-        ClockUtil.tick(local_clock,  LOCAL_NEWER_TS, self._tick_noop)
-        ClockUtil.tick(remote_clock, REMOTE_NEWER_TS, self._tick_noop)
-
-        # ticks for lamport-divergent partitions
-        ClockUtil.tick(remote_clock, LOCAL_NEWER_TICK, self._tick_noop)
-        ClockUtil.tick(local_clock, LOCAL_NEWER_TICK, self._tick_noop)
-        ClockUtil.tick(local_clock, LOCAL_NEWER_TICK, self._tick_noop)
-
-        ClockUtil.tick(local_clock, REMOTE_NEWER_TICK, self._tick_noop)
-        ClockUtil.tick(remote_clock, REMOTE_NEWER_TICK, self._tick_noop)
-        ClockUtil.tick(remote_clock, REMOTE_NEWER_TICK, self._tick_noop)
-
-        # partitions known to only one clock
-        ClockUtil.tick(local_clock, LOCAL_ONLY, self._tick_noop)
-        ClockUtil.tick(remote_clock, REMOTE_ONLY, self._tick_noop)
+        remote_clock = self._build_clock([
+            (auth_equal, 1, cur_ts),
+            (auth_local_prune, 1, prune_ts),
+            (auth_remote_only, 1, cur_ts),
+            (auth_remote_newer_ts, 1, cur_ts),
+            (auth_local_newer_ts, 1, cur_ts - 1),
+            (auth_remote_newer_tick, 2, cur_ts),
+            (auth_local_newer_tick, 1, cur_ts),
+            ], True)
 
         expected_merge_steps = {
-            REMOTE_PRUNE:      MergeStep.RHS_SKIP,
-            LOCAL_IGNORE:      MergeStep.LHS_ONLY,
-            REMOTE_NEWER_TS:   MergeStep.RHS_NEWER,
-            LOCAL_NEWER_TS:    MergeStep.LHS_NEWER,
-            REMOTE_NEWER_TICK: MergeStep.RHS_NEWER,
-            LOCAL_NEWER_TICK:  MergeStep.LHS_NEWER,
-            LOCAL_ONLY:        MergeStep.LHS_ONLY,
-            REMOTE_ONLY:       MergeStep.RHS_ONLY}
+            auth_equal:        MergeStep.LAUTH_RAUTH_EQUAL,
+            auth_remote_prune: MergeStep.RAUTH_PRUNED,
+            auth_local_prune:  MergeStep.LAUTH_PRUNED,
+            auth_remote_only:  MergeStep.RAUTH_ONLY,
+            auth_local_only:   MergeStep.LAUTH_ONLY,
+            auth_remote_newer_ts: MergeStep.RAUTH_NEWER,
+            auth_local_newer_ts:  MergeStep.LAUTH_NEWER,
+            auth_remote_newer_tick: MergeStep.RAUTH_NEWER,
+            auth_local_newer_tick: MergeStep.LAUTH_NEWER,
+        }
 
         # given the clock fixtures, validate that we see the
         #  expected ordering of MergeStep values
         expected_merge_steps = [
             v for k, v in sorted(expected_merge_steps.items())]
 
-        def merge_update(merge_step):
+        def merge_update(merge_step, local_is_legacy, remote_is_legacy):
+            self.assertTrue(local_is_legacy)
+            self.assertTrue(remote_is_legacy)
             self.assertEquals(merge_step, expected_merge_steps.pop(0))
 
-        ClockUtil.merge(local_clock, remote_clock, 10, merge_update)
+        ClockUtil.merge(local_clock, remote_clock, HORIZON, merge_update)
 
     def test_prune(self):
 
-        KEEP = UUID.from_random()
-        IGNORE = UUID.from_random()
-        PRUNE_A = UUID.from_random()
-        PRUNE_B = UUID.from_random()
+        author_cur = ClockUtil.generate_author_id()
+        author_ignore = ClockUtil.generate_author_id()
+        author_prune_a = ClockUtil.generate_author_id()
+        author_prune_b = ClockUtil.generate_author_id()
+
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts = ignore_ts - ClockUtil.clock_jitter_bound
 
         record = PersistedRecord()
-        clock = record.mutable_cluster_clock()
-        clock.set_clock_is_pruned(False)
+        record.mutable_cluster_clock().CopyFrom(
+            self._build_clock([
+                    (author_cur, 1, cur_ts),
+                    (author_ignore, 1, ignore_ts),
+                    (author_prune_a, 1, prune_ts),
+                    (author_prune_b, 1, prune_ts),
+                ], False))
 
-        expect = ClusterClock()
+        expect = self._build_clock([
+                (author_cur, 1, cur_ts),
+                (author_ignore, 1, ignore_ts),
+            ], True)
 
-        # two clocks to be pruned
-        ClockUtil.tick(clock, PRUNE_A, self._tick_noop)
-        ClockUtil.tick(clock, PRUNE_B, self._tick_noop)
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound)
-
-        # one clock past ignore_ts, to be kept
-        ClockUtil.tick(clock, IGNORE, self._tick_noop)
-        ClockUtil.tick(expect, IGNORE, self._tick_noop)
-        ServerTime.set_time(ServerTime.get_time() + 10)
-
-        # one current clock, to be kept
-        ClockUtil.tick(clock, KEEP, self._tick_noop)
-        ClockUtil.tick(expect, KEEP, self._tick_noop)
-
-        ClockUtil.prune(record, 10, self._prune_noop)
+        ClockUtil.prune(record, HORIZON, self._prune_noop)
 
         # assert pruned clock matches expectation
         self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
-            ClockUtil.compare(clock, expect, (1<<30)))
+            ClockUtil.compare(record.cluster_clock, expect, MAX_HORIZON))
 
-        # jump forward such that all clocks are prunable
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound + 1)
+        record.mutable_cluster_clock().CopyFrom(
+            self._build_clock([
+                (author_prune_a, 1, prune_ts),
+                (author_prune_b, 1, prune_ts),
+                ], False))
 
-        ClockUtil.prune(record, 1, self._prune_noop)
+        ClockUtil.prune(record, HORIZON, self._prune_noop)
 
         # no clocks remain; cluster_clock has been removed from record
         self.assertFalse(record.has_cluster_clock())
 
     def test_prune_datamodel_update(self):
 
-        PRUNE_A, B, PRUNE_C, D, PRUNE_E = \
-            sorted(UUID.from_random() for i in xrange(5))
+        author_prune_a, author_b, author_prune_c, author_d, author_prune_e = \
+            sorted(ClockUtil.generate_author_id() for i in xrange(5))
+
+        cur_ts = ServerTime.get_time()
+        ignore_ts = ServerTime.get_time() - HORIZON
+        prune_ts = ignore_ts - ClockUtil.clock_jitter_bound
 
         record = PersistedRecord()
-        clock = record.mutable_cluster_clock()
+        record.mutable_cluster_clock().CopyFrom(
+            self._build_clock([
+                    (author_prune_a, 1, prune_ts),
+                    (author_b, 1, cur_ts),
+                    (author_prune_c, 1, prune_ts),
+                    (author_d, 1, cur_ts),
+                    (author_prune_e, 1, prune_ts),
+                ], False))
 
-        # prunable ticks
-        ClockUtil.tick(clock, PRUNE_A, self._tick_noop)
-        ClockUtil.tick(clock, PRUNE_C, self._tick_noop)
-        ClockUtil.tick(clock, PRUNE_E, self._tick_noop)
-
-        ServerTime.set_time(ServerTime.get_time() + \
-            ClockUtil.clock_jitter_bound + 1)
-
-        # other ticks
-        ClockUtil.tick(clock, B, self._tick_noop)
-        ClockUtil.tick(clock, D, self._tick_noop)
+        expect = self._build_clock([
+                (author_b, 1, cur_ts),
+                (author_d, 1, cur_ts),
+            ], True)
 
         expected_prune_indices = [
             0, # prune of A
@@ -416,11 +444,16 @@ class TestClusterClock(unittest.TestCase):
 
         ClockUtil.prune(record, 1, prune_update)
 
+        # assert pruned clock matches expectation
+        self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
+            ClockUtil.compare(record.cluster_clock, expect, MAX_HORIZON))
+
     def _tick_noop(self, insert, index):
         pass 
 
-    def _merge_noop(self, step):
+    def _merge_noop(self, local_is_legacy, remote_is_legacy, step):
         pass
 
     def _prune_noop(self, index):
         pass
+

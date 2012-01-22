@@ -6,6 +6,7 @@ lib libsamoa :
     /root//boost_system
     /root//boost_thread
     /root//boost_regex
+    /root//boost_random
     /root//protobuf
     : <link>shared
     ;

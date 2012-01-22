@@ -66,6 +66,12 @@ public:
 
     static unsigned clock_jitter_bound /* = 3600 */;
 
+    /*! \brief Generates a new, random author id
+     *
+     * IDs are generated using mersenne twister, and seeded with system entropy
+     */
+    static uint64_t generate_author_id();
+
     /// Returns whether the ClusterClock is well-formed
     static bool validate(const spb::ClusterClock &);
 
@@ -134,32 +140,32 @@ public:
 
         // local and remote author clocks are equal
         //  update: lauth++, rauth++
-        LAUTH_RAUTH_EQUAL = 0,
+        LAUTH_RAUTH_EQUAL,
 
         // assumed that remote clock has pruned local's author clock
         //  update: lauth++
-        RAUTH_PRUNED = 1,
+        RAUTH_PRUNED,
 
         // assumed that local clock has pruned remote's author clock
         //  update: rauth++
-        LAUTH_PRUNED = 2,
-
-        // new author appears only in local clock
-        //  update: lauth++
-        LAUTH_ONLY = 1,
+        LAUTH_PRUNED,
 
         // new author appears only in remote clock, and will be
         //      inserted before the local author clock iterator
         //  update: insert-before-lauth, rauth++
-        RAUTH_ONLY = 2,
+        RAUTH_ONLY,
 
-        // local author clock is newer than remote
-        //  update: lauth++, rauth++
-        LAUTH_NEWER = 3,
+        // new author appears only in local clock
+        //  update: lauth++
+        LAUTH_ONLY,
 
         // remote author clock is newer than local
         //  update: lauth++, rauth++
-        RAUTH_NEWER = 4,
+        RAUTH_NEWER,
+
+        // local author clock is newer than remote
+        //  update: lauth++, rauth++
+        LAUTH_NEWER
     };
 
     /*! \brief Merges remote_clock into local_clock
@@ -194,6 +200,8 @@ private:
 
     typedef google::protobuf::RepeatedPtrField<
         spb::AuthorClock> author_clocks_t;
+
+    static bool has_timestamp_reached(const spb::ClusterClock &, uint64_t);
 };
 
 }

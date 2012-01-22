@@ -48,7 +48,7 @@ void set_blob_handler::handle(const request::state::ptr_t & rstate)
 
     // assume the key doesn't exist, and we're creating a new record
     datamodel::blob::update(record,
-        rstate->get_primary_partition()->author_id(),
+        rstate->get_primary_partition()->get_author_id(),
         rstate->get_request_data_blocks()[0]);
 
     rstate->get_primary_partition()->get_persister()->put(
@@ -89,7 +89,7 @@ datamodel::merge_result set_blob_handler::on_merge(
     //   update the record to 'repair' any divergence with the new value
 
     datamodel::blob::update(local_record,
-        rstate->get_primary_partition_uuid(),
+        rstate->get_primary_partition()->get_author_id(),
         rstate->get_request_data_blocks()[0]);
 
     datamodel::blob::prune(local_record,

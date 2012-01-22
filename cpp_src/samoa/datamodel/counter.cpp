@@ -21,7 +21,7 @@ void counter::update(spb::PersistedRecord & record, uint64_t author_id,
         if(insert_before)
         {
             core::protobuf::insert_before(
-                *record.mutable_counter_value(), index) += increment;
+                *record.mutable_counter_value(), index) = increment;
         }
         else
         {
@@ -41,7 +41,7 @@ bool counter::prune(spb::PersistedRecord & record,
         return true;
     }
 
-    auto update = [&record](unsigned index) -> bool
+    auto update = [&record](unsigned index)
     {
         if(record.counter_value(index))
         {
@@ -52,7 +52,6 @@ bool counter::prune(spb::PersistedRecord & record,
         }
         core::protobuf::remove_before(
             *record.mutable_counter_value(), index + 1);
-        return true;
     };
     clock_util::prune(record, consistency_horizon, update);
 
@@ -74,7 +73,8 @@ merge_result counter::merge(
     counter_values_t::iterator l_it = begin(local_values);
     counter_values_t::const_iterator r_it = begin(remote_values);
 
-    int64_t debug_delta = 0;
+    int64_t debug_delta = remote_record.counter_consistent_value() \
+        - local_record.counter_consistent_value();
 
     auto update = [&](clock_util::merge_step state,
         bool local_is_legacy, bool remote_is_legacy) -> void
@@ -84,6 +84,8 @@ merge_result counter::merge(
             is_legacy_merge = true;
             local_record.set_counter_consistent_value(
                 remote_record.counter_consistent_value());
+
+            debug_delta = 0;
         }
 
         if(state == clock_util::LAUTH_RAUTH_EQUAL)
@@ -93,17 +95,16 @@ merge_result counter::merge(
         }
         else if(state == clock_util::RAUTH_PRUNED)
         {
+            SAMOA_ASSERT(remote_is_legacy);
+            debug_delta -= *l_it;
+
             ++l_it;
         }
         else if(state == clock_util::LAUTH_PRUNED)
         {
-            if(is_legacy_merge)
-            {
-                // as this is a legacy merge, we didn't know about
-                //  this value & haven't pruned it; fold it in now
-                local_record.set_blob_consistent_value(
-                    local_record.blob_consistent_value() + *l_it);
-            }
+            SAMOA_ASSERT(!is_legacy_merge);
+            debug_delta += *r_it;
+
             ++r_it;
         }
         else if(state == clock_util::LAUTH_ONLY)
@@ -113,7 +114,7 @@ merge_result counter::merge(
         }
         else if(state == clock_util::RAUTH_ONLY)
         {
-            spb::insert_before(lhs_values, lhs_it) = *rhs_it;
+            spb::insert_before(local_values, l_it) = *r_it;
             ++r_it;
         }
         else if(state == clock_util::LAUTH_NEWER)
@@ -123,8 +124,8 @@ merge_result counter::merge(
         }
         else if(state == clock_util::RAUTH_NEWER)
         {
-            *lhs_it = *rhs_it;
-            ++lhs_it; ++rhs_it;
+            *l_it = *r_it;
+            ++l_it; ++r_it;
         }
     };
     merge_result result = clock_util::merge(

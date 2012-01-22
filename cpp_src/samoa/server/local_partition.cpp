@@ -3,6 +3,7 @@
 #include "samoa/server/table.hpp"
 #include "samoa/server/eventual_consistency.hpp"
 #include "samoa/persistence/persister.hpp"
+#include "samoa/datamodel/clock_util.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
@@ -14,13 +15,25 @@ local_partition::local_partition(
     const spb::ClusterState::Table::Partition & part,
     uint64_t range_begin, uint64_t range_end,
     const ptr_t & current)
- :  partition(part, range_begin, range_end)
+ :  partition(part, range_begin, range_end),
+    _author_id(datamodel::clock_util::generate_author_id())
 {
     SAMOA_ASSERT(part.ring_layer_size());
 
     if(current)
     {
         _persister = current->_persister;
+
+        if(current->get_range_begin() == get_range_begin() &&
+            current->get_range_end() == get_range_end())
+        {
+            // safe to preserve author id only if we have identical ranges of
+            //  responsibility; otherwise, we open ourselves to the possibility
+            //  of writing a new version of an existing key with an existing
+            //  author clock, such that we appear to be more recent than that
+            //  previously written clock
+            _author_id = current->get_author_id();
+        }
     }
     else
     {

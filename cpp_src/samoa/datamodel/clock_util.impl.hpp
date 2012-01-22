@@ -59,8 +59,9 @@ template<typename DatamodelUpdate>
 void clock_util::prune(spb::PersistedRecord & record,
     unsigned consistency_horizon, const DatamodelUpdate & datamodel_update)
 {
-    uint64_t ignore_ts = core::server_time::get_time() - consistency_horizon;
-    uint64_t prune_ts = ignore_ts - clock_jitter_bound;
+    uint64_t ignore_ts = std::max<int64_t>(0,
+        core::server_time::get_time() - consistency_horizon);
+    uint64_t prune_ts = std::max<int64_t>(0, ignore_ts - clock_jitter_bound);
 
     spb::ClusterClock & cluster_clock = *record.mutable_cluster_clock();
     author_clocks_t & clocks = *cluster_clock.mutable_author_clock();
@@ -98,7 +99,7 @@ void clock_util::prune(spb::PersistedRecord & record,
 inline bool clock_util::has_timestamp_reached(const spb::ClusterClock & clock,
     uint64_t timestamp)
 {
-    for(const spb::AuthorClock & author_clock : clock)
+    for(const spb::AuthorClock & author_clock : clock.author_clock())
     {
         if(author_clock.unix_timestamp() <= timestamp)
         	return true;
@@ -106,15 +107,16 @@ inline bool clock_util::has_timestamp_reached(const spb::ClusterClock & clock,
     return false;
 }
 
-template<typename DatamodelMergeStep>
+template<typename DatamodelUpdate>
 merge_result clock_util::merge(
     spb::ClusterClock & local_cluster_clock,
     const spb::ClusterClock & remote_cluster_clock,
     unsigned consistency_horizon,
-    const DatamodelMergeStep & datamodel_merge_step)
+    const DatamodelUpdate & datamodel_update)
 {
-    uint64_t ignore_ts = core::server_time::get_time() - consistency_horizon;
-    uint64_t prune_ts = ignore_ts - clock_jitter_bound;
+    uint64_t ignore_ts = std::max<int64_t>(0,
+        core::server_time::get_time() - consistency_horizon);
+    uint64_t prune_ts = std::max<int64_t>(0, ignore_ts - clock_jitter_bound);
 
     bool local_is_legacy = local_cluster_clock.clock_is_pruned() || \
         has_timestamp_reached(local_cluster_clock, ignore_ts);
@@ -125,11 +127,11 @@ merge_result clock_util::merge(
     result.local_was_updated = remote_is_legacy && !local_is_legacy;
     result.remote_is_stale = local_is_legacy && !remote_is_legacy;
 
-    if(remote_is_legacy && !local_is_legacy)
+    if(!local_is_legacy && remote_cluster_clock.clock_is_pruned())
     {
-    	// inherit legacy status by setting clock_is_pruned to true (default)
+        // inherit remote clock's pruning status of 'true' (default)
         //  datamodel is responsible for inheriting non-versioned content
-    	local_cluster_clock.clear_clock_is_pruned();
+        local_cluster_clock.clear_clock_is_pruned();
     }
 
     author_clocks_t & local_authors = \
@@ -137,14 +139,15 @@ merge_result clock_util::merge(
     const author_clocks_t & remote_authors = \
         remote_cluster_clock.author_clock();
 
-    clocks_t::iterator l_it = begin(local_authors);
-    clocks_t::const_iterator r_it = begin(remote_authors);
+    author_clocks_t::iterator l_it = begin(local_authors);
+    author_clocks_t::const_iterator r_it = begin(remote_authors);
 
     while(l_it != end(local_authors) && r_it != end(remote_authors))
     {
         if(l_it->author_id() < r_it->author_id())
         {
-            if(l_it->unix_timestamp() > ignore_ts)
+            if(l_it->unix_timestamp() > ignore_ts ||
+                !remote_cluster_clock.clock_is_pruned())
             {
                 result.remote_is_stale = true;
                 datamodel_update(LAUTH_ONLY,
@@ -158,7 +161,8 @@ merge_result clock_util::merge(
         }
         else if(l_it->author_id() > r_it->author_id())
         {
-            if(r_it->unix_timestamp() > prune_ts)
+            if(r_it->unix_timestamp() > prune_ts ||
+                !local_cluster_clock.clock_is_pruned())
             {
                 result.local_was_updated = true;
                 datamodel_update(RAUTH_ONLY,
@@ -218,9 +222,10 @@ merge_result clock_util::merge(
             ++l_it; ++r_it;
         }
     }
-    while(l_it != local.end())
+    while(l_it != end(local_authors))
     {
-        if(l_it->unix_timestamp() > ignore_ts)
+        if(l_it->unix_timestamp() > ignore_ts ||
+            !remote_cluster_clock.clock_is_pruned())
         {
             result.remote_is_stale = true;
             datamodel_update(LAUTH_ONLY,
@@ -232,9 +237,10 @@ merge_result clock_util::merge(
 
         ++l_it;
     }
-    while(r_it != remote.end())
+    while(r_it != end(remote_authors))
     {
-        if(r_it->unix_timestamp() > prune_ts)
+        if(r_it->unix_timestamp() > prune_ts ||
+            !local_cluster_clock.clock_is_pruned())
         {
             result.local_was_updated = true;
             datamodel_update(RAUTH_ONLY,
