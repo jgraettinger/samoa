@@ -9,6 +9,7 @@ from samoa.client.server import Server
 from samoa.server.listener import Listener
 from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
+from samoa.datamodel.blob import Blob
 from samoa.persistence.persister import Persister
 
 from samoa.test.module import TestModule
@@ -45,13 +46,11 @@ class TestEventualConsistency(unittest.TestCase):
         def populate():
 
             record = PersistedRecord()
-            record.add_blob_value(value_A)
-            ClockUtil.tick(record.mutable_cluster_clock(), part_A)
+            Blob.update(record, ClockUtil.generate_author_id(), value_A)
             yield cluster.persisters[part_A].put(None, key, record)
 
             record = PersistedRecord()
-            record.add_blob_value(value_B)
-            ClockUtil.tick(record.mutable_cluster_clock(), part_B)
+            Blob.update(record, ClockUtil.generate_author_id(), value_B)
             yield cluster.persisters[part_B].put(None, key, record)
             yield
 
@@ -65,9 +64,7 @@ class TestEventualConsistency(unittest.TestCase):
                 record = yield cluster.persisters[part_uuid].get(key)
 
                 # peers are now consistent
-                self.assertEquals(len(record.blob_value), 2)
-                self.assertItemsEqual(record.blob_value,
-                    [value_A, value_B])
+                self.assertItemsEqual(record.blob_value, [value_A, value_B])
 
             cluster.stop_server_contexts()
             yield
@@ -104,8 +101,7 @@ class TestEventualConsistency(unittest.TestCase):
 
         def populate():
             record = PersistedRecord()
-            record.add_blob_value(value)
-            ClockUtil.tick(record.mutable_cluster_clock(), part_drop)
+            Blob.update(record, ClockUtil.generate_author_id(), value)
             yield cluster.persisters[part_drop].put(None, key, record)
             yield
 
@@ -161,8 +157,7 @@ class TestEventualConsistency(unittest.TestCase):
 
         def populate():
             record = PersistedRecord()
-            record.add_blob_value(value)
-            ClockUtil.tick(record.mutable_cluster_clock(), part_drop)
+            Blob.update(record, ClockUtil.generate_author_id(), value)
             yield cluster.persisters[part_drop].put(None, key, record)
             yield
 
@@ -209,12 +204,11 @@ class TestEventualConsistency(unittest.TestCase):
         cluster.start_server_contexts()
 
         def populate():
-            for part_uuid, val in part_values.items():
+            for part_uuid, value in part_values.items():
 
                 # place divergent fixtures under each peer partition
                 record = PersistedRecord()
-                record.add_blob_value(val)
-                ClockUtil.tick(record.mutable_cluster_clock(), part_uuid)
+                Blob.update(record, ClockUtil.generate_author_id(), value)
                 yield cluster.persisters[part_uuid].put(None, key, record)
             yield
 

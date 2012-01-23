@@ -38,7 +38,7 @@ bool eventual_consistency::operator()(
         return true;
     }
 
-    if(!_prune_func(rstate->get_local_record()))
+    if(_prune_func(rstate->get_local_record()))
     {
         // pruning indicates this record should be discarded;
         //  return to persister immediately

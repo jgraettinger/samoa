@@ -8,7 +8,6 @@ from samoa.core.protobuf import ClusterClock, PersistedRecord
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry, MergeStep
 
 HORIZON = 3600
-MAX_HORIZON = (1 << 32) - 1
 
 class TestClusterClock(unittest.TestCase):
 
@@ -134,7 +133,7 @@ class TestClusterClock(unittest.TestCase):
         # ensure merged_clock equals expected_clock;
         #  use a large horizon to check for exact equality
         self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
-            ClockUtil.compare(merged_clock, expect_clock, MAX_HORIZON))
+            ClockUtil.compare(merged_clock, expect_clock))
 
     def _build_clock(self, ticks, is_pruned = False):
         clock = ClusterClock()
@@ -396,7 +395,7 @@ class TestClusterClock(unittest.TestCase):
 
         # assert pruned clock matches expectation
         self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
-            ClockUtil.compare(record.cluster_clock, expect, MAX_HORIZON))
+            ClockUtil.compare(record.cluster_clock, expect))
 
         record.mutable_cluster_clock().CopyFrom(
             self._build_clock([
@@ -446,7 +445,7 @@ class TestClusterClock(unittest.TestCase):
 
         # assert pruned clock matches expectation
         self.assertEquals(ClockAncestry.CLOCKS_EQUAL,
-            ClockUtil.compare(record.cluster_clock, expect, MAX_HORIZON))
+            ClockUtil.compare(record.cluster_clock, expect))
 
     def _tick_noop(self, insert, index):
         pass 

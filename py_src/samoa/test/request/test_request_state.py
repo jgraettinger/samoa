@@ -27,8 +27,8 @@ class TestRequestState(unittest.TestCase):
             UUID.from_random().to_bytes())
 
         clock = self.samoa_request.mutable_cluster_clock()
-        ClockUtil.tick(clock, UUID.from_random())
-        ClockUtil.tick(clock, UUID.from_random())
+        ClockUtil.tick(clock, ClockUtil.generate_author_id(), None)
+        ClockUtil.tick(clock, ClockUtil.generate_author_id(), None)
 
     def test_basic_fixture_parses(self):
 
@@ -55,7 +55,7 @@ class TestRequestState(unittest.TestCase):
     def test_invalid_cluster_clock(self):
 
         self.samoa_request.mutable_cluster_clock(
-            ).partition_clock.SwapElements(0, 1)
+            ).author_clock.SwapElements(0, 1)
 
         with self.assertRaisesRegexp(StateException, 'cluster-clock'):
             self.rstate.parse_samoa_request()

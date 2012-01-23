@@ -7,6 +7,7 @@ from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
+from samoa.datamodel.blob import Blob
 from samoa.persistence.persister import Persister
 
 from samoa.test.module import TestModule
@@ -53,18 +54,27 @@ class TestSetBlob(unittest.TestCase):
 
         def populate():
 
-            record = PersistedRecord()
-            record.add_blob_value(self.preset_A)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
+            author_A = self.cluster.contexts['peer_A'].get_cluster_state(
+                ).get_table_set(
+                ).get_table(self.table_uuid
+                ).get_partition(self.part_A
+                ).get_author_id()
 
+            record = PersistedRecord()
+            Blob.update(record, author_A, self.preset_A)
             yield self.persisters[self.part_A].put(None, self.key, record)
 
-            record = PersistedRecord()
-            record.add_blob_value(self.preset_B)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_B)
+            author_B = self.cluster.contexts['peer_B'].get_cluster_state(
+                ).get_table_set(
+                ).get_table(self.table_uuid
+                ).get_partition(self.part_B
+                ).get_author_id()
 
+            record = PersistedRecord()
+            Blob.update(record, author_B, self.preset_B)
             yield self.persisters[self.part_B].put(None, self.key, record)
-            yield
+
+            yield author_A, author_B
 
         return populate
 
@@ -97,68 +107,91 @@ class TestSetBlob(unittest.TestCase):
 
         def populate():
 
-            # set preset value in main's persister
-            record = PersistedRecord()
-            record.add_blob_value(self.preset)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.partition_uuid)
+            author_id = self.cluster.contexts['main'].get_cluster_state(
+                ).get_table_set(
+                ).get_table(self.table_uuid
+                ).get_partition(self.partition_uuid
+                ).get_author_id()
 
+            record = PersistedRecord()
+            Blob.update(record, author_id, self.preset)
             yield self.persister.put(None, self.key, record)
-            yield
+
+            yield author_id
 
         return populate
 
     def test_direct_write_no_clock(self):
+        def make_clock(author_id):
+            return None
+
         populate = self._build_simple_fixture()
-        self._simple_write_passes(populate, 'main', None)
+        self._simple_write_passes(populate, 'main', make_clock)
 
     def test_forwarded_write_no_clock(self):
+        def make_clock(author_id):
+            return None
+
         populate = self._build_simple_fixture()
-        self._simple_write_passes(populate, 'forwarder', None)
+        self._simple_write_passes(populate, 'forwarder', make_clock)
 
     def test_direct_write_with_clock(self):
-        populate = self._build_simple_fixture()
+        def make_clock(author_id):
+            clock = ClusterClock()
+            ClockUtil.tick(clock, author_id, None)
+            return clock
 
-        clock = ClusterClock()
-        ClockUtil.tick(clock, self.partition_uuid)
-        self._simple_write_passes(populate, 'main', clock)
+        populate = self._build_simple_fixture()
+        self._simple_write_passes(populate, 'main', make_clock)
 
     def test_forwarded_write_with_clock(self):
-        populate = self._build_simple_fixture()
+        def make_clock(author_id):
+            clock = ClusterClock()
+            ClockUtil.tick(clock, author_id, None)
+            return clock
 
-        clock = ClusterClock()
-        ClockUtil.tick(clock, self.partition_uuid)
-        self._simple_write_passes(populate, 'forwarder', clock)
+        populate = self._build_simple_fixture()
+        self._simple_write_passes(populate, 'forwarder', make_clock)
 
     def test_direct_write_empty_clock(self):
-        populate = self._build_simple_fixture()
+        def make_clock(author_id):
+            return ClusterClock()
 
-        self._simple_write_fails(populate, 'main', ClusterClock())
+        populate = self._build_simple_fixture()
+        self._simple_write_fails(populate, 'main', make_clock)
 
     def test_forwarded_write_empty_clock(self):
-        populate = self._build_simple_fixture()
+        def make_clock(author_id):
+            return ClusterClock()
 
-        self._simple_write_fails(populate, 'forwarder', ClusterClock())
+        populate = self._build_simple_fixture()
+        self._simple_write_fails(populate, 'forwarder', make_clock)
 
     def test_direct_write_wrong_clock(self):
-        populate = self._build_simple_fixture()
+        def make_clock(author_id):
+            clock = ClusterClock()
+            ClockUtil.tick(clock, ClockUtil.generate_author_id(), None)
+            return clock 
 
-        clock = ClusterClock()
-        ClockUtil.tick(clock, UUID.from_random())
-        self._simple_write_fails(populate, 'main', clock)
-        
+        populate = self._build_simple_fixture()
+        self._simple_write_fails(populate, 'main', make_clock)
+
     def test_forwarded_write_wrong_clock(self):
+        def make_clock(author_id):
+            clock = ClusterClock()
+            ClockUtil.tick(clock, ClockUtil.generate_author_id(), None)
+            return clock
+
         populate = self._build_simple_fixture()
+        self._simple_write_fails(populate, 'forwarder', make_clock)
 
-        clock = ClusterClock()
-        ClockUtil.tick(clock, UUID.from_random())
-        self._simple_write_fails(populate, 'forwarder', clock)
-
-    def _simple_write_fails(self, populate, server_name, clock):
+    def _simple_write_fails(self, populate, server_name, make_clock):
 
         def test():
 
-            yield populate()
-            response = yield self._make_request(server_name, clock)
+            author_id = yield populate()
+            response = yield self._make_request(server_name,
+                make_clock(author_id))
 
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
@@ -169,10 +202,10 @@ class TestSetBlob(unittest.TestCase):
                 [self.preset])
 
             expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.partition_uuid)
+            ClockUtil.tick(expected_clock, author_id, None)
 
-            # expected clock was returned
-            self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+            # validate expected clock was returned
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
                 expected_clock, samoa_response.cluster_clock))
 
             response.finish_response()
@@ -180,8 +213,8 @@ class TestSetBlob(unittest.TestCase):
             # preset record is unchanged
             record = yield self.persister.get(self.key)
 
-            self.assertEquals(list(record.blob_value), [self.preset])
-            self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+            self.assertItemsEqual(record.blob_value, [self.preset])
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
                 expected_clock, record.cluster_clock))
 
             # cleanup
@@ -190,12 +223,13 @@ class TestSetBlob(unittest.TestCase):
 
         Proactor.get_proactor().run_test(test)
 
-    def _simple_write_passes(self, populate, server_name, clock):
+    def _simple_write_passes(self, populate, server_name, make_clock):
 
         def test():
 
-            yield populate()
-            response = yield self._make_request(server_name, clock)
+            author_id = yield populate()
+            response = yield self._make_request(server_name,
+                make_clock(author_id))
 
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
@@ -205,14 +239,14 @@ class TestSetBlob(unittest.TestCase):
             response.finish_response()
 
             # validate written record
-            expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.partition_uuid)
-            ClockUtil.tick(expected_clock, self.partition_uuid)
-
             record = yield self.persister.get(self.key)
-
             self.assertEquals(list(record.blob_value), [self.value])
-            self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+
+            expected_clock = ClusterClock()
+            ClockUtil.tick(expected_clock, author_id, None)
+            ClockUtil.tick(expected_clock, author_id, None)
+
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
                 expected_clock, record.cluster_clock))
 
             # cleanup
@@ -223,38 +257,43 @@ class TestSetBlob(unittest.TestCase):
 
 
     def test_quorum_write_A(self):
+        def make_clock(author_A, author_B):
+            clock = ClusterClock()
+            ClockUtil.tick(clock, author_A, None)
+            return clock
+
         populate = self._build_diverged_fixture()
-
-        clock = ClusterClock()
-        ClockUtil.tick(clock, self.part_A)
-
         self._quorum_write_test(populate, 'peer_A',
-            clock, [self.value, self.preset_B])
+            make_clock, [self.value, self.preset_B])
 
     def test_quorum_write_B(self):
+        def make_clock(author_A, author_B):
+            clock = ClusterClock()
+            ClockUtil.tick(clock, author_B, None)
+            return clock
+
         populate = self._build_diverged_fixture()
-
-        clock = ClusterClock()
-        ClockUtil.tick(clock, self.part_B)
-
         self._quorum_write_test(populate, 'peer_B',
-            clock, [self.value, self.preset_A])
+            make_clock, [self.value, self.preset_A])
 
     def test_quorum_write_nil(self):
+        def make_clock(author_A, author_B):
+            clock = ClusterClock()
+            clock.set_clock_is_pruned(False)
+            return clock
+
         populate = self._build_diverged_fixture()
-
-        clock = ClusterClock() # empty
-
         self._quorum_write_test(populate, 'peer_nil',
-            clock, [self.value, self.preset_A, self.preset_B])
+            make_clock, [self.value, self.preset_A, self.preset_B])
 
     def _quorum_write_test(self, populate, server_name,
-            request_clock, expected_values):
+            make_clock, expected_values):
 
         def test():
 
-            yield populate()
-            response = yield self._make_request(server_name, request_clock, 4)
+            author_A, author_B = yield populate()
+            response = yield self._make_request(server_name,
+                make_clock(author_A, author_B), 4)
 
             samoa_response = response.get_message()
             self.assertFalse(response.get_error_code())
@@ -269,25 +308,11 @@ class TestSetBlob(unittest.TestCase):
 
         def validate():
 
-            server_partitions = {
-                'peer_A': self.part_A,
-                'peer_B': self.part_B,
-                'peer_nil': self.part_nil,
-            }
-
-            expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.part_A)
-            ClockUtil.tick(expected_clock, self.part_B)
-            ClockUtil.tick(expected_clock, server_partitions[server_name])
-
-            # assert all servers have expected values & clock
-            for srv_name, part_uuid in server_partitions.items():
+            # assert all servers have expected values
+            for part_uuid in [self.part_A, self.part_B, self.part_nil]:
 
                 record = yield self.persisters[part_uuid].get(self.key)
-
-                self.assertEquals(set(record.blob_value), set(expected_values))
-                self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
-                    expected_clock, record.cluster_clock))
+                self.assertItemsEqual(record.blob_value, expected_values)
 
             # cleanup
             self.cluster.stop_server_contexts()

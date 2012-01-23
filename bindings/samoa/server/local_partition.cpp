@@ -17,6 +17,7 @@ void make_local_partition_bindings()
                 const spb::ClusterState::Table::Partition &,
                 uint64_t, uint64_t,
                 const local_partition::ptr_t &>())
+        .def("get_author_id", &local_partition::get_author_id)
         .def("get_persister", &local_partition::get_persister,
             bpl::return_value_policy<bpl::copy_const_reference>())
         ;

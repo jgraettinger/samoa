@@ -9,6 +9,7 @@ from samoa.server.listener import Listener
 from samoa.client.server import Server
 from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
+from samoa.datamodel.blob import Blob
 from samoa.persistence.persister import Persister
 
 from samoa.test.module import TestModule
@@ -54,18 +55,27 @@ class TestGetBlob(unittest.TestCase):
 
         def populate():
 
-            record = PersistedRecord()
-            record.add_blob_value(self.value_A)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
+            author_A = self.cluster.contexts['peer_A'].get_cluster_state(
+                ).get_table_set(
+                ).get_table(self.table_uuid
+                ).get_partition(self.part_A
+                ).get_author_id()
 
+            record = PersistedRecord()
+            Blob.update(record, author_A, self.value_A)
             yield self.persisters[self.part_A].put(None, self.key, record)
 
-            record = PersistedRecord()
-            record.add_blob_value(self.value_B)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_B)
+            author_B = self.cluster.contexts['peer_B'].get_cluster_state(
+                ).get_table_set(
+                ).get_table(self.table_uuid
+                ).get_partition(self.part_B
+                ).get_author_id()
 
+            record = PersistedRecord()
+            Blob.update(record, author_B, self.value_B)
             yield self.persisters[self.part_B].put(None, self.key, record)
-            yield
+
+            yield author_A, author_B
 
         return populate
 
@@ -78,7 +88,7 @@ class TestGetBlob(unittest.TestCase):
 
         def test():
 
-            yield populate()
+            author_A, author_B = yield populate()
             request = yield self.cluster.schedule_request(server_name)
 
             samoa_request = request.get_message()
@@ -95,15 +105,15 @@ class TestGetBlob(unittest.TestCase):
             self.assertEquals(samoa_response.replication_failure, 1)
 
             self.assertEquals(len(samoa_response.data_block_length), 2)
-            self.assertEquals(set(response.get_response_data_blocks()),
-                set([self.value_A, self.value_B]))
+            self.assertItemsEqual(response.get_response_data_blocks(),
+                [self.value_A, self.value_B])
 
             expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.part_A)
-            ClockUtil.tick(expected_clock, self.part_B)
+            ClockUtil.tick(expected_clock, author_A, None)
+            ClockUtil.tick(expected_clock, author_B, None)
 
-            # ensure the expected clock is present in the response
-            self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+            # ensure expected clock is present in response; use a large horizon
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
                 expected_clock, samoa_response.cluster_clock))
 
             response.finish_response()
@@ -132,7 +142,7 @@ class TestGetBlob(unittest.TestCase):
 
         def test():
 
-            yield populate()
+            author_A, _ = yield populate()
             request = yield self.cluster.schedule_request('peer_A')
 
             samoa_request = request.get_message()
@@ -151,10 +161,10 @@ class TestGetBlob(unittest.TestCase):
                 [self.value_A])
 
             expected_clock = ClusterClock()
-            ClockUtil.tick(expected_clock, self.part_A)
+            ClockUtil.tick(expected_clock, author_A, None)
 
-            # ensure the expected clock is present in the response
-            self.assertEquals(ClockAncestry.EQUAL, ClockUtil.compare(
+            # ensure expected clock is present in response; use a large horizon
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
                 expected_clock, samoa_response.cluster_clock))
 
             response.finish_response()
@@ -186,8 +196,13 @@ class TestGetBlob(unittest.TestCase):
             self.assertEquals(samoa_response.replication_failure, 0)
 
             self.assertEquals(len(samoa_response.data_block_length), 0)
-            self.assertEquals(0,
-                len(samoa_response.cluster_clock.partition_clock))
+
+            expected_clock = ClusterClock()
+            expected_clock.set_clock_is_pruned(False)
+
+            # ensure expected clock is present in response
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
+                expected_clock, samoa_response.cluster_clock))
 
             response.finish_response()
 

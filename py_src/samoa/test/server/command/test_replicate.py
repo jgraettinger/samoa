@@ -7,6 +7,7 @@ from samoa.core.uuid import UUID
 from samoa.core.proactor import Proactor
 from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil, ClockAncestry
+from samoa.datamodel.blob import Blob
 from samoa.persistence.persister import Persister
 
 from samoa.test.module import TestModule
@@ -198,9 +199,7 @@ class TestReplicate(unittest.TestCase):
 
         if is_write:
             record = PersistedRecord()
-            record.add_blob_value(self.value_A)
-            ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
-
+            Blob.update(record, ClockUtil.generate_author_id(), self.value_A)
             request.add_data_block(record.SerializeToBytes())
 
         response = yield request.flush_request()
@@ -211,15 +210,12 @@ class TestReplicate(unittest.TestCase):
 
         # create divergent fixtures under both peers
         record = PersistedRecord()
-        record.add_blob_value(self.value_A)
-        ClockUtil.tick(record.mutable_cluster_clock(), self.part_A)
-
+        Blob.update(record, ClockUtil.generate_author_id(), self.value_A)
         yield self.persisters[self.part_A].put(None, self.key, record)
 
         record = PersistedRecord()
-        record.add_blob_value(self.value_B)
-        ClockUtil.tick(record.mutable_cluster_clock(), self.part_B)
-
+        Blob.update(record, ClockUtil.generate_author_id(), self.value_B)
         yield self.persisters[self.part_B].put(None, self.key, record)
+
         yield
 

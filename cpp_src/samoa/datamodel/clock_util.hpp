@@ -118,7 +118,7 @@ public:
     static clock_ancestry compare(
         const spb::ClusterClock & local_clock,
         const spb::ClusterClock & remote_clock,
-        unsigned consistency_horizon);
+        unsigned consistency_horizon = std::numeric_limits<unsigned>::max());
 
     /*! \brief Prunes author clocks of the cluster clock older than prune_ts
      *

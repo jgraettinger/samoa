@@ -12,23 +12,41 @@ namespace bpl = boost::python;
 void py_tick(spb::ClusterClock & clock, uint64_t author_id,
     const bpl::object & py_update)
 {
-    clock_util::tick(clock, author_id, py_update);
+    auto update = [&](bool insert_before, unsigned index)
+    {
+        if(py_update)
+            py_update(insert_before, index);
+    };
+    clock_util::tick(clock, author_id, update);
 }
 
 void py_prune(spb::PersistedRecord & record,
     unsigned consistency_horizon,
     const bpl::object & py_update)
 {
-    clock_util::prune(record, consistency_horizon, py_update);
+    auto update = [&](unsigned index)
+    {
+        if(py_update)
+            py_update(index);
+    };
+    clock_util::prune(record, consistency_horizon, update);
 }
+
+
 
 merge_result py_merge(spb::ClusterClock & local_clock,
     const spb::ClusterClock & remote_clock,
     unsigned consistency_horizon,
     const bpl::object & py_update)
 {
+    auto update = [&](clock_util::merge_step step,
+        bool local_is_legacy, bool remote_is_legacy)
+    {
+        if(py_update)
+            py_update(step, local_is_legacy, remote_is_legacy);
+    };
     return clock_util::merge(local_clock, remote_clock,
-        consistency_horizon, py_update);
+        consistency_horizon, update);
 }
 
 void make_clock_util_bindings()
@@ -37,7 +55,12 @@ void make_clock_util_bindings()
         .def_readwrite("clock_jitter_bound", &clock_util::clock_jitter_bound)
         .def("validate", &clock_util::validate).staticmethod("validate")
         .def("tick", &py_tick).staticmethod("tick")
-        .def("compare", &clock_util::compare).staticmethod("compare")
+        .def("compare", &clock_util::compare, (
+            bpl::arg("local_clock"),
+            bpl::arg("remote_clock"),
+            bpl::arg("consistency_horizon") = \
+                std::numeric_limits<unsigned>::max()))
+        .staticmethod("compare")
         .def("prune", &py_prune).staticmethod("prune")
         .def("merge", &py_merge).staticmethod("merge")
         .def("generate_author_id", &clock_util::generate_author_id)
