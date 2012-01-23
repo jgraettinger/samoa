@@ -20,9 +20,12 @@ enum CommandType {
     GET_BLOB = 10;
     SET_BLOB = 11;
 
-    TEST = 12;
+    UPDATE_COUNTER = 12;
+    COUNTER_VALUE = 13;
 
-    REPLICATE = 13;
+    REPLICATE = 14;
+
+    TEST = 15;
 };
 
 // Returned by Samoa to indicate an error in the operation
@@ -186,6 +189,8 @@ message SamoaRequest {
     optional CreateTableRequest create_table = 11;
     optional AlterTableRequest  alter_table = 12;
     optional CreatePartitionRequest create_partition = 13;
+
+    optional int64 counter_update = 14;
 };
 
 message SamoaResponse {

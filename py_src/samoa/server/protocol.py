@@ -11,6 +11,8 @@ import samoa.server.command.cluster_state
 import samoa.server.command.get_blob
 import samoa.server.command.set_blob
 import samoa.server.command.replicate
+import samoa.server.command.update_counter
+import samoa.server.command.counter_value
 
 import samoa.server.command as cmd
 from samoa.core.protobuf import CommandType
@@ -30,6 +32,8 @@ class Protocol(_server.Protocol):
         get_blob = cmd.get_blob.GetBlobHandler,
         set_blob = cmd.set_blob.SetBlobHandler,
         replicate = cmd.replicate.ReplicateHandler,
+        update_counter = cmd.update_counter.UpdateCounterHandler,
+        counter_value = cmd.counter_value.CounterValueHandler,
     )
     def __init__(self,
            ping,
@@ -41,7 +45,10 @@ class Protocol(_server.Protocol):
            cluster_state,
            get_blob,
            set_blob,
-           replicate):
+           update_counter,
+           counter_value,
+           replicate,
+           ):
 
         _server.Protocol.__init__(self)
 
@@ -63,6 +70,10 @@ class Protocol(_server.Protocol):
             CommandType.GET_BLOB, get_blob)
         self.set_command_handler(
             CommandType.SET_BLOB, set_blob)
+        self.set_command_handler(
+            CommandType.UPDATE_COUNTER, update_counter)
+        self.set_command_handler(
+            CommandType.COUNTER_VALUE, counter_value)
         self.set_command_handler(
             CommandType.REPLICATE, replicate)
 

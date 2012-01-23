@@ -19,6 +19,8 @@ void record_state::reset_record_state()
 
     _local_record.mutable_cluster_clock(
         )->set_clock_is_pruned(false);
+    _remote_record.mutable_cluster_clock(
+        )->set_clock_is_pruned(false);
 }
 
 }
