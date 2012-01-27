@@ -151,7 +151,8 @@ class TestReplicate(unittest.TestCase):
             response.finish_response()
 
             self.assertEquals(len(record.blob_value), 1)
-            self.assertTrue(record.blob_value[0] in [self.value_A, self.value_B])
+            self.assertTrue(record.blob_value[0] in \
+                [self.value_A, self.value_B])
 
             # cleanup
             self.cluster.stop_server_contexts()
