@@ -28,10 +28,16 @@ class TestSetBlob(unittest.TestCase):
         common_fixture = ClusterStateFixture()
         self.table_uuid = UUID(
             common_fixture.add_table(
-                data_type = DataType.BLOB_TYPE).uuid)
+                data_type = DataType.BLOB_TYPE,
+                replication_factor = 2).uuid)
 
         self.cluster = PeeredCluster(common_fixture,
             server_names = ['main', 'peer', 'forwarder'])
+
+        # make peers explicitly known to forwarder; otherwise, it's
+        #  a race as to whether discovery takes 2 or 1 iteration
+        self.cluster.set_known_peer('forwarder', 'main')
+        self.cluster.set_known_peer('forwarder', 'peer') 
 
         self.main_partition_uuid = self.cluster.add_partition(
             self.table_uuid, 'main')
@@ -48,48 +54,137 @@ class TestSetBlob(unittest.TestCase):
         self.preset_value = common_fixture.generate_bytes()
         self.new_value = common_fixture.generate_bytes()
 
+        self.preset_clock = ClusterClock()
+        ClockUtil.tick(self.preset_clock, self.author_id, None)
+
         def populate():
 
             record = PersistedRecord()
-            Blob.update(record, self.author_id, self.preset)
+            Blob.update(record, self.author_id, self.preset_value)
             yield self.main_persister.put(None, self.key, record)
             yield self.peer_persister.put(None, self.key, record)
+
+            self.preset_clock = ClusterClock(record.cluster_clock)
             yield
 
         return populate
 
-    def test_direct_get_blob_hit(self):
+    def test_direct_no_clock(self):
         populate = self._build_fixture()
+        self._validate_success(populate, 'main', None)
 
-    def test_direct_get_blob_miss(self):
+    def test_forwarded_no_clock(self):
+        populate = self._build_fixture()
+        self._validate_success(populate, 'forwarder', None)
+
+    def test_direct_with_clock(self):
+        populate = self._build_fixture()
+        self._validate_success(populate, 'main', self.preset_clock)
+
+    def test_forwarded_with_clock(self):
+        populate = self._build_fixture()
+        self._validate_success(populate, 'forwarder', self.preset_clock)
+
+    def test_direct_wrong_clock(self):
+        populate = self._build_fixture()
+        self._validate_fails(populate, 'main', ClusterClock())
+
+    def test_forwarded_wrong_clock(self):
+        populate = self._build_fixture()
+        self._validate_fails(populate, 'forwarder', ClusterClock())
+
+    def test_quorum(self):
+        populate = self._build_fixture()
         def test():
-            yield self._build_fixture()
+            yield populate()
+            response = yield self._make_request('forwarder', self.preset_clock, 2)
 
-    def test_forwarded_get_blob(self):
+            samoa_response = response.get_message()
+            self.assertTrue(samoa_response.success)
+            self.assertEquals(samoa_response.replication_success, 2)
+            self.assertEquals(samoa_response.replication_failure, 0)
+            response.finish_response()
+
+            # writes have already persisted to both peers
+            yield self._validate_persisters_updated()
+
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run_test(test)
+
+    def _validate_success(self, populate, server_name, clock):
+
+        def test():
+            yield populate()
+            response = yield self._make_request(server_name, clock)
+
+            samoa_response = response.get_message()
+            self.assertTrue(samoa_response.success)
+            response.finish_response()
+            yield
+
+        Proactor.get_proactor().run_test([
+            test,
+            self._validate_persisters_updated,
+            self.cluster.stop_server_contexts])
+
+    def _validate_fails(self, populate, server_name, clock):
+
+        def test():
+            yield populate()
+            response = yield self._make_request(server_name, clock)
+
+            samoa_response = response.get_message()
+            self.assertFalse(samoa_response.success)
+            response.finish_response()
+
+            # current blob & clock sent back
+            self.assertEquals(response.get_response_data_blocks(),
+                [self.preset_value])
+
+            # validate expected clock was returned
+            self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
+                self.preset_clock, samoa_response.cluster_clock))
+
+            response.finish_response()
+
+        Proactor.get_proactor().run_test(test)
+
+    def _validate_persisters_updated(self):
+
+        record = yield self.main_persister.get(self.key)
+        self.assertItemsEqual(Blob.value(record), [self.new_value])
+        self.assertEquals(ClockAncestry.REMOTE_MORE_RECENT, ClockUtil.compare(
+            self.preset_clock, record.cluster_clock))
+
+        record = yield self.peer_persister.get(self.key)
+        self.assertItemsEqual(Blob.value(record), [self.new_value]) 
+        self.assertEquals(ClockAncestry.REMOTE_MORE_RECENT, ClockUtil.compare(
+            self.preset_clock, record.cluster_clock))
         yield
 
-    def test_direct_write_no_clock(self):
-        def make_clock(author_id):
-            return None
+    def _validate_persisters_not_changed(self):
 
-        populate = self._build_simple_fixture()
-        self._simple_write_passes(populate, 'main', make_clock)
+        record = yield self.main_persister.get(self.key)
+        self.assertItemsEqual(Blob.value(record), [self.preset_value])
+        self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
+            self.preset_clock, record.cluster_clock))
 
-    def test_forwarded_write_no_clock(self):
-        def make_clock(author_id):
-            return None
+        record = yield self.peer_persister.get(self.key)
+        self.assertItemsEqual(Blob.value(record), [self.preset_value]) 
+        self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
+            self.preset_clock, record.cluster_clock))
+        yield
 
-        populate = self._build_simple_fixture()
-        self._simple_write_passes(populate, 'forwarder', make_clock)
 
-    def test_direct_write_with_clock(self):
-        def make_clock(author_id):
-            clock = ClusterClock()
-            ClockUtil.tick(clock, author_id, None)
-            return clock
 
-        populate = self._build_simple_fixture()
-        self._simple_write_passes(populate, 'main', make_clock)
+
+
+
+
+
+
 
     def test_forwarded_write_with_clock(self):
         def make_clock(author_id):
@@ -137,7 +232,7 @@ class TestSetBlob(unittest.TestCase):
         def test():
 
             author_id = yield populate()
-            response = yield self._make_request(server_name,
+            response = yield self._make_set_request(server_name,
                 make_clock(author_id))
 
             samoa_response = response.get_message()
@@ -175,7 +270,7 @@ class TestSetBlob(unittest.TestCase):
         def test():
 
             author_id = yield populate()
-            response = yield self._make_request(server_name,
+            response = yield self._make_set_request(server_name,
                 make_clock(author_id))
 
             samoa_response = response.get_message()
@@ -259,7 +354,7 @@ class TestSetBlob(unittest.TestCase):
 
         Proactor.get_proactor().run_test(test)
 
-    def _make_request(self, server_name, request_clock = None):
+    def _make_request(self, server_name, request_clock = None, quorum = 1):
 
         request = yield self.cluster.schedule_request(server_name)
 
@@ -267,11 +362,12 @@ class TestSetBlob(unittest.TestCase):
         samoa_request.set_type(CommandType.SET_BLOB)
         samoa_request.set_table_uuid(self.table_uuid.to_bytes())
         samoa_request.set_key(self.key)
+        samoa_request.set_requested_quorum(quorum)
 
         if request_clock:
             samoa_request.mutable_cluster_clock().CopyFrom(request_clock)
 
-        request.add_data_block(self.value)
+        request.add_data_block(self.new_value)
 
         response = yield request.flush_request()
         yield response

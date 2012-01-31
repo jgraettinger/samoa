@@ -43,9 +43,14 @@ class PeeredCluster(object):
 
     def set_known_peer(self, server_name, peer_name):
 
+        peer_uuid = self.fixtures[peer_name].server_uuid
+        peer_port = self.fixtures[peer_name].server_port
+
+        if self.fixtures[server_name].get_peer(peer_uuid):
+            return
+
         self.fixtures[server_name].add_peer(
-            uuid = self.fixtures[peer_name].server_uuid,
-            port = self.fixtures[peer_name].server_port)
+            uuid = peer_uuid, port = peer_port)
 
     def add_partition(self, table_uuid, server_name):
 
