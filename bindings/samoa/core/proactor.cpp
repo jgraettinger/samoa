@@ -58,24 +58,6 @@ void py_run_later(proactor & p, const bpl::object & callable,
 }
 
 //////////////////////////////////////////////////////////
-// proactor.sleep() support
-
-void on_py_sleep(const pysamoa::future::ptr_t & future)
-{
-    pysamoa::python_scoped_lock block;
-
-    future->on_result(bpl::object());
-}
-
-pysamoa::future::ptr_t py_sleep(proactor & p, unsigned delay_ms)
-{
-    pysamoa::future::ptr_t f(boost::make_shared<pysamoa::future>());
-
-    p.run_later(boost::bind(&on_py_sleep, f), delay_ms);
-    return f;
-}
-
-//////////////////////////////////////////////////////////
 // proactor.run_test() support
 
 struct idle_timeout {};
@@ -85,7 +67,8 @@ void on_idle(const io_service_ptr_t &)
     throw idle_timeout();
 }
 
-void py_run_test(proactor & p, bpl::object test_steps, unsigned idle_timeout_ms)
+void py_run_test(proactor & p, bpl::object test_steps,
+    unsigned idle_timeout_ms)
 {
     SAMOA_ASSERT(p.get_declared_io_service() && \
         "serial or concurrent io-service must be declared from this thread");
@@ -158,6 +141,24 @@ void py_run_test(proactor & p, bpl::object test_steps, unsigned idle_timeout_ms)
     }
 }
 
+//////////////////////////////////////////////////////////
+// proactor.run() support
+
+void py_run(proactor & p)
+{
+    SAMOA_ASSERT(p.get_declared_io_service() && \
+        "serial or concurrent io-service must be declared from this thread");
+
+    // release GIL - must be re-aquired before manipulating python objects
+    pysamoa::python_scoped_unlock unlock;
+
+    boost::asio::io_service & io_srv = *p.get_declared_io_service();
+    std::unique_ptr<boost::asio::io_service::work> work(
+        new boost::asio::io_service::work(io_srv));
+
+    io_srv.run(); 
+}
+
 
 void make_proactor_bindings()
 {
@@ -172,12 +173,14 @@ void make_proactor_bindings()
             bpl::arg("delay_ms") = 0,
             bpl::arg("args") = bpl::tuple(),
             bpl::arg("kwargs") = bpl::dict()))
-        .def("sleep", &py_sleep)
+        .def("run", &py_run)
         .def("shutdown", &proactor::shutdown)
         .def("serial_io_service", &proactor::serial_io_service)
         .def("concurrent_io_service", &proactor::concurrent_io_service)
-        .def("declare_serial_io_service", &proactor::declare_serial_io_service)
-        .def("declare_concurrent_io_service", &proactor::declare_concurrent_io_service);
+        .def("declare_serial_io_service",
+            &proactor::declare_serial_io_service)
+        .def("declare_concurrent_io_service",
+            &proactor::declare_concurrent_io_service);
 
     bpl::class_<boost::asio::io_service, io_service_ptr_t, boost::noncopyable>(
         "_ioservice", bpl::no_init);

@@ -5,8 +5,6 @@ make $(BUILD)/generated/cpp_src/samoa/core/protobuf/samoa.pb.h
     : samoa.proto : @protoc_cpp_src ;
 make $(BUILD)/generated/bindings/samoa/core/protobuf/_samoa.cpp
     : samoa.proto : @protoc_bindings ;
-make $(BUILD)/generated/py_src/samoa/core/protobuf/samoa_pb2.py
-    : samoa.proto : @protoc_py_src ;
 
 .cwd = [ PWD ] ;
 
@@ -21,14 +19,6 @@ actions protoc_bindings
 {
     cd $(>:D)
     echo protoc --bplbindings_out=$(<:D) $(>:BS)
-    PATH=$(ROOT)/build_tools:$PATH protoc --bplbindings_out=$(<:D) $(>:BS)
+    protoc --bplbindings_out=$(<:D) $(>:BS)
     cd $(.cwd)
 }
-actions protoc_py_src
-{
-    cd $(>:D)
-    echo  protoc --python_out=$(<:D) $(>:BS)
-    protoc --python_out=$(<:D) $(>:BS)
-    cd $(.cwd)
-}
-
