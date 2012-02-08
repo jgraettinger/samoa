@@ -4,6 +4,7 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
+#include <boost/crc.hpp>
 
 namespace samoa {
 namespace persistence {
@@ -31,7 +32,8 @@ public:
         if(_next_offset == available_length)
         {
             // we've completely filled _next_packet
-            _next_packet->set_crc_32(_next_packet->compute_crc_32());
+            _next_packet->set_combined_checksum(
+                _next_packet->compute_combined_checksum(_content_crc));
 
             if(_next_packet->completes_sequence())
             {
@@ -82,7 +84,8 @@ public:
         while(_next_packet)
         {
             _next_packet->set_value(_next_offset);
-            _next_packet->set_crc_32(_next_packet->compute_crc_32());
+            _next_packet->set_combined_checksum(
+                _next_packet->compute_combined_checksum(_content_crc));
 
             if(_next_packet->completes_sequence())
                 break;
@@ -92,12 +95,17 @@ public:
         }
     }
 
+    uint32_t content_checksum() const
+    { return _content_crc.checksum(); }
+
 private:
 
     element & _element;
     packet * _next_packet;
     unsigned _next_offset;
     unsigned _total_bytes;
+
+    boost::crc_32_type _content_crc;
 };
 
 }

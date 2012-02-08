@@ -320,7 +320,7 @@ void persister::on_put(
     // do we have enough space to write over the old value, in-place?
     if(!old_element.is_null() && old_element.capacity() >= required_capacity)
     {
-        // we've enough space to write over the old value, in-place
+        // in-place write
         write_record_with_cached_sizes(local_record, old_element);
 
         put_callback(boost::system::error_code(), result);

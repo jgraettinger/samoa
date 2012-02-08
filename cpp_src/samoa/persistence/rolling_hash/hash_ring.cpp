@@ -181,10 +181,10 @@ void hash_ring::update_hash_chain(const locator & loc,
 
     if(loc.previous_chained_head)
     {
+    	uint32_t meta_cs = loc.previous_chained_head->compute_meta_checksum();
     	// update previous element in the hash chain
         loc.previous_chained_head->set_hash_chain_next(new_offset);
-        loc.previous_chained_head->set_crc_32(
-            loc.previous_chained_head->compute_crc_32());
+        loc.previous_chained_head->update_meta_of_combined_checksum(meta_cs);
     }
     else
     {
@@ -202,11 +202,11 @@ void hash_ring::drop_from_hash_chain(const locator & loc)
 
     if(loc.previous_chained_head)
     {
+    	uint32_t meta_cs = loc.previous_chained_head->compute_meta_checksum();
         // update previous element in the hash chain
         loc.previous_chained_head->set_hash_chain_next(
             loc.element_head->hash_chain_next());
-        loc.previous_chained_head->set_crc_32(
-            loc.previous_chained_head->compute_crc_32());
+        loc.previous_chained_head->update_meta_of_combined_checksum(meta_cs);
     }
     else
     {

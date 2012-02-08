@@ -6,6 +6,7 @@ import unittest
 from samoa.persistence.rolling_hash.heap_hash_ring import HeapHashRing
 from samoa.persistence.rolling_hash.mapped_hash_ring import MappedHashRing
 from samoa.persistence.rolling_hash.element import Element
+from samoa.persistence.rolling_hash.packet import Packet, PacketCRC32
 
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
@@ -233,7 +234,8 @@ class TestHashRing(unittest.TestCase):
         # previous record, with an invalid chain-next
         pkt = self._alloc(ring, 'a key', 'test value')
         pkt.set_hash_chain_next(1 << 14)
-        pkt.set_crc_32(pkt.compute_crc_32())
+        pkt.set_combined_checksum(
+            pkt.compute_combined_checksum(PacketCRC32()))
 
         with self.assertRaisesRegexp(RuntimeError, "region_size"):
             ring.locate_key('test key')
@@ -248,7 +250,6 @@ class TestHashRing(unittest.TestCase):
         # pkt2's offset is chained from pkt1
         pkt2 = self._alloc(ring, fixture.generate_bytes())
 
-        pkt1.set_dead()
         ring.drop_from_hash_chain(ring.locate_key(pkt1.key()))
 
         # pkt2 is still reachable
@@ -268,7 +269,6 @@ class TestHashRing(unittest.TestCase):
         # pkt3's offset is chained from pkt2
         pkt3 = self._alloc(ring, fixture.generate_bytes())
 
-        pkt2.set_dead()
         ring.drop_from_hash_chain(ring.locate_key(pkt2.key()))
 
         # pkt3 is still reachable
@@ -306,7 +306,8 @@ class TestHashRing(unittest.TestCase):
 
         pkt.set_key(key)
         pkt.set_value(value)
-        pkt.set_crc_32(pkt.compute_crc_32())
+        pkt.set_combined_checksum(
+            pkt.compute_combined_checksum(PacketCRC32()))
 
         locator = ring.locate_key(key)
         ring.update_hash_chain(locator, ring.packet_offset(pkt))

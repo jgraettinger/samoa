@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <stdexcept>
+#include <boost/crc.hpp>
 
 namespace samoa {
 namespace persistence {
@@ -18,33 +19,60 @@ public:
     /*!
      * \brief Examines packet for issues in storage or retrieval.
      *  - Key and value lengths are bounds-checked against capacity
-     *  - Current and stored CRC checksums are compared
+     *  - Computed and stored meta & content checksums are compared
      * @return: false if any checks fail
      */
-    bool check_integrity() const;
+    bool check_integrity(boost::crc_32_type & content_crc) const;
 
     /*!
-     * \brief Computes a 32-bit CRC of this packet
+     * \brief Computes the running checksum of this packet's content
      *
-     * Checksum includes:
+     * Added to content_crc:
+     *  - byte-range of key_begin() : key_end()
+     *  - byte-range of value_begin() : value_end()
+     *
+     * Checksum reflects this packet's content, and the content of
+     *  all antecedant packets. This works because packets arrange all
+     *  key content first, follwed by all value content; as meta-data
+     *  checksuming is isolated from content_crc, any distribution of
+     *  content amount different packets will result in the same
+     *  content_crc state.
+     */ 
+    uint32_t compute_content_checksum(boost::crc_32_type & content_crc) const;
+
+    /*!
+     * \brief Computes a checksum over (only) this packet's meta-data.
+     *
+     * Added to the CRC:
      *  - hash_chain_next()
      *  - is_dead()
      *  - continues_sequence()
      *  - completes_sequence()
-     *  - byte-range of key_begin() : key_end()
-     *  - byte-range of value_begin() : value_end()
      */
-    uint32_t compute_crc_32() const;
-
-    uint32_t crc_32() const
-    { return _meta.crc_32; }
+    uint32_t compute_meta_checksum() const;
 
     /*!
-     * \brief Update the 32-bit CRC of the packet
-     * @param checksum Must be returned by compute_crc_32()
+     * \brief Computes a combined (xor) checksum from content & meta-data
      */
-    void set_crc_32(uint32_t checksum)
-    { _meta.crc_32 = checksum; }
+    uint32_t compute_combined_checksum(boost::crc_32_type & content_crc) const;
+
+    uint32_t combined_checksum() const
+    { return _meta.combined_checksum; }
+
+    /*!
+     * \brief Update the checksum of the packet
+     * @param checksum Must be returned by compute_checksum()
+     */
+    void set_combined_checksum(uint32_t checksum)
+    { _meta.combined_checksum = checksum; }
+
+    /*!
+     * \brief Folds an update to metadata into the combined checksum
+     *
+     * Avoids re-computing content portions of the checksum. Previous
+     *  meta checksum must be provided. 
+     */
+    void update_meta_of_combined_checksum(uint32_t old_meta_checksum);
 
     /// Location of next element in linear hash table
     uint32_t hash_chain_next() const
@@ -59,7 +87,8 @@ public:
     { return _meta.is_dead; }
 
     /// Marks the packet as reclaimable
-    void set_dead();
+    void set_dead()
+    { _meta.is_dead = true; }
 
     /*!
      * This packet contains additional key/value content,
@@ -165,7 +194,7 @@ private:
 
     struct {
 
-        uint32_t crc_32;
+        uint32_t combined_checksum;
 
         // offset of next element in hash chain, or 0
         uint32_t hash_chain_next;

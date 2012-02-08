@@ -40,7 +40,11 @@ bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 }
 */
 
-std::string py_repr_packet(packet & p);
+// See packet.cpp: subclass of boost::crc_32_type for bindings
+class py_packet_crc_32 : public boost::crc_32_type
+{ };
+
+std::string py_repr_packet(packet &, py_packet_crc_32 *);
 
 std::string py_repr_hash_ring(hash_ring & r)
 {
@@ -59,13 +63,19 @@ std::string py_repr_hash_ring(hash_ring & r)
     else
         out << "not wrapped,\n";
 
+    py_packet_crc_32 content_crc;
+
     packet * pkt = r.head();
     for(unsigned i = 0; pkt; ++i)
     {
         uint32_t offset = r.packet_offset(pkt);
         out << "\t" << offset << ":" << (offset + pkt->packet_length());
-        out << " " << py_repr_packet(*pkt) << ",\n";
+        out << " " << py_repr_packet(*pkt, &content_crc) << ",\n";
 
+        if(pkt->completes_sequence())
+        {
+        	content_crc = py_packet_crc_32();
+        }
         pkt = r.next_packet(pkt);
     }
     out << ">";
@@ -84,7 +94,7 @@ std::string py_repr_locator(hash_ring::locator & l)
     out << "previous_chained_head ";
     if(l.previous_chained_head)
     {
-        out << py_repr_packet(*l.previous_chained_head) << ", ";
+        out << py_repr_packet(*l.previous_chained_head, nullptr) << ", ";
     }
     else
     {
@@ -94,7 +104,7 @@ std::string py_repr_locator(hash_ring::locator & l)
     out << "element_head ";
     if(l.element_head)
     {
-        out << py_repr_packet(*l.element_head);
+        out << py_repr_packet(*l.element_head, nullptr);
     }
     else
     {

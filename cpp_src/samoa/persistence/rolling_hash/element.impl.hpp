@@ -38,7 +38,8 @@ element::element(
 
             // we fully wrote key content into this packet;
             //  update it's checksum and skip to next packet
-            pkt->set_crc_32(pkt->compute_crc_32());
+            pkt->set_combined_checksum(
+                pkt->compute_combined_checksum(_content_crc));
 
             pkt = _ring->next_packet(pkt);
             RING_INTEGRITY_CHECK(pkt->continues_sequence());
@@ -63,9 +64,10 @@ element::element(
         {
             RING_INTEGRITY_CHECK(!pkt->completes_sequence());
 
-            // we fully wrote key content into this packet;
+            // we fully wrote value content into this packet;
             //  update it's checksum and skip to next packet
-            pkt->set_crc_32(pkt->compute_crc_32());
+            pkt->set_combined_checksum(
+                pkt->compute_combined_checksum(_content_crc));
 
             pkt = _ring->next_packet(pkt);
             RING_INTEGRITY_CHECK(pkt->continues_sequence());
@@ -74,7 +76,8 @@ element::element(
 
     do
     {
-        pkt->set_crc_32(pkt->compute_crc_32());
+    	pkt->set_combined_checksum(
+    	    pkt->compute_combined_checksum(_content_crc));
         pkt = ring->next_packet(pkt);
     } while(pkt && pkt->continues_sequence());
 
@@ -86,6 +89,8 @@ void element::set_value(
     uint32_t value_length, ValueIterator value_it)
 {
     packet * pkt = _head;
+
+    boost::crc_32_type new_content_crc;
 
     while(value_length)
     {
@@ -101,7 +106,8 @@ void element::set_value(
         }
         value_length -= cur_length;
 
-        pkt->set_crc_32(pkt->compute_crc_32());
+    	pkt->set_combined_checksum(
+    	    pkt->compute_combined_checksum(new_content_crc));
         pkt = step(pkt);
 
         SAMOA_ASSERT(value_length == 0 || pkt);
@@ -110,9 +116,13 @@ void element::set_value(
     while(pkt)
     {
         pkt->set_value(0);
-        pkt->set_crc_32(pkt->compute_crc_32());
+    	pkt->set_combined_checksum(
+    	    pkt->compute_combined_checksum(new_content_crc));
         pkt = step(pkt);
     }
+
+    _last = pkt;
+    _content_crc = new_content_crc;
 }
 
 }
