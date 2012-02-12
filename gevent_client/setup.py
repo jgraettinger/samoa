@@ -8,7 +8,7 @@ def compile_protobuf():
 
     base_path = os.path.dirname(sys.argv[0])
     proto_in  = os.path.join(base_path, 'samoa.proto')
-    build_out = os.path.join(base_path, 'build', 'generated')
+    build_out = os.path.join(base_path, 'build', 'generated', 'samoa', 'core', 'protobuf')
 
     if not os.path.exists(build_out):
         os.makedirs(build_out)
@@ -30,7 +30,8 @@ def compile_protobuf():
         if source.endswith('.cpp'):
             cpp_sources.append(os.path.join(build_samoa_out, source))
 
-    return build_out, cpp_sources
+    include_dir = os.path.join(base_path, 'build', 'generated')
+    return include_dir, cpp_sources
 
 include_path, cpp_sources = compile_protobuf()
 
