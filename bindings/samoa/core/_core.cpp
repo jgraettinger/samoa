@@ -9,6 +9,7 @@ namespace core {
     void make_stream_protocol_bindings();
     void make_uuid_bindings();
     void make_server_time_bindings();
+    void make_murmur_checksummer_bindings();
 };
 };
 
@@ -18,5 +19,6 @@ BOOST_PYTHON_MODULE(_core)
     samoa::core::make_stream_protocol_bindings();
     samoa::core::make_uuid_bindings();
     samoa::core::make_server_time_bindings();
+    samoa::core::make_murmur_checksummer_bindings();
 }
 
