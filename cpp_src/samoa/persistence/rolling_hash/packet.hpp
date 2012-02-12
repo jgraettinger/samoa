@@ -1,9 +1,9 @@
 #ifndef SAMOA_PERSISTENCE_ROLLING_HASH_PACKET_HPP
 #define SAMOA_PERSISTENCE_ROLLING_HASH_PACKET_HPP
 
+#include "samoa/core/murmur_checksummer.hpp"
 #include <cstddef>
 #include <stdexcept>
-#include <boost/crc.hpp>
 
 namespace samoa {
 namespace persistence {
@@ -22,28 +22,28 @@ public:
      *  - Computed and stored meta & content checksums are compared
      * @return: false if any checks fail
      */
-    bool check_integrity(boost::crc_32_type & content_crc) const;
+    bool check_integrity(core::murmur_checksummer & content_cs) const;
 
     /*!
      * \brief Computes the running checksum of this packet's content
      *
-     * Added to content_crc:
+     * Added to content_cs:
      *  - byte-range of key_begin() : key_end()
      *  - byte-range of value_begin() : value_end()
      *
      * Checksum reflects this packet's content, and the content of
      *  all antecedant packets. This works because packets arrange all
      *  key content first, follwed by all value content; as meta-data
-     *  checksuming is isolated from content_crc, any distribution of
+     *  checksuming is isolated from content_cs, any distribution of
      *  content amount different packets will result in the same
-     *  content_crc state.
+     *  content_cs state.
      */ 
-    uint32_t compute_content_checksum(boost::crc_32_type & content_crc) const;
+    uint32_t compute_content_checksum(core::murmur_checksummer &) const;
 
     /*!
      * \brief Computes a checksum over (only) this packet's meta-data.
      *
-     * Added to the CRC:
+     * Added to the sum:
      *  - hash_chain_next()
      *  - is_dead()
      *  - continues_sequence()
@@ -54,7 +54,8 @@ public:
     /*!
      * \brief Computes a combined (xor) checksum from content & meta-data
      */
-    uint32_t compute_combined_checksum(boost::crc_32_type & content_crc) const;
+    uint32_t compute_combined_checksum(
+        core::murmur_checksummer & content_cs) const;
 
     uint32_t combined_checksum() const
     { return _meta.combined_checksum; }

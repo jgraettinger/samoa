@@ -25,7 +25,7 @@ bpl::tuple py_checksum(const murmur_checksummer & mc)
 }
 
 /*
-// Used for testing against original implementation
+// Used for testing/comparing against original implementation
 bpl::tuple py_original(uint32_t seed, const bpl::str & input)
 {
     char * buf;
@@ -43,7 +43,8 @@ bpl::tuple py_original(uint32_t seed, const bpl::str & input)
 
 void make_murmur_checksummer_bindings()
 {
-    bpl::class_<murmur_checksummer>("MurmurChecksummer", bpl::init<uint32_t>())
+    bpl::class_<murmur_checksummer>("MurmurChecksummer", bpl::init<>())
+        .def(bpl::init<uint32_t>())
         .def("process_bytes", &py_process_bytes)
         .def("checksum", &py_checksum)
         //.def("_original", &py_original)

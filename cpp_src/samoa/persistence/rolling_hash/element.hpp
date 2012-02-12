@@ -3,7 +3,7 @@
 
 #include "samoa/persistence/rolling_hash/fwd.hpp"
 #include "samoa/persistence/rolling_hash/packet.hpp"
-#include <boost/crc.hpp>
+#include "samoa/core/murmur_checksummer.hpp"
 
 namespace samoa {
 namespace persistence {
@@ -32,7 +32,7 @@ public:
     uint32_t value_length() const;
     uint32_t capacity() const;
 
-    uint32_t content_checksum() const;
+    core::murmur_checksummer::checksum_t content_checksum() const;
 
     template<typename ValueIterator>
     void set_value(uint32_t value_length, ValueIterator value_begin);
@@ -54,7 +54,7 @@ private:
     packet * _head;
 
     mutable packet * _last;
-    mutable boost::crc_32_type _content_crc;
+    mutable core::murmur_checksummer _content_cs;
 };
 
 }

@@ -1,6 +1,7 @@
 #ifndef SAMOA_CORE_MURMUR_CHECKSHUMMER_HPP
 #define SAMOA_CORE_MURMUR_CHECKSHUMMER_HPP
 
+#include <cstdint>
 #include <array>
 
 namespace samoa {
@@ -23,7 +24,15 @@ public:
 
     typedef std::array<uint64_t, 2> checksum_t;
 
-    murmur_checksummer(uint32_t seed)
+    murmur_checksummer()
+     :  _h1(0),
+        _h2(0),
+        _block({{0,0}}),
+        _block_pos(0),
+        _total_length(0)
+    { }
+
+    explicit murmur_checksummer(uint32_t seed)
      :  _h1(seed),
         _h2(seed),
         _block({{0,0}}),
@@ -31,8 +40,10 @@ public:
         _total_length(0)
     { }
 
-    void process_bytes(const uint8_t * data, unsigned length)
+    void process_bytes(const void * data_in, unsigned length)
     {
+        const uint8_t * data = reinterpret_cast<const uint8_t *>(data_in);
+
         _total_length += length;
         while(length >= (16 - _block_pos))
         {

@@ -6,7 +6,8 @@ import unittest
 from samoa.persistence.rolling_hash.heap_hash_ring import HeapHashRing
 from samoa.persistence.rolling_hash.mapped_hash_ring import MappedHashRing
 from samoa.persistence.rolling_hash.element import Element
-from samoa.persistence.rolling_hash.packet import Packet, PacketCRC32
+from samoa.persistence.rolling_hash.packet import Packet
+from samoa.core.murmur_checksummer import MurmurChecksummer
 
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 
@@ -235,7 +236,7 @@ class TestHashRing(unittest.TestCase):
         pkt = self._alloc(ring, 'a key', 'test value')
         pkt.set_hash_chain_next(1 << 14)
         pkt.set_combined_checksum(
-            pkt.compute_combined_checksum(PacketCRC32()))
+            pkt.compute_combined_checksum(MurmurChecksummer()))
 
         with self.assertRaisesRegexp(RuntimeError, "region_size"):
             ring.locate_key('test key')
@@ -307,7 +308,7 @@ class TestHashRing(unittest.TestCase):
         pkt.set_key(key)
         pkt.set_value(value)
         pkt.set_combined_checksum(
-            pkt.compute_combined_checksum(PacketCRC32()))
+            pkt.compute_combined_checksum(MurmurChecksummer()))
 
         locator = ring.locate_key(key)
         ring.update_hash_chain(locator, ring.packet_offset(pkt))

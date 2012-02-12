@@ -8,19 +8,6 @@ namespace rolling_hash {
 
 namespace bpl = boost::python;
 
-// subclass to prevent conflict with another wrapping of crc_32_type
-class py_packet_crc_32 : public boost::crc_32_type
-{ };
-
-bool py_check_integrity(const packet * p, py_packet_crc_32 & crc)
-{ return p->check_integrity(crc); }
-
-uint32_t py_compute_content_checksum(const packet * p, py_packet_crc_32 & crc)
-{ return p->compute_content_checksum(crc); }
-
-uint32_t py_compute_combined_checksum(const packet * p, py_packet_crc_32 & crc)
-{ return p->compute_combined_checksum(crc); }
-
 bpl::str py_key(packet * p)
 {
     return bpl::str(p->key_begin(), p->key_end());
@@ -47,7 +34,7 @@ void py_set_value(packet * p, const bpl::str & value)
     std::copy(begin, end, p->set_value(std::distance(begin, end)));
 }
 
-std::string py_repr_packet(packet & p, py_packet_crc_32 * crc)
+std::string py_repr_packet(packet & p, core::murmur_checksummer * cs)
 {
     std::stringstream out;
     out << "packet" << &p << "<";
@@ -83,11 +70,11 @@ std::string py_repr_packet(packet & p, py_packet_crc_32 * crc)
 
     out << "combined_checksum " << p.combined_checksum();
 
-    if(!crc)
+    if(!cs)
     {
-        out << ", no-crc";
+        out << ", no-checksummer";
     }
-    else if(!p.check_integrity(*crc))
+    else if(!p.check_integrity(*cs))
     {
     	out << ", CORRUPT";
     }
@@ -98,16 +85,13 @@ std::string py_repr_packet(packet & p, py_packet_crc_32 * crc)
 
 void make_packet_bindings()
 {
-    bpl::class_<py_packet_crc_32>("PacketCRC32", bpl::init<>())
-        .def("checksum", &py_packet_crc_32::checksum);
-
     bpl::class_<packet, boost::noncopyable>("Packet", bpl::no_init)
         .def("__repr__", &py_repr_packet,
-            (bpl::arg("content_crc") = bpl::object()))
-        .def("check_integrity", &py_check_integrity)
-        .def("compute_content_checksum", &py_compute_content_checksum)
+            (bpl::arg("content_checksummer") = bpl::object()))
+        .def("check_integrity", &packet::check_integrity)
+        .def("compute_content_checksum", &packet::compute_content_checksum)
         .def("compute_meta_checksum", &packet::compute_meta_checksum)
-        .def("compute_combined_checksum", &py_compute_combined_checksum)
+        .def("compute_combined_checksum", &packet::compute_combined_checksum)
         .def("combined_checksum", &packet::combined_checksum)
         .def("set_combined_checksum", &packet::set_combined_checksum)
         .def("update_meta_of_combined_checksum",

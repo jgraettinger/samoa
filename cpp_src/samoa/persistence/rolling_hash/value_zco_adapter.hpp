@@ -2,9 +2,8 @@
 #define SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCO_ADAPTER_HPP
 
 #include <google/protobuf/io/zero_copy_stream.h>
+#include "samoa/core/murmur_checksummer.hpp"
 #include "samoa/error.hpp"
-#include "samoa/log.hpp"
-#include <boost/crc.hpp>
 
 namespace samoa {
 namespace persistence {
@@ -33,7 +32,7 @@ public:
         {
             // we've completely filled _next_packet
             _next_packet->set_combined_checksum(
-                _next_packet->compute_combined_checksum(_content_crc));
+                _next_packet->compute_combined_checksum(_content_cs));
 
             if(_next_packet->completes_sequence())
             {
@@ -85,7 +84,7 @@ public:
         {
             _next_packet->set_value(_next_offset);
             _next_packet->set_combined_checksum(
-                _next_packet->compute_combined_checksum(_content_crc));
+                _next_packet->compute_combined_checksum(_content_cs));
 
             if(_next_packet->completes_sequence())
                 break;
@@ -95,8 +94,8 @@ public:
         }
     }
 
-    uint32_t content_checksum() const
-    { return _content_crc.checksum(); }
+    core::murmur_checksummer::checksum_t content_checksum() const
+    { return _content_cs.checksum(); }
 
 private:
 
@@ -105,7 +104,7 @@ private:
     unsigned _next_offset;
     unsigned _total_bytes;
 
-    boost::crc_32_type _content_crc;
+    core::murmur_checksummer _content_cs;
 };
 
 }

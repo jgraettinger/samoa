@@ -40,11 +40,7 @@ bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 }
 */
 
-// See packet.cpp: subclass of boost::crc_32_type for bindings
-class py_packet_crc_32 : public boost::crc_32_type
-{ };
-
-std::string py_repr_packet(packet &, py_packet_crc_32 *);
+std::string py_repr_packet(packet &, core::murmur_checksummer *);
 
 std::string py_repr_hash_ring(hash_ring & r)
 {
@@ -63,18 +59,18 @@ std::string py_repr_hash_ring(hash_ring & r)
     else
         out << "not wrapped,\n";
 
-    py_packet_crc_32 content_crc;
+    core::murmur_checksummer content_cs;
 
     packet * pkt = r.head();
     for(unsigned i = 0; pkt; ++i)
     {
         uint32_t offset = r.packet_offset(pkt);
         out << "\t" << offset << ":" << (offset + pkt->packet_length());
-        out << " " << py_repr_packet(*pkt, &content_crc) << ",\n";
+        out << " " << py_repr_packet(*pkt, &content_cs) << ",\n";
 
         if(pkt->completes_sequence())
         {
-        	content_crc = py_packet_crc_32();
+        	content_cs = core::murmur_checksummer();
         }
         pkt = r.next_packet(pkt);
     }

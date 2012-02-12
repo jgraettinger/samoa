@@ -18,7 +18,7 @@ element::element(const hash_ring * ring, packet * head)
     _head(head),
     _last(head)
 {
-    RING_INTEGRITY_CHECK(head->check_integrity(_content_crc));
+    RING_INTEGRITY_CHECK(head->check_integrity(_content_cs));
 }
 
 element::element(
@@ -106,13 +106,13 @@ uint32_t element::capacity() const
     } 
 }
 
-uint32_t element::content_checksum() const
+core::murmur_checksummer::checksum_t element::content_checksum() const
 {
     while(!_last->completes_sequence())
     {
         step(_last);
     }
-    return _content_crc.checksum();
+    return _content_cs.checksum();
 }
 
 void element::set_dead()
@@ -139,7 +139,7 @@ packet * element::step(packet * pkt) const
     if(pkt == _last)
     {
         RING_INTEGRITY_CHECK(next->continues_sequence());
-        RING_INTEGRITY_CHECK(next->check_integrity(_content_crc));
+        RING_INTEGRITY_CHECK(next->check_integrity(_content_cs));
 
         _last = next;
     }

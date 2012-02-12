@@ -39,7 +39,7 @@ element::element(
             // we fully wrote key content into this packet;
             //  update it's checksum and skip to next packet
             pkt->set_combined_checksum(
-                pkt->compute_combined_checksum(_content_crc));
+                pkt->compute_combined_checksum(_content_cs));
 
             pkt = _ring->next_packet(pkt);
             RING_INTEGRITY_CHECK(pkt->continues_sequence());
@@ -67,7 +67,7 @@ element::element(
             // we fully wrote value content into this packet;
             //  update it's checksum and skip to next packet
             pkt->set_combined_checksum(
-                pkt->compute_combined_checksum(_content_crc));
+                pkt->compute_combined_checksum(_content_cs));
 
             pkt = _ring->next_packet(pkt);
             RING_INTEGRITY_CHECK(pkt->continues_sequence());
@@ -77,7 +77,7 @@ element::element(
     do
     {
     	pkt->set_combined_checksum(
-    	    pkt->compute_combined_checksum(_content_crc));
+    	    pkt->compute_combined_checksum(_content_cs));
         pkt = ring->next_packet(pkt);
     } while(pkt && pkt->continues_sequence());
 
@@ -90,7 +90,7 @@ void element::set_value(
 {
     packet * pkt = _head;
 
-    boost::crc_32_type new_content_crc;
+    core::murmur_checksummer new_content_cs;
 
     while(value_length)
     {
@@ -107,7 +107,7 @@ void element::set_value(
         value_length -= cur_length;
 
     	pkt->set_combined_checksum(
-    	    pkt->compute_combined_checksum(new_content_crc));
+    	    pkt->compute_combined_checksum(new_content_cs));
         pkt = step(pkt);
 
         SAMOA_ASSERT(value_length == 0 || pkt);
@@ -117,12 +117,12 @@ void element::set_value(
     {
         pkt->set_value(0);
     	pkt->set_combined_checksum(
-    	    pkt->compute_combined_checksum(new_content_crc));
+    	    pkt->compute_combined_checksum(new_content_cs));
         pkt = step(pkt);
     }
 
     _last = pkt;
-    _content_crc = new_content_crc;
+    _content_cs = new_content_cs;
 }
 
 }

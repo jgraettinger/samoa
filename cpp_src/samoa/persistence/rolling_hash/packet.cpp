@@ -13,43 +13,43 @@ packet::packet(unsigned capacity)
         capacity_alignment_adjustment());
 }
 
-bool packet::check_integrity(boost::crc_32_type & content_crc) const
+bool packet::check_integrity(core::murmur_checksummer & content_cs) const
 {
     if(key_length() + value_length() > capacity())
         return false;
 
-    if(compute_combined_checksum(content_crc) != combined_checksum())
+    if(compute_combined_checksum(content_cs) != combined_checksum())
         return false;
 
     return true;
 }
 
 uint32_t packet::compute_content_checksum(
-    boost::crc_32_type & content_crc) const
+    core::murmur_checksummer & content_cs) const
 {
-    content_crc.process_block(key_begin(), key_end());
-    content_crc.process_block(value_begin(), value_end());
+    content_cs.process_bytes(key_begin(), key_length());
+    content_cs.process_bytes(value_begin(), value_length());
 
-    return content_crc.checksum();
+    return (uint32_t)(content_cs.checksum()[0] >> 32);
 }
 
 uint32_t packet::compute_meta_checksum() const
 {
-    boost::crc_32_type meta_crc;
+    uint32_t meta_bytes[] = {
+        _meta.hash_chain_next,
+        is_dead(),
+        continues_sequence(),
+        completes_sequence()};
 
-    meta_crc.process_bytes(&_meta.hash_chain_next,
-        sizeof(_meta.hash_chain_next));
-    meta_crc.process_byte(is_dead());
-    meta_crc.process_byte(continues_sequence());
-    meta_crc.process_byte(completes_sequence());
-
-    return meta_crc.checksum();
+    core::murmur_checksummer cs;
+    cs.process_bytes(&meta_bytes, sizeof(meta_bytes));
+    return (uint32_t)(cs.checksum()[0] >> 32);
 }
 
 uint32_t packet::compute_combined_checksum(
-    boost::crc_32_type & content_crc) const
+    core::murmur_checksummer & content_cs) const
 {
-    return compute_meta_checksum() ^ compute_content_checksum(content_crc);
+    return compute_meta_checksum() ^ compute_content_checksum(content_cs);
 }
 
 void packet::update_meta_of_combined_checksum(uint32_t old_meta_checksum)

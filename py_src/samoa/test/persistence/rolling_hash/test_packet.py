@@ -2,7 +2,8 @@
 import unittest
 
 from samoa.persistence.rolling_hash.heap_hash_ring import HeapHashRing
-from samoa.persistence.rolling_hash.packet import Packet, PacketCRC32
+from samoa.persistence.rolling_hash.packet import Packet
+from samoa.core.murmur_checksummer import MurmurChecksummer
 
 class TestPacket(unittest.TestCase):
 
@@ -41,22 +42,22 @@ class TestPacket(unittest.TestCase):
         packet_2.set_value('test-value-part-2')
 
         # start with correct packet checksums
-        content_crc = PacketCRC32()
+        content_cs = MurmurChecksummer()
 
         packet_1.set_combined_checksum(
-            packet_1.compute_combined_checksum(content_crc))
+            packet_1.compute_combined_checksum(content_cs))
         packet_2.set_combined_checksum(
-            packet_2.compute_combined_checksum(content_crc))
+            packet_2.compute_combined_checksum(content_cs))
 
         # packet checks pass
-        content_crc = PacketCRC32()
-        self.assertTrue(packet_1.check_integrity(content_crc))
-        self.assertTrue(packet_2.check_integrity(content_crc))
+        content_cs = MurmurChecksummer()
+        self.assertTrue(packet_1.check_integrity(content_cs))
+        self.assertTrue(packet_2.check_integrity(content_cs))
 
         # a check of packet_2 w/o packet_1 fails
         #  (depends on packet_1 content)
-        content_crc = PacketCRC32()
-        self.assertFalse(packet_2.check_integrity(content_crc))
+        content_cs = MurmurChecksummer()
+        self.assertFalse(packet_2.check_integrity(content_cs))
 
         # update packet_1 metadata
         old_meta_cs = packet_1.compute_meta_checksum()
@@ -66,19 +67,19 @@ class TestPacket(unittest.TestCase):
         packet_1.update_meta_of_combined_checksum(old_meta_cs)
 
         # both packets still check out
-        content_crc = PacketCRC32()
-        self.assertTrue(packet_1.check_integrity(content_crc))
-        self.assertTrue(packet_2.check_integrity(content_crc))
+        content_cs = MurmurChecksummer()
+        self.assertTrue(packet_1.check_integrity(content_cs))
+        self.assertTrue(packet_2.check_integrity(content_cs))
 
         # modifying packet 1 content w/o updating checksum
         packet_1.set_value('test-valu3')
 
         # both packets now fail
-        content_crc = PacketCRC32()
-        self.assertFalse(packet_1.check_integrity(content_crc))
-        self.assertFalse(packet_2.check_integrity(content_crc))
+        content_cs = MurmurChecksummer()
+        self.assertFalse(packet_1.check_integrity(content_cs))
+        self.assertFalse(packet_2.check_integrity(content_cs))
 
-    def test_running_content_crc(self):
+    def test_running_content_cs(self):
 
         ring = HeapHashRing.open(16572, 1)
 
@@ -101,18 +102,18 @@ class TestPacket(unittest.TestCase):
         packet_3c.set_value('st-value')
 
         # all packets produce equal content checksums
-        crc1 = PacketCRC32()
-        packet_1.compute_content_checksum(crc1)
+        cs1 = MurmurChecksummer()
+        packet_1.compute_content_checksum(cs1)
 
-        crc2 = PacketCRC32()
-        packet_2a.compute_content_checksum(crc2)
-        packet_2b.compute_content_checksum(crc2)
+        cs2 = MurmurChecksummer()
+        packet_2a.compute_content_checksum(cs2)
+        packet_2b.compute_content_checksum(cs2)
 
-        crc3 = PacketCRC32()
-        packet_3a.compute_content_checksum(crc3)
-        packet_3b.compute_content_checksum(crc3)
-        packet_3c.compute_content_checksum(crc3)
+        cs3 = MurmurChecksummer()
+        packet_3a.compute_content_checksum(cs3)
+        packet_3b.compute_content_checksum(cs3)
+        packet_3c.compute_content_checksum(cs3)
 
-        self.assertEquals(crc1.checksum(), crc2.checksum())
-        self.assertEquals(crc1.checksum(), crc3.checksum())
+        self.assertEquals(cs1.checksum(), cs2.checksum())
+        self.assertEquals(cs1.checksum(), cs3.checksum())
 
