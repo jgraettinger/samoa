@@ -1,6 +1,8 @@
 #ifndef SAMOA_REQUEST_REPLICATION_STATE_HPP
 #define SAMOA_REQUEST_REPLICATION_STATE_HPP
 
+#include "samoa/core/murmur_hash.hpp"
+
 namespace samoa {
 namespace request {
 
@@ -83,6 +85,18 @@ public:
     void set_peer_read_hit();
 
     /*!
+     * \brief Retrieves the checksum of the replicated content
+     *
+     * Content checksums are composed with bloom filters for optimistic
+     *  identification of redundant replications.
+     */
+    const core::murmur_hash::checksum_t & get_replication_checksum() const
+    { return _checksum; }
+
+    //! Sets the checksum of the replicated content
+    void set_replication_checksum(const core::murmur_hash::checksum_t &);
+
+    /*!
      * Initializes replication_state for a replication operation.
      *
      * \param replication_factor The _effective_ replication-factor
@@ -101,6 +115,8 @@ private:
     unsigned _success_count;
 
     bool _peer_read_hit;
+
+    core::murmur_hash::checksum_t _checksum;
 };
 
 }

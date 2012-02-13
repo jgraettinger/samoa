@@ -41,18 +41,35 @@ void replication::repaired_read(
 }
 
 void replication::replicated_write(
-    const replication::write_callback_t & callback,
+    bool  force_fanout,
     const request::state::ptr_t & rstate)
 {
+    // count local write against the quorum
+    if(rstate->peer_replication_success())
+    {
+        peer_writes_finished();
+    }
+
+    rstate->get_primary_partition()->get_consistent_set()->add(
+        rstate->get_replication_checksum());
+
     for(const partition::ptr_t & partition : rstate->get_peer_partitions())
     {
-        rstate->get_peer_set()->schedule_request(
-            // wrap with request's io-service to synchronize callbacks
-            rstate->get_io_service()->wrap(
-                boost::bind(&replication::on_peer_write_request,
-                    _1, _2, callback, rstate,
-                    partition->get_server_uuid(), partition->get_uuid())),
-            partition->get_server_uuid());
+        if(!rstate->is_replication_finished() || force_fanout)
+        {
+            rstate->get_peer_set()->schedule_request(
+                // wrap with request's io-service to synchronize callbacks
+                rstate->get_io_service()->wrap(
+                    boost::bind(&replication::on_peer_write_request,
+                        _1, _2, rstate, checksum,
+                        partition->get_server_uuid(), partition->get_uuid())),
+                partition->get_server_uuid());
+        }
+        else
+        {
+            // optimistically assume peers have been replicated to as well
+            partition->get_consistency_filter()->add(checksum);
+        }
     }
 }
 
@@ -230,8 +247,8 @@ void replication::on_local_read_repair(
 void replication::on_peer_write_request(
     const boost::system::error_code & ec,
     samoa::client::server_request_interface iface,
-    const replication::write_callback_t & callback,
     const request::state::ptr_t & rstate,
+    const core::murmur_checksummer::checksum_t & checksum,
     const core::uuid & peer_uuid,
     const core::uuid & part_uuid)
 {
@@ -302,6 +319,16 @@ void replication::on_peer_write_response(
     }
 }
 
+void replication::peer_writes_finished(const request::state::ptr_t & rstate)
+{
+    rstate->get_samoa_response().set_replication_success(
+        rstate->get_peer_success_count());
+    rstate->get_samoa_response().set_replication_failure(
+        rstate->get_peer_failure_count());
+
+    rstate->flush_response();
+}
+    
 
 }
 }

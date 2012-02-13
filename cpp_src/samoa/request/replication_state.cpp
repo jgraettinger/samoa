@@ -11,7 +11,8 @@ replication_state::replication_state()
     _quorum_count(0),
     _failure_count(0),
     _success_count(0),
-    _peer_read_hit(false)
+    _peer_read_hit(false),
+    _checksum({{0,0}})
 { }
 
 replication_state::~replication_state()
@@ -66,6 +67,12 @@ void replication_state::set_peer_read_hit()
     _peer_read_hit = true;
 }
 
+void replication_state::set_replication_checksum(
+    const core::murmur_hash::checksum_t & checksum)
+{
+    _checksum = checksum;
+}
+
 void replication_state::load_replication_state(unsigned replication_factor)
 {
     if(_quorum_count > replication_factor)
@@ -87,6 +94,7 @@ void replication_state::reset_replication_state()
     _failure_count = 0;
     _success_count = 0;
     _peer_read_hit = false;
+    _checksum = {{0,0}};
 }
 
 }

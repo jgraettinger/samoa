@@ -86,6 +86,8 @@ public:
     using replication_state::is_replication_finished;
     using replication_state::had_peer_read_hit;
     using replication_state::set_peer_read_hit;
+    using replication_state::get_replication_checksum;
+    using replication_state::set_replication_checksum;
 
     /*!
      * Loads io_service_state, context_state, and client_state.

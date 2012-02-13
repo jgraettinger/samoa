@@ -171,16 +171,21 @@ unsigned py_get_peer_success_count(state & s)
 unsigned py_get_peer_failure_count(state & s)
 { return s.get_peer_failure_count(); }
 
-bool py_is_replication_finished(state & s)
-{ return s.is_replication_finished(); }
-
 bool py_peer_replication_failure(state & s)
 { return s.peer_replication_failure(); }
 
 bool py_peer_replication_success(state & s)
 { return s.peer_replication_success(); }
 
+bool py_is_replication_finished(state & s)
+{ return s.is_replication_finished(); }
 
+core::murmur_hash::checksum_t py_get_replication_checksum(state & s)
+{ return s.get_replication_checksum(); }
+
+void py_set_replication_checksum(state & s,
+    const core::murmur_hash::checksum_t & checksum)
+{ return s.set_replication_checksum(checksum); }
 
 void make_state_bindings()
 {
@@ -242,9 +247,11 @@ void make_state_bindings()
         .def("get_quorum_count", &py_get_quorum_count)
         .def("get_peer_success_count", &py_get_peer_success_count)
         .def("get_peer_failure_count", &py_get_peer_failure_count)
-        .def("is_replication_finished", &py_is_replication_finished)
         .def("peer_replication_failure", &py_peer_replication_failure)
         .def("peer_replication_success", &py_peer_replication_success)
+        .def("is_replication_finished", &py_is_replication_finished)
+        .def("get_replication_checksum", &py_get_replication_checksum)
+        .def("set_replication_checksum", &py_set_replication_checksum)
 
         .def("parse_samoa_request", &state::parse_samoa_request)
         .def("reset_state", &state::reset_state)

@@ -74,7 +74,8 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
 
 void replicate_handler::on_write(const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
-    const request::state::ptr_t & rstate)
+    const request::state::ptr_t & rstate,
+    const core::murmur_checksummer::checksum_t & checksum)
 {
     if(ec)
     {
@@ -83,23 +84,10 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
         return;
     }
 
-    // local write is committed
-    if(rstate->peer_replication_success())
-    {
-        on_client_response(rstate);
+    rstate->set_replication_checksum(checksum);
 
-        if(!merge_result.remote_is_stale)
-        {
-            // remote is up to date => no further work
-            return;
-        }
-    }
-
-    // quorum isn't met or a peer is out of date; start a reverse replication
-    replication::replicated_write(
-        boost::bind(&replicate_handler::on_client_response,
-            shared_from_this(), rstate),
-        rstate);
+    bool force_fanout = merge_result.remote_is_stale;
+    replication::replicated_write(force_fanout, rstate);
 }
 
 void replicate_handler::on_read(const boost::system::error_code & ec,
