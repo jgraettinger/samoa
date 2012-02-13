@@ -243,10 +243,12 @@ class TestPersister(unittest.TestCase):
                 upkeeps_observed.append((rstate.get_key(),
                     rstate.get_local_record().blob_value[0]))
 
-                # Tell persister to keep record
-                return True
+            persister.set_upkeep_callback(upkeep)
 
-            persister.set_record_upkeep_callback(upkeep)
+            def prune(rstate):
+                return False
+
+            persister.set_prune_callback(prune)
 
             # place two keys, having single & multiple packets
             record = PersistedRecord()
@@ -329,27 +331,24 @@ class TestPersister(unittest.TestCase):
             self.assertFalse((
                 yield persister.iteration_next(not_called, ticket)))
 
-            upkeeps_observed = []
+            prunes_observed = []
 
-            # switch to an upkeep method which discards the record
-            def upkeep(rstate):
-                upkeeps_observed.append((rstate.get_key(),
-                    rstate.get_local_record().blob_value[0]))
-                return False
+            # switch to a prune method which discards the record
+            def prune(record):
+                prunes_observed.append(record.blob_value[0])
+                return True
 
-            persister.set_record_upkeep_callback(upkeep)
-
-            yield persister.bottom_up_compaction()
-            self.assertEquals(upkeeps_observed.pop(),
-                ('bar', '=' * (1 << 14)))
+            persister.set_prune_callback(prune)
 
             yield persister.bottom_up_compaction()
-            self.assertEquals(upkeeps_observed.pop(),
-                ('foo', 'a longer foo value'))
+            self.assertEquals(prunes_observed.pop(), '=' * (1 << 14))
+
+            yield persister.bottom_up_compaction()
+            self.assertEquals(prunes_observed.pop(), 'a longer foo value')
 
             # persister is now empty
             yield persister.bottom_up_compaction()
-            self.assertEquals(upkeeps_observed, [])
+            self.assertEquals(prunes_observed, [])
 
             self.assertEquals(root.begin_offset(), root.end_offset())
             self.assertEquals(leaf.begin_offset(), leaf.end_offset())

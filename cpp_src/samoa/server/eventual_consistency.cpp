@@ -20,29 +20,22 @@ namespace server {
 eventual_consistency::eventual_consistency(
     const context::ptr_t & context,
     const core::uuid & table_uuid,
-    const core::uuid & partition_uuid,
-    const datamodel::prune_func_t & prune_func)
+    const core::uuid & partition_uuid)
  :  _weak_context(context),
     _table_uuid(table_uuid),
-    _partition_uuid(partition_uuid),
-    _prune_func(prune_func)
+    _partition_uuid(partition_uuid)
 { }
 
-bool eventual_consistency::operator()(
-    const request::state::ptr_t & rstate)
+void eventual_consistency::upkeep(
+    const request::state::ptr_t & rstate,
+    const core::murmur_checksummer::checksum_t & /*old_checksum*/,
+    const core::murmur_checksummer::checksum_t & /*new_checksum*/)
 {
     context::ptr_t ctxt = _weak_context.lock();
     if(!ctxt)
     {
         // shutdown race condition
-        return true;
-    }
-
-    if(_prune_func(rstate->get_local_record()))
-    {
-        // pruning indicates this record should be discarded;
-        //  return to persister immediately
-        return false;
+        return;
     }
 
     rstate->load_io_service_state(
@@ -84,7 +77,7 @@ bool eventual_consistency::operator()(
                 shared_from_this(), _1, _2, rstate),
             rstate->get_peer_set()->select_best_peer(rstate));
     }
-    return true;
+    return;
 }
 
 void eventual_consistency::on_replication()

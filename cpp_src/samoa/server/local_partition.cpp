@@ -72,15 +72,14 @@ bool local_partition::merge_partition(
 void local_partition::initialize(
     const context::ptr_t & context, const table::ptr_t & table)
 {
-    // slightly convoluted, but we need the binder to hold a shared-
-    //  pointer for lifetime management of the functor.
-    // without that requirement, a stack eventual_consistency
-    //  could be directly passed-by-value as the callback
-    _persister->set_record_upkeep_callback(
-        boost::bind(&eventual_consistency::operator(),
-            boost::make_shared<eventual_consistency>(context,
-                table->get_uuid(), get_uuid(),
-                table->get_consistent_prune()), _1));
+    _persister->set_prune_callback(
+        table->get_consistent_prune());
+
+    _persister->set_upkeep_callback(
+        boost::bind(&eventual_consistency::upkeep,
+            boost::make_shared<eventual_consistency>(
+                context, table->get_uuid(), get_uuid()),
+            _1, _2, _3));
 }
 
 }

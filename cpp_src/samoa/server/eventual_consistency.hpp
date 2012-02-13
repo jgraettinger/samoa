@@ -5,6 +5,7 @@
 #include "samoa/client/fwd.hpp"
 #include "samoa/request/fwd.hpp"
 #include "samoa/core/uuid.hpp"
+#include "samoa/core/murmur_checksummer.hpp"
 #include "samoa/datamodel/merge_func.hpp"
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
@@ -23,10 +24,11 @@ public:
     eventual_consistency(
         const context_ptr_t &,
         const core::uuid & table_uuid,
-        const core::uuid & partition_uuid,
-        const datamodel::prune_func_t &);
+        const core::uuid & partition_uuid);
 
-    bool operator()(const request::state_ptr_t & rstate);
+    void upkeep(const request::state_ptr_t & rstate,
+        const core::murmur_checksummer::checksum_t & old_checksum,
+        const core::murmur_checksummer::checksum_t & new_checksum);
 
 private:
 

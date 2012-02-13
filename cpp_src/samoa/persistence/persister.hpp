@@ -37,11 +37,15 @@ public:
 
     typedef boost::function<void(
         const boost::system::error_code &,
-        const datamodel::merge_result &)
+        const datamodel::merge_result &,
+        const core::murmur_checksummer::checksum_t &)
     > put_callback_t;
 
-    typedef boost::function<bool(const request::state_ptr_t &)
-    > record_upkeep_callback_t;
+    typedef boost::function<void(
+        const request::state_ptr_t &,
+        const core::murmur_checksummer::checksum_t & old_checksum,
+        const core::murmur_checksummer::checksum_t & new_checksum)
+    > upkeep_callback_t;
 
     typedef boost::function<void(void)
     > bottom_up_compaction_callback_t;
@@ -88,7 +92,9 @@ public:
         const spb::PersistedRecord &, // referenced, remote record
         spb::PersistedRecord &); // referenced, local record
 
-    void set_record_upkeep_callback(const record_upkeep_callback_t &);
+    void set_prune_callback(const datamodel::prune_func_t &);
+
+    void set_upkeep_callback(const upkeep_callback_t &);
 
     float max_compaction_factor() const
     { return 3.0; }
@@ -141,16 +147,19 @@ private:
     void write_record_with_cached_sizes(
         const spb::PersistedRecord &, rolling_hash::element &);
 
+    core::proactor_ptr_t _proactor;
+    boost::asio::strand _strand;
+
     std::vector<rolling_hash::hash_ring *> _layers;
 
     spinlock _iterators_lock;
     std::vector<iterator> _iterators;
 
-    spinlock _record_upkeep_lock;
-    record_upkeep_callback_t _record_upkeep;
+    spinlock _prune_lock;
+    datamodel::prune_func_t _prune;
 
-    core::proactor_ptr_t _proactor;
-    boost::asio::strand _strand;
+    spinlock _upkeep_lock;
+    upkeep_callback_t _upkeep;
 };
 
 }

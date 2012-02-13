@@ -55,6 +55,10 @@ private:
 
     mutable packet * _last;
     mutable core::murmur_checksummer _content_cs;
+
+    // value_zco_adapter updates _last and _content_cs
+    //  when over-writing element content
+    friend class value_zco_adapter;
 };
 
 }

@@ -240,25 +240,45 @@ future::ptr_t py_bottom_up_compaction(persister & p)
     return f; 
 }
 
-/////////// set_record_upkeep_callback support
+/////////// set_prune_callback support
 
-bool py_on_record_upkeep_callback(
+bool py_on_prune_callback(
+    const bpl::object & prune_callback,
+    spb::PersistedRecord & record)
+{
+    pysamoa::python_scoped_lock block;
+
+    return bpl::extract<bool>(prune_callback(record));
+}
+
+void py_set_prune_callback(persister & p,
+    const bpl::object & prune_callback)
+{
+    datamodel::prune_func_t callback = \
+        boost::bind(&py_on_prune_callback,
+            prune_callback, _1);
+
+    p.set_prune_callback(callback);
+}
+
+/////////// set_upkeep_callback support
+
+void py_on_upkeep_callback(
     const bpl::object & upkeep_callback,
     const request::state::ptr_t & rstate)
 {
     pysamoa::python_scoped_lock block;
-
-    return bpl::extract<bool>(upkeep_callback(rstate));
+    upkeep_callback(rstate);
 }
 
-void py_set_record_upkeep_callback(persister & p,
-    const bpl::object & record_upkeep_callback)
+void py_set_upkeep_callback(persister & p,
+    const bpl::object & upkeep_callback)
 {
-    persister::record_upkeep_callback_t callback = \
-        boost::bind(&py_on_record_upkeep_callback,
-            record_upkeep_callback, _1);
+    persister::upkeep_callback_t callback = \
+        boost::bind(&py_on_upkeep_callback,
+            upkeep_callback, _1);
 
-    p.set_record_upkeep_callback(callback);
+    p.set_upkeep_callback(callback);
 }
 
 ///////////
@@ -277,7 +297,8 @@ void make_persister_bindings()
         .def("iteration_begin", &persister::iteration_begin)
         .def("iteration_next", &py_iteration_next)
         .def("put", &py_put)
-        .def("set_record_upkeep_callback", &py_set_record_upkeep_callback)
+        .def("set_prune_callback", &py_set_prune_callback)
+        .def("set_upkeep_callback", &py_set_upkeep_callback)
         .def("max_compaction_factor",
             &persister::max_compaction_factor)
         .def("bottom_up_compaction", &py_bottom_up_compaction)

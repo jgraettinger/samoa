@@ -32,7 +32,7 @@ public:
         {
             // we've completely filled _next_packet
             _next_packet->set_combined_checksum(
-                _next_packet->compute_combined_checksum(_content_cs));
+                _next_packet->compute_combined_checksum(_new_content_cs));
 
             if(_next_packet->completes_sequence())
             {
@@ -84,27 +84,28 @@ public:
         {
             _next_packet->set_value(_next_offset);
             _next_packet->set_combined_checksum(
-                _next_packet->compute_combined_checksum(_content_cs));
+                _next_packet->compute_combined_checksum(_new_content_cs));
 
             if(_next_packet->completes_sequence())
+            {
+                _element._last = _next_packet;
+                _element._content_cs = _new_content_cs;
                 break;
-    
+            }
+
             _next_offset = 0;
             _next_packet = _element.ring()->next_packet(_next_packet);
         }
     }
 
-    core::murmur_checksummer::checksum_t content_checksum() const
-    { return _content_cs.checksum(); }
-
 private:
 
-    element & _element;
+    const element & _element;
     packet * _next_packet;
     unsigned _next_offset;
     unsigned _total_bytes;
 
-    core::murmur_checksummer _content_cs;
+    core::murmur_checksummer _new_content_cs;
 };
 
 }

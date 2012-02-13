@@ -140,11 +140,18 @@ void persister::put(
             boost::ref(local_record)));
 }
 
-void persister::set_record_upkeep_callback(
-    const persister::record_upkeep_callback_t & callback)
+void persister::set_prune_callback(
+    const datamodel::prune_func_t & callback)
 {
-    spinlock::guard guard(_record_upkeep_lock);
-    _record_upkeep = callback;
+    spinlock::guard guard(_prune_lock);
+    _prune = callback;
+}
+
+void persister::set_upkeep_callback(
+    const persister::upkeep_callback_t & callback)
+{
+    spinlock::guard guard(_upkeep_lock);
+    _upkeep = callback;
 }
 
 void persister::bottom_up_compaction(
@@ -302,7 +309,8 @@ void persister::on_put(
         if(!result.local_was_updated)
         {
             // local_record wasn't updated => write should be aborted
-            put_callback(boost::system::error_code(), result);
+            put_callback(boost::system::error_code(), result,
+                old_element.content_checksum());
             return;
         }
     }
@@ -323,7 +331,8 @@ void persister::on_put(
         // in-place write
         write_record_with_cached_sizes(local_record, old_element);
 
-        put_callback(boost::system::error_code(), result);
+        put_callback(boost::system::error_code(), result,
+            old_element.content_checksum());
         return;
     }
 
@@ -369,8 +378,8 @@ void persister::on_put(
     {
         // we failed to free sufficient space; return error to caller
         put_callback(boost::system::errc::make_error_code(
-            boost::system::errc::not_enough_memory),
-            result);
+                boost::system::errc::not_enough_memory),
+            result, {{0,0}});
         return;
     }
 
@@ -430,7 +439,8 @@ void persister::on_put(
         old_element.set_dead();
     }
 
-    put_callback(boost::system::error_code(), result);
+    put_callback(boost::system::error_code(), result,
+        new_element.content_checksum());
 }
 
 void persister::step_iterator(iterator & it)
@@ -463,11 +473,13 @@ void persister::step_iterator(iterator & it)
 }
 
 template<typename PreRotateLambda>
-uint32_t persister::top_down_compaction(const PreRotateLambda & pre_rotate_lambda)
+uint32_t persister::top_down_compaction(
+    const PreRotateLambda & pre_rotate_lambda)
 {
     for(size_t layer_ind = 0; layer_ind + 1 != _layers.size(); ++layer_ind)
     {
-        uint32_t compacted_bytes = inner_compaction(layer_ind, pre_rotate_lambda);
+        uint32_t compacted_bytes = inner_compaction(
+            layer_ind, pre_rotate_lambda);
 
     	// stop on the first successful compaction
         if(compacted_bytes)
@@ -599,41 +611,40 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
     }
     else
     {
-    	rolling_hash::element element(&layer, head);
+    	rolling_hash::element old_element(&layer, head);
         pre_rotate_lambda(_layers.size() - 1);
 
         request::state::ptr_t rstate = boost::make_shared<request::state>();
 
         // extract key & parse protobuf record
         rstate->set_key(std::string(
-            rolling_hash::key_gather_iterator(element),
+            rolling_hash::key_gather_iterator(old_element),
             rolling_hash::key_gather_iterator()));
 
-        rolling_hash::value_zci_adapter zci_adapter(element);
+        rolling_hash::value_zci_adapter zci_adapter(old_element);
         SAMOA_ASSERT(rstate->get_local_record(
             ).ParseFromZeroCopyStream(&zci_adapter));
 
         rolling_hash::hash_ring::locator locator = \
             layer.locate_key(rstate->get_key());
 
+        // drop and reclaim the old element
         uint32_t hash_chain_next = head->hash_chain_next();
+        layer.drop_from_hash_chain(locator);
 
-        // drop and reclaim the element
-        element.set_dead();
+        old_element.set_dead();
         compacted_bytes = layer.reclaim_head();
 
-        bool upkeep_result = true;
+        bool prune_result = false;
         {
-            spinlock::guard guard(_record_upkeep_lock);
-
-            if(_record_upkeep && !_record_upkeep(rstate))
-                upkeep_result = false;
+            spinlock::guard guard(_prune_lock);
+            if(_prune && _prune(rstate->get_local_record()))
+                prune_result = true;
         }
 
-        if(!upkeep_result)
+        if(prune_result)
         {
-            // record should be discarded
-            layer.drop_from_hash_chain(locator);
+            // record should be discarded; we're done
         }
         else
         {
@@ -643,21 +654,29 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
             uint32_t capacity = rstate->get_key().size() + \
                 rstate->get_local_record().ByteSize();
 
-            // allocation will always succeed, so long as record
-            //  upkeep maintains or shrinks serialized value length
+            // allocation will always succeed, so long as prune()
+            //  maintains or shrinks serialized value length
             rolling_hash::packet * new_head = layer.allocate_packets(capacity);
             SAMOA_ASSERT(new_head);
 
-            // write key & value, and update hash chain
+            // update hash chain
+            new_head->set_hash_chain_next(hash_chain_next);
+            layer.update_hash_chain(locator, layer.packet_offset(new_head));
+
+            // write key & value content
             rolling_hash::element new_element(&layer,
                 new_head, rstate->get_key());
-
-            new_head->set_hash_chain_next(hash_chain_next);
-
             write_record_with_cached_sizes(
                 rstate->get_local_record(), new_element);
 
-            layer.update_hash_chain(locator, layer.packet_offset(new_head));
+            {
+                spinlock::guard guard(_upkeep_lock);
+                if(_upkeep)
+                {
+                    _upkeep(rstate, old_element.content_checksum(),
+                        new_element.content_checksum());
+                }
+            }
         }
     }
 
