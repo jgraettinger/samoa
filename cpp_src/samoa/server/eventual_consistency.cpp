@@ -28,8 +28,8 @@ eventual_consistency::eventual_consistency(
 
 void eventual_consistency::upkeep(
     const request::state::ptr_t & rstate,
-    const core::murmur_checksummer::checksum_t & /*old_checksum*/,
-    const core::murmur_checksummer::checksum_t & /*new_checksum*/)
+    const core::murmur_checksummer::checksum_t & old_checksum,
+    const core::murmur_checksummer::checksum_t & new_checksum)
 {
     context::ptr_t ctxt = _weak_context.lock();
     if(!ctxt)
@@ -50,16 +50,7 @@ void eventual_consistency::upkeep(
     try {
         rstate->load_route_state();
 
-        // quorum is all responsible partitions
-        rstate->set_quorum_count(0);
-        rstate->load_replication_state();
-
-        // replicate value to peers
-        rstate->peer_replication_success();
-        replication::replicated_write(
-            boost::bind(&eventual_consistency::on_replication,
-                shared_from_this()),
-            rstate);
+        replication::replicated_sync(rstate, new_checksum, old_checksum);
     }
     catch(const request::state_exception & e)
     {
@@ -72,17 +63,17 @@ void eventual_consistency::upkeep(
 
         rstate->load_route_state();
 
+        // quorum is all responsible partitions
+        rstate->set_quorum_count(0);
+        rstate->load_replication_state();
+
+        // replicate value to peers
         rstate->get_peer_set()->schedule_request(
             boost::bind(&eventual_consistency::on_move_request,
                 shared_from_this(), _1, _2, rstate),
             rstate->get_peer_set()->select_best_peer(rstate));
     }
     return;
-}
-
-void eventual_consistency::on_replication()
-{
-    // no-op
 }
 
 void eventual_consistency::on_move_request(

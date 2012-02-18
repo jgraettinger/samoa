@@ -130,9 +130,8 @@ void set_blob_handler::on_put(
     // local write was a success
     rstate->get_samoa_response().set_success(true);
 
-    // replicate, forcing a fanout to all peers
-    rstate->set_replication_checksum(checksum);
-    replication::replicated_write(true, rstate);
+    // replicate to all peers
+    replication::replicated_write(rstate, checksum);
 }
 
 }

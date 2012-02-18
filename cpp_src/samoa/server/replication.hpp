@@ -5,6 +5,7 @@
 #include "samoa/client/fwd.hpp"
 #include "samoa/client/server.hpp"
 #include "samoa/request/request_state.hpp"
+#include "samoa/core/murmur_checksummer.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/function.hpp>
 
@@ -22,54 +23,53 @@ public:
         const read_callback_t &,
         const request::state_ptr_t &); 
 
-    typedef boost::function<void()> write_callback_t;
-
     static void replicated_write(
-        const write_callback_t &,
-        const request::state_ptr_t &);
+        const request::state_ptr_t &,
+        const core::murmur_checksummer::checksum_t & checksum);
+
+    static void replicated_sync(
+        const request::state_ptr_t &,
+        const core::murmur_checksummer::checksum_t & checksum,
+        const core::murmur_checksummer::checksum_t & alternate);
 
 private:
-
-    static void build_peer_request(
-        samoa::client::server_request_interface &,
-        const request::state_ptr_t &,
-        const core::uuid & peer_uuid);
-
-    static void peer_reads_finished(
-        const read_callback_t &,
-        const request::state_ptr_t &);
 
     static void on_peer_read_request(
         const boost::system::error_code & ec,
         samoa::client::server_request_interface,
         const read_callback_t &,
         const request::state_ptr_t &,
-        const core::uuid & peer_uuid,
-        const core::uuid & part_uuid);
+        const partition_ptr_t &);
 
     static void on_peer_read_response(
         const boost::system::error_code & ec,
         samoa::client::server_response_interface,
         const read_callback_t &,
         const request::state_ptr_t &,
-        const core::uuid & peer_uuid);
+        const partition_ptr_t &);
 
-    static void on_local_read_repair(
-        const boost::system::error_code & ec,
-        bool, const read_callback_t &);
+    static void peer_reads_finished(
+        const read_callback_t &,
+        const request::state_ptr_t &);
 
     static void on_peer_write_request(
         const boost::system::error_code & ec,
         samoa::client::server_request_interface,
-        const write_callback_t &,
+        const boost::function<void()> &,
         const request::state_ptr_t &,
-        const core::uuid & peer_uuid,
-        const core::uuid & part_uuid);
+        const core::murmur_checksummer::checksum_t &,
+        const partition_ptr_t &);
 
     static void on_peer_write_response(
         const boost::system::error_code & ec,
         samoa::client::server_response_interface,
-        const write_callback_t &,
+        const boost::function<void()> &,
+        const request::state_ptr_t &,
+        const core::murmur_checksummer::checksum_t &,
+        const partition_ptr_t &);
+
+    static void build_peer_request(
+        samoa::client::server_request_interface &,
         const request::state_ptr_t &,
         const core::uuid & peer_uuid);
 };

@@ -85,9 +85,7 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
     }
 
     rstate->set_replication_checksum(checksum);
-
-    bool force_fanout = merge_result.remote_is_stale;
-    replication::replicated_write(force_fanout, rstate);
+    replication::replicated_write(rstate, merge_result.remote_is_stale);
 }
 
 void replicate_handler::on_read(const boost::system::error_code & ec,

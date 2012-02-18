@@ -49,6 +49,9 @@ public:
 
     bool position_in_responsible_range(uint64_t ring_position) const;
 
+    const consistent_set_ptr_t & get_consistent_set() const
+    { return _consistent_set; }
+
     //! Merges a peer partition description into the local description
     /*!
         \return true iff the local description was modified
@@ -72,6 +75,7 @@ protected:
     uint64_t   _consistent_range_begin;
     uint64_t   _consistent_range_end;
     uint64_t   _lamport_ts;
+    consistent_set_ptr_t _consistent_set;
 };
 
 }
