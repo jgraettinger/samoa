@@ -53,7 +53,7 @@ void update_counter_handler::handle(const request::state::ptr_t & rstate)
 
     rstate->get_primary_partition()->get_persister()->put(
         boost::bind(&update_counter_handler::on_put,
-            shared_from_this(), _1, _2, rstate),
+            shared_from_this(), _1, _2, _3, rstate),
         boost::bind(&update_counter_handler::on_merge,
             shared_from_this(), _1, _2, rstate),
         rstate->get_key(),
@@ -83,6 +83,7 @@ datamodel::merge_result update_counter_handler::on_merge(
 void update_counter_handler::on_put(
     const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
+    const core::murmur_checksum_t & checksum,
     const request::state::ptr_t & rstate)
 {
     if(ec)
@@ -99,28 +100,8 @@ void update_counter_handler::on_put(
     response.set_counter_value(
         datamodel::counter::value(rstate->get_local_record()));
 
-    // count the local write, and respond to client if quorum is met
-    if(rstate->peer_replication_success())
-    {
-        on_replicated_write(rstate);
-    }
-
     // replicate the update to peers
-    replication::replicated_write(
-        boost::bind(&update_counter_handler::on_replicated_write,
-            shared_from_this(), rstate),
-        rstate);
-}
-
-void update_counter_handler::on_replicated_write(
-    const request::state::ptr_t & rstate)
-{
-    rstate->get_samoa_response().set_replication_success(
-        rstate->get_peer_success_count());
-    rstate->get_samoa_response().set_replication_failure(
-        rstate->get_peer_failure_count());
-
-    rstate->flush_response();
+    replication::replicated_write(rstate, checksum);
 }
 
 }

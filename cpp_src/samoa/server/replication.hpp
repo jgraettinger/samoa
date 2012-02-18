@@ -5,7 +5,7 @@
 #include "samoa/client/fwd.hpp"
 #include "samoa/client/server.hpp"
 #include "samoa/request/request_state.hpp"
-#include "samoa/core/murmur_checksummer.hpp"
+#include "samoa/core/fwd.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/function.hpp>
 
@@ -25,12 +25,12 @@ public:
 
     static void replicated_write(
         const request::state_ptr_t &,
-        const core::murmur_checksummer::checksum_t & checksum);
+        const core::murmur_checksum_t & checksum);
 
     static void replicated_sync(
         const request::state_ptr_t &,
-        const core::murmur_checksummer::checksum_t & checksum,
-        const core::murmur_checksummer::checksum_t & alternate);
+        const core::murmur_checksum_t & checksum,
+        const core::murmur_checksum_t & alternate);
 
 private:
 
@@ -57,7 +57,7 @@ private:
         samoa::client::server_request_interface,
         const boost::function<void()> &,
         const request::state_ptr_t &,
-        const core::murmur_checksummer::checksum_t &,
+        const core::murmur_checksum_t &,
         const partition_ptr_t &);
 
     static void on_peer_write_response(
@@ -65,7 +65,7 @@ private:
         samoa::client::server_response_interface,
         const boost::function<void()> &,
         const request::state_ptr_t &,
-        const core::murmur_checksummer::checksum_t &,
+        const core::murmur_checksum_t &,
         const partition_ptr_t &);
 
     static void build_peer_request(

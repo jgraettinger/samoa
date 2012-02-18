@@ -1,7 +1,7 @@
 #ifndef SAMOA_PERSISTENCE_ROLLING_HASH_PACKET_HPP
 #define SAMOA_PERSISTENCE_ROLLING_HASH_PACKET_HPP
 
-#include "samoa/core/murmur_checksummer.hpp"
+#include "samoa/core/fwd.hpp"
 #include <cstddef>
 #include <stdexcept>
 
@@ -22,7 +22,7 @@ public:
      *  - Computed and stored meta & content checksums are compared
      * @return: false if any checks fail
      */
-    bool check_integrity(core::murmur_checksummer & content_cs) const;
+    bool check_integrity(core::murmur_hash & content_cs) const;
 
     /*!
      * \brief Computes the running checksum of this packet's content
@@ -38,7 +38,7 @@ public:
      *  content amount different packets will result in the same
      *  content_cs state.
      */ 
-    uint32_t compute_content_checksum(core::murmur_checksummer &) const;
+    uint32_t compute_content_checksum(core::murmur_hash &) const;
 
     /*!
      * \brief Computes a checksum over (only) this packet's meta-data.
@@ -55,7 +55,7 @@ public:
      * \brief Computes a combined (xor) checksum from content & meta-data
      */
     uint32_t compute_combined_checksum(
-        core::murmur_checksummer & content_cs) const;
+        core::murmur_hash & content_cs) const;
 
     uint32_t combined_checksum() const
     { return _meta.combined_checksum; }

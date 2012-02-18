@@ -27,11 +27,6 @@ void make_replication_state_bindings()
             &replication_state::had_peer_read_hit)
         .def("set_peer_read_hit",
             &replication_state::set_peer_read_hit)
-        .def("get_replication_checksum",
-            &replication_state::get_replication_checksum,
-            bpl::return_value_policy<copy_const_reference>())
-        .def("set_replication_checksum",
-            &replication_state::set_replication_checksum)
         .def("load_replication_state",
             &replication_state::load_replication_state)
         .def("reset_replication_state",

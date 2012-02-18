@@ -5,7 +5,7 @@
 #include "samoa/client/fwd.hpp"
 #include "samoa/request/fwd.hpp"
 #include "samoa/core/uuid.hpp"
-#include "samoa/core/murmur_checksummer.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/datamodel/merge_func.hpp"
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
@@ -27,8 +27,8 @@ public:
         const core::uuid & partition_uuid);
 
     void upkeep(const request::state_ptr_t & rstate,
-        const core::murmur_checksummer::checksum_t & old_checksum,
-        const core::murmur_checksummer::checksum_t & new_checksum);
+        const core::murmur_checksum_t & old_checksum,
+        const core::murmur_checksum_t & new_checksum);
 
 private:
 

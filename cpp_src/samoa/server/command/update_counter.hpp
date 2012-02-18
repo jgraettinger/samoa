@@ -9,6 +9,7 @@
 #include "samoa/datamodel/merge_func.hpp"
 #include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/core/uuid.hpp"
 #include <boost/system/error_code.hpp>
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
@@ -39,9 +40,9 @@ private:
         const spb::PersistedRecord &, const request::state_ptr_t &);
 
     void on_put(const boost::system::error_code &,
-        const datamodel::merge_result &, const request::state_ptr_t &);
-
-    void on_replicated_write(const request::state_ptr_t &);
+        const datamodel::merge_result &,
+        const core::murmur_checksum_t &,
+        const request::state_ptr_t &);
 };
 
 }

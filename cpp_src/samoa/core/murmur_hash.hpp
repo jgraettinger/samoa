@@ -1,8 +1,8 @@
-#ifndef SAMOA_CORE_MURMUR_CHECKSHUMMER_HPP
-#define SAMOA_CORE_MURMUR_CHECKSHUMMER_HPP
+#ifndef SAMOA_CORE_MURMUR_HASH_HPP
+#define SAMOA_CORE_MURMUR_HASH_HPP
 
+#include "samoa/core/fwd.hpp"
 #include <cstdint>
-#include <array>
 
 namespace samoa {
 namespace core {
@@ -18,13 +18,13 @@ namespace core {
  *  Austin Appleby's MurmurHash3_x64_128();
  *  see http://code.google.com/p/smhasher/
  */
-class murmur_checksummer
+class murmur_hash
 {
 public:
 
-    typedef std::array<uint64_t, 2> checksum_t;
+    typedef murmur_checksum_t checksum_t;
 
-    murmur_checksummer()
+    murmur_hash()
      :  _h1(0),
         _h2(0),
         _block({{0,0}}),
@@ -32,7 +32,7 @@ public:
         _total_length(0)
     { }
 
-    explicit murmur_checksummer(uint32_t seed)
+    explicit murmur_hash(uint32_t seed)
      :  _h1(seed),
         _h2(seed),
         _block({{0,0}}),

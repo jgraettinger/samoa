@@ -38,13 +38,13 @@ public:
     typedef boost::function<void(
         const boost::system::error_code &,
         const datamodel::merge_result &,
-        const core::murmur_checksummer::checksum_t &)
+        const core::murmur_checksum_t &)
     > put_callback_t;
 
     typedef boost::function<void(
         const request::state_ptr_t &,
-        const core::murmur_checksummer::checksum_t & old_checksum,
-        const core::murmur_checksummer::checksum_t & new_checksum)
+        const core::murmur_checksum_t & old_checksum,
+        const core::murmur_checksum_t & new_checksum)
     > upkeep_callback_t;
 
     typedef boost::function<void(void)

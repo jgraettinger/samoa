@@ -53,7 +53,7 @@ void set_blob_handler::handle(const request::state::ptr_t & rstate)
 
     rstate->get_primary_partition()->get_persister()->put(
         boost::bind(&set_blob_handler::on_put,
-            shared_from_this(), _1, _2, rstate),
+            shared_from_this(), _1, _2, _3, rstate),
         boost::bind(&set_blob_handler::on_merge,
             shared_from_this(), _1, _2, rstate),
         rstate->get_key(),
@@ -103,6 +103,7 @@ datamodel::merge_result set_blob_handler::on_merge(
 void set_blob_handler::on_put(
     const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
+    const core::murmur_checksum_t & checksum,
     const request::state::ptr_t & rstate)
 {
     if(ec)

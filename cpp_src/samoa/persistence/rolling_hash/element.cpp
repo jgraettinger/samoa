@@ -106,7 +106,7 @@ uint32_t element::capacity() const
     } 
 }
 
-core::murmur_checksummer::checksum_t element::content_checksum() const
+core::murmur_checksum_t element::content_checksum() const
 {
     while(!_last->completes_sequence())
     {

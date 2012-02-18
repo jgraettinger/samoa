@@ -9,7 +9,7 @@
 #include "samoa/request/request_state.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
-#include "samoa/core/murmur_checksummer.hpp"
+#include "samoa/core/murmur_hash.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
@@ -118,7 +118,7 @@ void replication::on_peer_read_response(
 
         {
             // checksum response content, and add to the partition's set
-            core::murmur_checksummer cs;
+            core::murmur_hash cs;
 
             cs.process_bytes(rstate->get_key().data(),
                 rstate->get_key().size());
@@ -186,7 +186,7 @@ void replication::peer_reads_finished(
 
 void replication::replicated_write(
     const request::state::ptr_t & rstate,
-    const core::murmur_checksummer::checksum_t & checksum)
+    const core::murmur_checksum_t & checksum)
 {
     auto callback = [rstate]()
     {
@@ -220,10 +220,10 @@ void replication::replicated_write(
 
 void replication::replicated_sync(
     const request::state::ptr_t & rstate,
-    const core::murmur_checksummer::checksum_t & checksum,
-    const core::murmur_checksummer::checksum_t & alternate_checksum)
+    const core::murmur_checksum_t & checksum,
+    const core::murmur_checksum_t & alternate_checksum)
 {
-    auto callback = [](const request::state::ptr_t &)
+    auto callback = []()
     {
         // no-op
     };
@@ -233,12 +233,13 @@ void replication::replicated_sync(
         if(partition->get_consistent_set()->test(checksum) ||
            partition->get_consistent_set()->test(alternate_checksum))
         {
-            LOG_DEBUG("key " << log::ascii_escape(rstate->get_key()) << " consistent on partition " << partition->get_uuid());
+            LOG_DBG("key " << log::ascii_escape(rstate->get_key()) << \
+                " consistent on partition " << partition->get_uuid());
 
             continue;
         }
 
-        LOG_DEBUG("key " << log::ascii_escape(rstate->get_key()) << \
+        LOG_DBG("key " << log::ascii_escape(rstate->get_key()) << \
             " NOT consistent on partition " << partition->get_uuid());
 
         rstate->get_peer_set()->schedule_request(
@@ -256,7 +257,7 @@ void replication::on_peer_write_request(
     samoa::client::server_request_interface iface,
     const boost::function<void()> & callback,
     const request::state::ptr_t & rstate,
-    const core::murmur_checksum::checksum_t & checksum,
+    const core::murmur_checksum_t & checksum,
     const partition::ptr_t & partition)
 {
     if(ec)
@@ -290,7 +291,7 @@ void replication::on_peer_write_response(
     samoa::client::server_response_interface iface,
     const boost::function<void()> & callback,
     const request::state::ptr_t & rstate,
-    const core::murmur_checksum::checksum_t & checksum,
+    const core::murmur_checksum_t & checksum,
     const partition::ptr_t & partition)
 {
     if(ec || iface.get_error_code())

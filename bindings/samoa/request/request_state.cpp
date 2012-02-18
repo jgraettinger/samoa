@@ -180,13 +180,6 @@ bool py_peer_replication_success(state & s)
 bool py_is_replication_finished(state & s)
 { return s.is_replication_finished(); }
 
-core::murmur_hash::checksum_t py_get_replication_checksum(state & s)
-{ return s.get_replication_checksum(); }
-
-void py_set_replication_checksum(state & s,
-    const core::murmur_hash::checksum_t & checksum)
-{ return s.set_replication_checksum(checksum); }
-
 void make_state_bindings()
 {
     bpl::class_<state, state::ptr_t, boost::noncopyable>(
@@ -250,8 +243,6 @@ void make_state_bindings()
         .def("peer_replication_failure", &py_peer_replication_failure)
         .def("peer_replication_success", &py_peer_replication_success)
         .def("is_replication_finished", &py_is_replication_finished)
-        .def("get_replication_checksum", &py_get_replication_checksum)
-        .def("set_replication_checksum", &py_set_replication_checksum)
 
         .def("parse_samoa_request", &state::parse_samoa_request)
         .def("reset_state", &state::reset_state)

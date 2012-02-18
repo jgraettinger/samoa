@@ -9,6 +9,7 @@
 #include "samoa/request/state_exception.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
@@ -28,8 +29,8 @@ eventual_consistency::eventual_consistency(
 
 void eventual_consistency::upkeep(
     const request::state::ptr_t & rstate,
-    const core::murmur_checksummer::checksum_t & old_checksum,
-    const core::murmur_checksummer::checksum_t & new_checksum)
+    const core::murmur_checksum_t & old_checksum,
+    const core::murmur_checksum_t & new_checksum)
 {
     context::ptr_t ctxt = _weak_context.lock();
     if(!ctxt)
@@ -62,10 +63,6 @@ void eventual_consistency::upkeep(
         rstate->set_key(std::move(key));
 
         rstate->load_route_state();
-
-        // quorum is all responsible partitions
-        rstate->set_quorum_count(0);
-        rstate->load_replication_state();
 
         // replicate value to peers
         rstate->get_peer_set()->schedule_request(

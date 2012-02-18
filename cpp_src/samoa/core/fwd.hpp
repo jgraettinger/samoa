@@ -5,6 +5,7 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/smart_ptr/make_shared.hpp>
+#include <array>
 
 namespace samoa {
 namespace core {
@@ -15,7 +16,8 @@ typedef boost::shared_ptr<proactor> proactor_ptr_t;
 typedef boost::shared_ptr<boost::asio::io_service> io_service_ptr_t;
 typedef boost::shared_ptr<boost::asio::deadline_timer> timer_ptr_t;
 
-class murmur_checksummer;
+typedef std::array<uint64_t, 2> murmur_checksum_t;
+class murmur_hash;
 
 }
 }

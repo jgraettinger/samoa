@@ -90,7 +90,7 @@ void element::set_value(
 {
     packet * pkt = _head;
 
-    core::murmur_checksummer new_content_cs;
+    core::murmur_hash new_content_cs;
 
     while(value_length)
     {

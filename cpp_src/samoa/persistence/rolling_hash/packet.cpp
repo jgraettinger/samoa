@@ -1,5 +1,6 @@
 
 #include "samoa/persistence/rolling_hash/packet.hpp"
+#include "samoa/core/murmur_hash.hpp"
 #include "samoa/error.hpp"
 
 namespace samoa {
@@ -13,7 +14,7 @@ packet::packet(unsigned capacity)
         capacity_alignment_adjustment());
 }
 
-bool packet::check_integrity(core::murmur_checksummer & content_cs) const
+bool packet::check_integrity(core::murmur_hash & content_cs) const
 {
     if(key_length() + value_length() > capacity())
         return false;
@@ -25,7 +26,7 @@ bool packet::check_integrity(core::murmur_checksummer & content_cs) const
 }
 
 uint32_t packet::compute_content_checksum(
-    core::murmur_checksummer & content_cs) const
+    core::murmur_hash & content_cs) const
 {
     content_cs.process_bytes(key_begin(), key_length());
     content_cs.process_bytes(value_begin(), value_length());
@@ -41,13 +42,13 @@ uint32_t packet::compute_meta_checksum() const
         continues_sequence(),
         completes_sequence()};
 
-    core::murmur_checksummer cs;
+    core::murmur_hash cs;
     cs.process_bytes(&meta_bytes, sizeof(meta_bytes));
     return (uint32_t)(cs.checksum()[0] >> 32);
 }
 
 uint32_t packet::compute_combined_checksum(
-    core::murmur_checksummer & content_cs) const
+    core::murmur_hash & content_cs) const
 {
     return compute_meta_checksum() ^ compute_content_checksum(content_cs);
 }

@@ -1,5 +1,5 @@
 #include <boost/python.hpp>
-#include "samoa/core/murmur_checksummer.hpp"
+#include "samoa/core/murmur_hash.hpp"
 //#include "MurmurHash3.h"
 
 namespace samoa {
@@ -7,7 +7,7 @@ namespace core {
 
 namespace bpl = boost::python;
 
-void py_process_bytes(murmur_checksummer & mc, const bpl::str & input)
+void py_process_bytes(murmur_hash & mh, const bpl::str & input)
 {
     char * buf;
     Py_ssize_t len;
@@ -15,12 +15,12 @@ void py_process_bytes(murmur_checksummer & mc, const bpl::str & input)
     if(PyString_AsStringAndSize(input.ptr(), &buf, &len) == -1)
         bpl::throw_error_already_set();
 
-    mc.process_bytes(reinterpret_cast<const uint8_t*>(buf), len);
+    mh.process_bytes(reinterpret_cast<const uint8_t*>(buf), len);
 }
 
-bpl::tuple py_checksum(const murmur_checksummer & mc)
+bpl::tuple py_checksum(const murmur_hash & mh)
 {
-    std::array<uint64_t, 2> result = mc.checksum();
+    std::array<uint64_t, 2> result = mh.checksum();
     return bpl::make_tuple(result[0], result[1]);
 }
 
@@ -41,9 +41,9 @@ bpl::tuple py_original(uint32_t seed, const bpl::str & input)
 }
 */
 
-void make_murmur_checksummer_bindings()
+void make_murmur_hash_bindings()
 {
-    bpl::class_<murmur_checksummer>("MurmurChecksummer", bpl::init<>())
+    bpl::class_<murmur_hash>("MurmurHash", bpl::init<>())
         .def(bpl::init<uint32_t>())
         .def("process_bytes", &py_process_bytes)
         .def("checksum", &py_checksum)

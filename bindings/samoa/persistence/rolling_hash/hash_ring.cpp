@@ -2,6 +2,7 @@
 #include <boost/python.hpp>
 #include "samoa/persistence/rolling_hash/hash_ring.hpp"
 #include "samoa/persistence/rolling_hash/packet.hpp"
+#include "samoa/core/murmur_hash.hpp"
 #include <memory>
 
 namespace samoa {
@@ -40,7 +41,7 @@ bool py_mark_for_deletion(rolling_hash * hash, const bpl::str & key)
 }
 */
 
-std::string py_repr_packet(packet &, core::murmur_checksummer *);
+std::string py_repr_packet(packet &, core::murmur_hash *);
 
 std::string py_repr_hash_ring(hash_ring & r)
 {
@@ -59,7 +60,7 @@ std::string py_repr_hash_ring(hash_ring & r)
     else
         out << "not wrapped,\n";
 
-    core::murmur_checksummer content_cs;
+    core::murmur_hash content_cs;
 
     packet * pkt = r.head();
     for(unsigned i = 0; pkt; ++i)
@@ -70,7 +71,7 @@ std::string py_repr_hash_ring(hash_ring & r)
 
         if(pkt->completes_sequence())
         {
-        	content_cs = core::murmur_checksummer();
+        	content_cs = core::murmur_hash();
         }
         pkt = r.next_packet(pkt);
     }

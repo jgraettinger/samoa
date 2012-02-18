@@ -5,6 +5,7 @@
 #include "samoa/server/command_handler.hpp"
 #include "samoa/datamodel/merge_func.hpp"
 #include "samoa/request/fwd.hpp"
+#include "samoa/core/fwd.hpp"
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/shared_ptr.hpp>
@@ -31,7 +32,9 @@ public:
 protected:
 
     void on_write(const boost::system::error_code &,
-        const datamodel::merge_result &, const request::state_ptr_t &);
+        const datamodel::merge_result &,
+        const core::murmur_checksum_t &,
+        const request::state_ptr_t &);
 
     void on_read(const boost::system::error_code &,
         bool, const request::state_ptr_t &);

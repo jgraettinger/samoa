@@ -1,5 +1,6 @@
 
 #include "samoa/server/partition.hpp"
+#include "samoa/server/consistent_set.hpp"
 #include "samoa/core/uuid.hpp"
 
 namespace samoa {
@@ -15,7 +16,8 @@ partition::partition(
    _range_end(range_end),
    _consistent_range_begin(part.consistent_range_begin()),
    _consistent_range_end(part.consistent_range_end()),
-   _lamport_ts(part.lamport_ts())
+   _lamport_ts(part.lamport_ts()),
+   _consistent_set(boost::make_shared<consistent_set>())
 {}
 
 partition::~partition()
@@ -34,7 +36,6 @@ bool partition::position_in_responsible_range(uint64_t pos) const
         return pos >= _range_begin && pos <= _range_end;
     }
 }
-     
 
 }
 }

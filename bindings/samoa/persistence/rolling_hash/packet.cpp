@@ -1,6 +1,7 @@
 
 #include <boost/python.hpp>
 #include "samoa/persistence/rolling_hash/packet.hpp"
+#include "samoa/core/murmur_hash.hpp"
 
 namespace samoa {
 namespace persistence {
@@ -34,7 +35,7 @@ void py_set_value(packet * p, const bpl::str & value)
     std::copy(begin, end, p->set_value(std::distance(begin, end)));
 }
 
-std::string py_repr_packet(packet & p, core::murmur_checksummer * cs)
+std::string py_repr_packet(packet & p, core::murmur_hash * cs)
 {
     std::stringstream out;
     out << "packet" << &p << "<";

@@ -5,6 +5,7 @@
 #include "samoa/server/table.hpp"
 #include "samoa/server/replication.hpp"
 #include "samoa/server/peer_set.hpp"
+#include "samoa/server/consistent_set.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
 #include "samoa/persistence/persister.hpp"
@@ -12,6 +13,7 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/lexical_cast.hpp>
@@ -55,7 +57,7 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
 
         rstate->get_primary_partition()->get_persister()->put(
             boost::bind(&replicate_handler::on_write,
-                shared_from_this(), _1, _2, rstate),
+                shared_from_this(), _1, _2, _3, rstate),
             datamodel::merge_func_t(
                 rstate->get_table()->get_consistent_merge()),
             rstate->get_key(),
@@ -72,10 +74,11 @@ void replicate_handler::handle(const request::state::ptr_t & rstate)
     }
 }
 
-void replicate_handler::on_write(const boost::system::error_code & ec,
+void replicate_handler::on_write(
+    const boost::system::error_code & ec,
     const datamodel::merge_result & merge_result,
-    const request::state::ptr_t & rstate,
-    const core::murmur_checksummer::checksum_t & checksum)
+    const core::murmur_checksum_t & checksum,
+    const request::state::ptr_t & rstate)
 {
     if(ec)
     {
@@ -84,8 +87,20 @@ void replicate_handler::on_write(const boost::system::error_code & ec,
         return;
     }
 
-    rstate->set_replication_checksum(checksum);
-    replication::replicated_write(rstate, merge_result.remote_is_stale);
+    if(rstate->get_quorum_count() != 1 || merge_result.remote_is_stale)
+    {
+    	// force replication fanout
+        replication::replicated_write(rstate, checksum);
+    }
+    else
+    {
+        // assume that all peers have also been replicated to as well
+        for(const partition::ptr_t & partition : rstate->get_peer_partitions())
+        {
+            partition->get_consistent_set()->add(checksum);
+        }
+        rstate->flush_response();
+    }
 }
 
 void replicate_handler::on_read(const boost::system::error_code & ec,

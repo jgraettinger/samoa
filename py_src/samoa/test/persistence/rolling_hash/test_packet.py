@@ -3,7 +3,7 @@ import unittest
 
 from samoa.persistence.rolling_hash.heap_hash_ring import HeapHashRing
 from samoa.persistence.rolling_hash.packet import Packet
-from samoa.core.murmur_checksummer import MurmurChecksummer
+from samoa.core.murmur_hash import MurmurHash
 
 class TestPacket(unittest.TestCase):
 
@@ -42,7 +42,7 @@ class TestPacket(unittest.TestCase):
         packet_2.set_value('test-value-part-2')
 
         # start with correct packet checksums
-        content_cs = MurmurChecksummer()
+        content_cs = MurmurHash()
 
         packet_1.set_combined_checksum(
             packet_1.compute_combined_checksum(content_cs))
@@ -50,13 +50,13 @@ class TestPacket(unittest.TestCase):
             packet_2.compute_combined_checksum(content_cs))
 
         # packet checks pass
-        content_cs = MurmurChecksummer()
+        content_cs = MurmurHash()
         self.assertTrue(packet_1.check_integrity(content_cs))
         self.assertTrue(packet_2.check_integrity(content_cs))
 
         # a check of packet_2 w/o packet_1 fails
         #  (depends on packet_1 content)
-        content_cs = MurmurChecksummer()
+        content_cs = MurmurHash()
         self.assertFalse(packet_2.check_integrity(content_cs))
 
         # update packet_1 metadata
@@ -67,7 +67,7 @@ class TestPacket(unittest.TestCase):
         packet_1.update_meta_of_combined_checksum(old_meta_cs)
 
         # both packets still check out
-        content_cs = MurmurChecksummer()
+        content_cs = MurmurHash()
         self.assertTrue(packet_1.check_integrity(content_cs))
         self.assertTrue(packet_2.check_integrity(content_cs))
 
@@ -75,7 +75,7 @@ class TestPacket(unittest.TestCase):
         packet_1.set_value('test-valu3')
 
         # both packets now fail
-        content_cs = MurmurChecksummer()
+        content_cs = MurmurHash()
         self.assertFalse(packet_1.check_integrity(content_cs))
         self.assertFalse(packet_2.check_integrity(content_cs))
 
@@ -102,14 +102,14 @@ class TestPacket(unittest.TestCase):
         packet_3c.set_value('st-value')
 
         # all packets produce equal content checksums
-        cs1 = MurmurChecksummer()
+        cs1 = MurmurHash()
         packet_1.compute_content_checksum(cs1)
 
-        cs2 = MurmurChecksummer()
+        cs2 = MurmurHash()
         packet_2a.compute_content_checksum(cs2)
         packet_2b.compute_content_checksum(cs2)
 
-        cs3 = MurmurChecksummer()
+        cs3 = MurmurHash()
         packet_3a.compute_content_checksum(cs3)
         packet_3b.compute_content_checksum(cs3)
         packet_3c.compute_content_checksum(cs3)

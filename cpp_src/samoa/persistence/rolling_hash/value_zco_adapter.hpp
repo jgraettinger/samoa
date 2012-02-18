@@ -2,7 +2,7 @@
 #define SAMOA_PERSISTENCE_ROLLING_HASH_VALUE_ZCO_ADAPTER_HPP
 
 #include <google/protobuf/io/zero_copy_stream.h>
-#include "samoa/core/murmur_checksummer.hpp"
+#include "samoa/core/murmur_hash.hpp"
 #include "samoa/error.hpp"
 
 namespace samoa {
@@ -105,7 +105,7 @@ private:
     unsigned _next_offset;
     unsigned _total_bytes;
 
-    core::murmur_checksummer _new_content_cs;
+    core::murmur_hash _new_content_cs;
 };
 
 }
