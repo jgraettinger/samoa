@@ -163,6 +163,12 @@ message PersistedRecord
     optional uint64 expire_timestamp = 6;
 };
 
+message DigestProperties
+{
+    required fixed64 seed = 1;
+    required uint32 byte_length = 2;
+};
+
 // Union container type
 
 message SamoaRequest {

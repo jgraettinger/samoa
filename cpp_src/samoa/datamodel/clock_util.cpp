@@ -1,10 +1,8 @@
 
 #include "samoa/datamodel/clock_util.hpp"
 #include "samoa/core/server_time.hpp"
-#include "samoa/spinlock.hpp"
+#include "samoa/core/fwd.hpp"
 #include "samoa/error.hpp"
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/random_device.hpp>
 
 namespace samoa {
 namespace datamodel {
@@ -16,12 +14,7 @@ unsigned clock_util::clock_jitter_bound = 3600;
 
 uint64_t clock_util::generate_author_id()
 {
-    static boost::random::random_device random_device;
-    static boost::mt19937_64 generator(random_device());
-    static spinlock lock;
-
-    spinlock::guard guard(lock);
-    return generator();
+    return core::random::generate_uint64();
 }
 
 bool clock_util::validate(const spb::ClusterClock & cluster_clock)

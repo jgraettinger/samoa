@@ -5,7 +5,7 @@
 #include "samoa/server/table.hpp"
 #include "samoa/server/replication.hpp"
 #include "samoa/server/peer_set.hpp"
-#include "samoa/server/consistent_set.hpp"
+#include "samoa/server/digest.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
 #include "samoa/persistence/persister.hpp"
@@ -97,7 +97,7 @@ void replicate_handler::on_write(
         // assume that all peers have also been replicated to as well
         for(const partition::ptr_t & partition : rstate->get_peer_partitions())
         {
-            partition->get_consistent_set()->add(checksum);
+            partition->get_digest()->add(checksum);
         }
         rstate->flush_response();
     }

@@ -52,8 +52,8 @@ typedef boost::shared_ptr<remote_partition> remote_partition_ptr_t;
 class peer_discovery;
 typedef boost::shared_ptr<peer_discovery> peer_discovery_ptr_t;
 
-class consistent_set;
-typedef boost::shared_ptr<consistent_set> consistent_set_ptr_t;
+class digest;
+typedef boost::shared_ptr<digest> digest_ptr_t;
 
 }
 }

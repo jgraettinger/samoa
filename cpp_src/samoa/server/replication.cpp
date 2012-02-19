@@ -4,7 +4,7 @@
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/table.hpp"
-#include "samoa/server/consistent_set.hpp"
+#include "samoa/server/digest.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
@@ -127,7 +127,7 @@ void replication::on_peer_read_response(
             {
                 cs.process_bytes(buffer.begin(), buffer.size());
             }
-            partition->get_consistent_set()->add(cs.checksum());
+            partition->get_digest()->add(cs.checksum());
         }
 
         // is the response still needed?
@@ -205,7 +205,7 @@ void replication::replicated_write(
         callback();
     }
 
-    rstate->get_primary_partition()->get_consistent_set()->add(checksum);
+    rstate->get_primary_partition()->get_digest()->add(checksum);
 
     for(const partition::ptr_t & partition : rstate->get_peer_partitions())
     {
@@ -230,8 +230,8 @@ void replication::replicated_sync(
 
     for(const partition::ptr_t & partition : rstate->get_peer_partitions())
     {
-        if(partition->get_consistent_set()->test(checksum) ||
-           partition->get_consistent_set()->test(alternate_checksum))
+        if(partition->get_digest()->test(checksum) ||
+           partition->get_digest()->test(alternate_checksum))
         {
             LOG_DBG("key " << log::ascii_escape(rstate->get_key()) << \
                 " consistent on partition " << partition->get_uuid());
@@ -325,7 +325,7 @@ void replication::on_peer_write_response(
         {
             callback();
         }
-        partition->get_consistent_set()->add(checksum);
+        partition->get_digest()->add(checksum);
         iface.finish_response();
     }
 }

@@ -1,4 +1,3 @@
-
 #ifndef SAMOA_SERVER_PARTITION_HPP
 #define SAMOA_SERVER_PARTITION_HPP
 
@@ -49,8 +48,8 @@ public:
 
     bool position_in_responsible_range(uint64_t ring_position) const;
 
-    const consistent_set_ptr_t & get_consistent_set() const
-    { return _consistent_set; }
+    const digest_ptr_t & get_digest() const
+    { return _digest; }
 
     //! Merges a peer partition description into the local description
     /*!
@@ -75,7 +74,7 @@ protected:
     uint64_t   _consistent_range_begin;
     uint64_t   _consistent_range_end;
     uint64_t   _lamport_ts;
-    consistent_set_ptr_t _consistent_set;
+    digest_ptr_t _digest;
 };
 
 }
