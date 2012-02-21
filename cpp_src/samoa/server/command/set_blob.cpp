@@ -41,98 +41,72 @@ void set_blob_handler::handle(const request::state::ptr_t & rstate)
         rstate->get_peer_set()->forward_request(rstate);
         return;
     }
-
     rstate->load_replication_state();
 
-    spb::PersistedRecord & record = rstate->get_remote_record();
-
     // assume the key doesn't exist, and we're creating a new record
-    datamodel::blob::update(record,
+    datamodel::blob::update(rstate->get_remote_record(),
         rstate->get_primary_partition()->get_author_id(),
         rstate->get_request_data_blocks()[0]);
 
-    rstate->get_primary_partition()->get_persister()->put(
-        boost::bind(&set_blob_handler::on_put,
-            shared_from_this(), _1, _2, _3, rstate),
-        boost::bind(&set_blob_handler::on_merge,
-            shared_from_this(), _1, _2, rstate),
-        rstate->get_key(),
-        rstate->get_remote_record(),
-        rstate->get_local_record());
-}
-
-datamodel::merge_result set_blob_handler::on_merge(
-    spb::PersistedRecord & local_record,
-    const spb::PersistedRecord &,
-    const request::state::ptr_t & rstate)
-{
-    datamodel::merge_result result;
-    result.local_was_updated = false;
-    result.remote_is_stale = false;
-
-    // if request included a cluster clock, validate
-    //  equality against the stored cluster clock
-    if(rstate->get_samoa_request().has_cluster_clock())
+    auto on_merge = [rstate](
+        spb::PersistedRecord & local_record,
+        const spb::PersistedRecord &) -> datamodel::merge_result
     {
-        if(datamodel::clock_util::compare(
-                local_record.cluster_clock(),
-                rstate->get_samoa_request().cluster_clock(),
-                rstate->get_table()->get_consistency_horizon()
-            ) != datamodel::clock_util::CLOCKS_EQUAL)
+        datamodel::merge_result result;
+
+        // if request included a cluster clock, validate
+        //  equality against the stored cluster clock
+        if(rstate->get_samoa_request().has_cluster_clock())
         {
-            // clock doesn't match: abort
-            return result;
+            if(datamodel::clock_util::compare(
+                    local_record.cluster_clock(),
+                    rstate->get_samoa_request().cluster_clock(),
+                    rstate->get_table()->get_consistency_horizon()
+                ) != datamodel::clock_util::CLOCKS_EQUAL)
+            {
+                // clock doesn't match: abort
+                return datamodel::merge_result(false, false);
+            }
         }
-    }
 
-    // clocks match, or the request doesn't have a clock (implicit match)
-    //   update the record to 'repair' any divergence with the new value
+        // clocks match, or the request doesn't have a clock (implicit match)
+        //   update the record to 'repair' any divergence with the new value
 
-    datamodel::blob::update(local_record,
-        rstate->get_primary_partition()->get_author_id(),
-        rstate->get_request_data_blocks()[0]);
+        datamodel::blob::update(local_record,
+            rstate->get_primary_partition()->get_author_id(),
+            rstate->get_request_data_blocks()[0]);
 
-    datamodel::blob::prune(local_record,
-        rstate->get_table()->get_consistency_horizon());
+        datamodel::blob::prune(local_record,
+            rstate->get_table()->get_consistency_horizon());
 
-    result.local_was_updated = true;
-    result.remote_is_stale = true;
-    return result;
-}
+        return datamodel::merge_result(true, true);
+    };
 
-void set_blob_handler::on_put(
-    const boost::system::error_code & ec,
-    const datamodel::merge_result & merge_result,
-    const core::murmur_checksum_t & checksum,
-    const request::state::ptr_t & rstate)
-{
-    if(ec)
+    auto on_write = [rstate](
+        const boost::system::error_code & ec,
+        const datamodel::merge_result & merge_result)
     {
-        rstate->send_error(500, ec);
-        return;
-    }
+        if(ec)
+        {
+            rstate->send_error(500, ec);
+            return;
+        }
 
-    if(!merge_result.local_was_updated)
-    {
-        spb::SamoaResponse & response = rstate->get_samoa_response();
+        if(!merge_result.local_was_updated)
+        {
+            rstate->get_samoa_response().mutable_cluster_clock()->CopyFrom(
+                rstate->get_local_record().cluster_clock());
 
-        response.set_success(false);
-        response.mutable_cluster_clock()->CopyFrom(
-            rstate->get_local_record().cluster_clock());
-
-        datamodel::blob::value(rstate->get_local_record(),
-            [&](const std::string & value)
-            { rstate->add_response_data_block(begin(value), end(value)); });
-
+            datamodel::blob::value(rstate->get_local_record(),
+                [&](const std::string & value)
+                { rstate->add_response_data_block(begin(value), end(value)); }
+            );
+        }
         rstate->flush_response();
-        return;
-    }
+    };
 
-    // local write was a success
-    rstate->get_samoa_response().set_success(true);
-
-    // replicate to all peers
-    replication::replicated_write(rstate, checksum);
+    rstate->get_primary_partition()->write(
+        on_write, on_merge, rstate, true);
 }
 
 }

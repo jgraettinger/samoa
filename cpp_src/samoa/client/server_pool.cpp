@@ -202,10 +202,8 @@ void server_pool::on_connect(const boost::system::error_code & ec,
         for(callback_list_t::iterator it = callbacks.begin();
             it != callbacks.end(); ++it)
         {
-            server_request_interface null_iface = \
-                server_request_interface::null_instance();
-
-            (*it)(ec, null_iface);
+            server_request_interface null;
+            (*it)(ec, null);
         }
     }
 }

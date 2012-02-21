@@ -5,7 +5,6 @@
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/local_partition.hpp"
-#include "samoa/server/replication.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
@@ -21,8 +20,6 @@ namespace server {
 namespace command {
 
 namespace spb = samoa::core::protobuf;
-using std::begin;
-using std::end;
 
 void update_counter_handler::handle(const request::state::ptr_t & rstate)
 {
@@ -41,67 +38,50 @@ void update_counter_handler::handle(const request::state::ptr_t & rstate)
         rstate->get_peer_set()->forward_request(rstate);
         return;
     }
-
     rstate->load_replication_state();
 
-    spb::PersistedRecord & record = rstate->get_remote_record();
-
     // assume the key doesn't exist, and we're creating a new record
-    datamodel::counter::update(record,
+    datamodel::counter::update(rstate->get_remote_record(),
         rstate->get_primary_partition()->get_author_id(),
         rstate->get_samoa_request().counter_update());
 
-    rstate->get_primary_partition()->get_persister()->put(
-        boost::bind(&update_counter_handler::on_put,
-            shared_from_this(), _1, _2, _3, rstate),
-        boost::bind(&update_counter_handler::on_merge,
-            shared_from_this(), _1, _2, rstate),
-        rstate->get_key(),
-        rstate->get_remote_record(),
-        rstate->get_local_record());
-}
-
-datamodel::merge_result update_counter_handler::on_merge(
-    spb::PersistedRecord & local_record,
-    const spb::PersistedRecord &,
-    const request::state::ptr_t & rstate)
-{
-    datamodel::counter::update(local_record,
-        rstate->get_primary_partition()->get_author_id(),
-        rstate->get_samoa_request().counter_update());
-
-    datamodel::counter::prune(local_record,
-        rstate->get_table()->get_consistency_horizon());
-
-    datamodel::merge_result result;
-    result.local_was_updated = true;
-    result.remote_is_stale = false;
-
-    return result;
-}
-
-void update_counter_handler::on_put(
-    const boost::system::error_code & ec,
-    const datamodel::merge_result & merge_result,
-    const core::murmur_checksum_t & checksum,
-    const request::state::ptr_t & rstate)
-{
-    if(ec)
+    auto on_merge = [rstate](
+        spb::PersistedRecord & local_record,
+        const spb::PersistedRecord &) -> datamodel::merge_result
     {
-        rstate->send_error(500, ec);
-        return;
-    }
+        // the key already exists; update and prune the present counter
+        datamodel::counter::update(local_record,
+            rstate->get_primary_partition()->get_author_id(),
+            rstate->get_samoa_request().counter_update());
 
-    SAMOA_ASSERT(merge_result.local_was_updated);
+        datamodel::counter::prune(local_record,
+            rstate->get_table()->get_consistency_horizon());
 
-    spb::SamoaResponse & response = rstate->get_samoa_response();
+        return datamodel::merge_result(true, true);
+    };
 
-    response.set_success(true);
-    response.set_counter_value(
-        datamodel::counter::value(rstate->get_local_record()));
+    auto on_write = [rstate](
+        const boost::system::error_code & ec,
+        const datamodel::merge_result & merge_result)
+    {
+        if(ec)
+        {
+            rstate->send_error(500, ec);
+            return;
+        }
 
-    // replicate the update to peers
-    replication::replicated_write(rstate, checksum);
+        SAMOA_ASSERT(merge_result.local_was_updated);
+
+        // return updated value to caller
+        spb::SamoaResponse & response = rstate->get_samoa_response();
+        response.set_counter_value(
+            datamodel::counter::value(rstate->get_local_record()));
+
+        rstate->flush_response();
+    };
+
+    rstate->get_primary_partition()->write(
+        on_write, on_merge, rstate, true);
 }
 
 }

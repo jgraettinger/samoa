@@ -35,6 +35,9 @@ class server_request_interface
 {
 public:
 
+    /// Constructs an unusable (null) instance
+    server_request_interface();
+
     /*!
      * \brief Request to be written to the server.
      * This object is mutable and exclusive to the current holder
@@ -75,11 +78,6 @@ public:
      */
     void flush_request(const server_response_callback_t &);
 
-    /*!
-     *  \brief Returns an unusable (semantically null) instance
-     */
-    static server_request_interface null_instance();
-
 private:
 
     // only server may construct, though anybody may copy
@@ -92,6 +90,9 @@ private:
 class server_response_interface
 {
 public:
+
+    /// Constructs an unusable (null) instance
+    server_response_interface();
 
     /*!
      * \brief Response received from server

@@ -25,11 +25,6 @@ public:
     { }
 
     void handle(const request::state_ptr_t &);
-
-private:
-
-    void on_repaired_read(const boost::system::error_code & ec,
-        const request::state_ptr_t &);
 };
 
 }

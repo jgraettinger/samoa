@@ -33,16 +33,6 @@ public:
     { }
 
     void handle(const request::state_ptr_t &);
-
-private:
-
-    datamodel::merge_result on_merge(spb::PersistedRecord &,
-        const spb::PersistedRecord &, const request::state_ptr_t &);
-
-    void on_put(const boost::system::error_code &,
-        const datamodel::merge_result &,
-        const core::murmur_checksum_t &,
-        const request::state_ptr_t &);
 };
 
 }

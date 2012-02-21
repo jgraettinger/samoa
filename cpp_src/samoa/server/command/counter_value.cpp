@@ -33,34 +33,23 @@ void counter_value_handler::handle(const request::state::ptr_t & rstate)
         rstate->get_peer_set()->forward_request(rstate);
         return;
     }
-
     rstate->load_replication_state();
 
-    replication::repaired_read(
-        boost::bind(&counter_value_handler::on_repaired_read,
-            shared_from_this(), _1, rstate),
-        rstate);
-}
-
-void counter_value_handler::on_repaired_read(
-    const boost::system::error_code & ec,
-    const request::state::ptr_t & rstate)
-{
-    if(ec)
+    auto on_read = [rstate](const boost::system::error_code & ec, bool)
     {
-        rstate->send_error(504, ec);
-        return;
-    }
+        if(ec)
+        {
+            rstate->send_error(504, ec);
+            return;
+        }
 
-    spb::SamoaResponse & response = rstate->get_samoa_response();
+        rstate->get_samoa_response().set_counter_value(
+            datamodel::counter::value(rstate->get_local_record()));
 
-    response.set_replication_success(rstate->get_peer_success_count());
-    response.set_replication_failure(rstate->get_peer_failure_count());
+        rstate->flush_response();
+    };
 
-    response.set_counter_value(
-        datamodel::counter::value(rstate->get_local_record()));
-
-    rstate->flush_response();
+    rstate->get_primary_partition()->read(on_read, rstate);
 }
 
 }

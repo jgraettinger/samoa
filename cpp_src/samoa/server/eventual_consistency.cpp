@@ -4,6 +4,7 @@
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/local_partition.hpp"
+#include "samoa/server/digest.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
@@ -51,7 +52,37 @@ void eventual_consistency::upkeep(
     try {
         rstate->load_route_state();
 
-        replication::replicated_sync(rstate, new_checksum, old_checksum);
+        auto on_peer_request = [=](
+            samoa::client::server_request_interface & iface,
+            const partition::ptr_t & partition) -> bool
+        {
+            if( partition->get_digest()->test(old_checksum) ||
+                partition->get_digest()->test(new_checksum))
+            {
+                LOG_DBG("key " << log::ascii_escape(rstate->get_key()) << \
+                    " consistent on partition " << partition->get_uuid());
+                return false;
+            }
+
+            LOG_DBG("key " << log::ascii_escape(rstate->get_key()) << \
+                " NOT consistent on partition " << partition->get_uuid());
+
+            // serialize local record to the peer
+            core::protobuf::zero_copy_output_adapter zco_adapter;
+            SAMOA_ASSERT(rstate->get_local_record(
+                ).SerializeToZeroCopyStream(&zco_adapter));
+            iface.add_data_block(zco_adapter.output_regions());
+
+            return true;
+        };
+
+        auto on_peer_response = [](
+            const boost::system::error_code &,
+            samoa::client::server_response_interface &,
+            const partition::ptr_t &)
+        { };
+
+        replication::replicate(on_peer_request, on_peer_response, rstate);
     }
     catch(const request::state_exception & e)
     {

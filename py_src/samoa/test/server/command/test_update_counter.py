@@ -38,7 +38,6 @@ class TestUpdateCounter(unittest.TestCase, WriteLikeCommandTestMixin):
     # validation
 
     def _validate_response(self, response, server_name):
-        self.assertTrue(response.get_message().success)
         value = response.get_message().counter_value
 
         # this write is always included

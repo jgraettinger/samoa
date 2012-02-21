@@ -28,18 +28,6 @@ public:
     { }
 
     void handle(const request::state_ptr_t &);
-
-protected:
-
-    void on_write(const boost::system::error_code &,
-        const datamodel::merge_result &,
-        const core::murmur_checksum_t &,
-        const request::state_ptr_t &);
-
-    void on_read(const boost::system::error_code &,
-        bool, const request::state_ptr_t &);
-
-    void on_client_response(const request::state_ptr_t &);
 };
 
 }

@@ -74,6 +74,9 @@ server::server(const core::io_service_ptr_t & io_srv,
 ///////////////////////////////////////////////////////////////////////////////
 //  server::request_interface
 
+server_request_interface::server_request_interface()
+{ }
+
 server_request_interface::server_request_interface(const server::ptr_t & p)
  : _srv(p)
 {
@@ -160,11 +163,11 @@ void server_request_interface::abort_request()
     _srv.reset();
 }
 
-server_request_interface server_request_interface::null_instance()
-{ return server_request_interface((server_ptr_t())); }
-
 ///////////////////////////////////////////////////////////////////////////////
 //  server::response_interface
+
+server_response_interface::server_response_interface()
+{ }
 
 server_response_interface::server_response_interface(const server::ptr_t & p)
  : _srv(p)

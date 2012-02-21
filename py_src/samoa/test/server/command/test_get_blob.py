@@ -38,17 +38,13 @@ class TestGetBlob(unittest.TestCase, ReadLikeCommandTestMixin):
 
     def _validate_response_hit(self, response):
 
-        samoa_response = response.get_message()
         self.assertItemsEqual(response.get_response_data_blocks(),
             self.expected.blob_value)
 
         self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
-            self.expected.cluster_clock, samoa_response.cluster_clock))
+            self.expected.cluster_clock, response.get_message().cluster_clock))
 
     def _validate_response_miss(self, response):
-
-        samoa_response = response.get_message()
-        self.assertFalse(samoa_response.success)
 
         self.assertItemsEqual(response.get_response_data_blocks(), [])
 
@@ -56,5 +52,5 @@ class TestGetBlob(unittest.TestCase, ReadLikeCommandTestMixin):
         expected_clock.set_clock_is_pruned(False)
 
         self.assertEquals(ClockAncestry.CLOCKS_EQUAL, ClockUtil.compare(
-            expected_clock, samoa_response.cluster_clock))
+            expected_clock, response.get_message().cluster_clock))
 

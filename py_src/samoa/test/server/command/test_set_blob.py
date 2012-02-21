@@ -42,7 +42,7 @@ class TestSetBlob(unittest.TestCase, WriteLikeCommandTestMixin):
     # validation
 
     def _validate_response(self, response, server_name):
-        self.assertTrue(response.get_message().success)
+        self.assertFalse(response.get_message().has_cluster_clock())
         yield
 
     def _validate_persisters(self, persisters, expected_divergence):
@@ -99,7 +99,7 @@ class TestSetBlob(unittest.TestCase, WriteLikeCommandTestMixin):
             request = yield self._make_request('main')
             response = yield request.flush_request()
 
-            self.assertFalse(response.get_message().success)
+            self.assertTrue(response.get_message().has_cluster_clock())
 
             # current value and clock are sent with response
             self.assertEquals(response.get_response_data_blocks()[0], 'preset')

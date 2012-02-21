@@ -210,8 +210,6 @@ message SamoaResponse {
 
     optional Error error = 4;
 
-    optional bool success = 5;
-
     optional bytes table_uuid = 6;
     optional bytes partition_uuid = 7;
 

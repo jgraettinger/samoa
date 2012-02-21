@@ -1,9 +1,17 @@
 #include "samoa/server/local_partition.hpp"
+#include "samoa/server/remote_partition.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/eventual_consistency.hpp"
+#include "samoa/server/digest.hpp"
+#include "samoa/server/replication.hpp"
+#include "samoa/client/server.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/datamodel/clock_util.hpp"
+#include "samoa/request/request_state.hpp"
+#include "samoa/core/fwd.hpp"
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
@@ -80,6 +88,235 @@ void local_partition::initialize(
             boost::make_shared<eventual_consistency>(
                 context, table->get_uuid(), get_uuid()),
             _1, _2, _3));
+}
+
+void local_partition::write(
+    const local_partition::write_callback_t & write_callback,
+    const datamodel::merge_func_t & merge_callback,
+    const request::state::ptr_t & rstate,
+    bool is_novel)
+{
+    _persister->put(
+        boost::bind(&local_partition::on_local_write,
+            shared_from_this(), _1, _2, _3, write_callback, rstate, is_novel),
+        datamodel::merge_func_t(merge_callback),
+        rstate->get_key(),
+        rstate->get_remote_record(),
+        rstate->get_local_record());
+}
+
+void local_partition::on_local_write(
+    const boost::system::error_code & ec,
+    const datamodel::merge_result & merge_result,
+    const core::murmur_checksum_t & checksum,
+    const local_partition::write_callback_t & client_callback,
+    const request::state_ptr_t & rstate,
+    bool is_novel_write)
+{
+    auto callback = [=]()
+    {
+        // update response with quorum success/failure
+        rstate->get_samoa_response().set_replication_success(
+            rstate->get_peer_success_count());
+        rstate->get_samoa_response().set_replication_failure(
+            rstate->get_peer_failure_count());
+
+        client_callback(ec, merge_result);
+    };
+
+    if(ec || (is_novel_write && !merge_result.local_was_updated))
+    {
+        // an error occurred, or novel write was aborted
+        callback();
+        return;
+    }
+
+    get_digest()->add(checksum);
+
+    // count local write against the quorum
+    if(rstate->peer_replication_success())
+    {
+        callback();
+    }
+
+    if( rstate->is_replication_finished() && \
+        !is_novel_write && \
+        !merge_result.remote_is_stale)
+    {
+        // quorum is met (size of 1), and this is an undiverged replication
+        //   we don't need to fan out, and we assume all remote peers have
+        //   been replicated to as well
+
+        for(const partition::ptr_t & partition : rstate->get_peer_partitions())
+        {
+            if(dynamic_cast<remote_partition*>(partition.get()))
+            {
+                partition->get_digest()->add(checksum);
+            }
+        }
+        return;
+    }
+
+    auto on_peer_request = [=](
+        samoa::client::server_request_interface & iface,
+        const partition::ptr_t &) -> bool
+    {
+        // serialize local record to the peer
+        core::protobuf::zero_copy_output_adapter zco_adapter;
+        SAMOA_ASSERT(rstate->get_local_record(
+            ).SerializeToZeroCopyStream(&zco_adapter));
+        iface.add_data_block(zco_adapter.output_regions());
+
+        // request should still be made
+        return true;
+    };
+
+    auto on_peer_response = [=](
+        const boost::system::error_code & ec,
+        samoa::client::server_response_interface &,
+        const partition::ptr_t & partition)
+    {
+        if(ec)
+        {
+            if(rstate->peer_replication_failure())
+            {
+                // quorum has failed
+                callback();
+            }
+        }
+        else
+        {
+            // mark successful replication to remote peers
+            if(dynamic_cast<remote_partition*>(partition.get()))
+            {
+                partition->get_digest()->add(checksum);
+            }
+
+            if(rstate->peer_replication_success())
+            {
+                // quorum has passed
+                callback();
+            }
+        }
+    };
+
+    replication::replicate(on_peer_request, on_peer_response, rstate);
+}
+
+void local_partition::read(
+    const local_partition::read_callback_t & client_callback,
+    const request::state_ptr_t & rstate)
+{
+    auto callback = [=]()
+    {
+        // update response with quorum success/failure
+        rstate->get_samoa_response().set_replication_success(
+            rstate->get_peer_success_count());
+        rstate->get_samoa_response().set_replication_failure(
+            rstate->get_peer_failure_count());
+
+        if(rstate->had_peer_read_hit())
+        {
+            // speculatively write the merged remote record; as a side-effect,
+            //  local-record will be populated with the merged result
+            get_persister()->put(
+                boost::bind(client_callback, _1, true),
+                datamodel::merge_func_t(
+                    rstate->get_table()->get_consistent_merge()),
+                rstate->get_key(),
+                rstate->get_remote_record(),
+                rstate->get_local_record());
+        }
+        else
+        {
+            // no populated remote record; fall back on simple persister read
+            get_persister()->get(
+                boost::bind(client_callback, boost::system::error_code(), _1),
+                rstate->get_key(),
+                rstate->get_local_record());
+        }
+    };
+
+    // assume the local read will succeed
+    if(rstate->peer_replication_success())
+    {
+        callback();
+        return;
+    }
+
+    auto on_peer_request = [=](
+        samoa::client::server_request_interface &,
+        const partition::ptr_t &) -> bool
+    {
+        // if quorum is already met, abort the request
+        return !rstate->is_replication_finished();
+    };
+
+    auto on_peer_response = [=](
+        const boost::system::error_code & ec,
+        samoa::client::server_response_interface & iface,
+        const partition::ptr_t & partition)
+    {
+        if(ec)
+        {
+            if(rstate->peer_replication_failure())
+            {
+                // quorum has failed
+                callback();
+            }
+            return;
+        }
+
+        // is this a non-empty response?
+        if(!iface.get_response_data_blocks().empty())
+        {
+            SAMOA_ASSERT(iface.get_response_data_blocks().size() == 1);
+            const core::buffer_regions_t & regions = \
+                iface.get_response_data_blocks()[0];
+
+            // is a remote partition?
+            if(dynamic_cast<remote_partition*>(partition.get()))
+            {
+                // checksum response content, and add to partition digest
+                core::murmur_hash cs;
+
+                cs.process_bytes(rstate->get_key().data(),
+                    rstate->get_key().size());
+
+                for(const core::buffer_region & buffer : regions)
+                {
+                    cs.process_bytes(buffer.begin(), buffer.size());
+                }
+                partition->get_digest()->add(cs.checksum());
+            }
+
+            // is the response still needed?
+            if(!rstate->is_replication_finished())
+            {
+                // parse into local-record (used here as scratch space)
+                core::protobuf::zero_copy_input_adapter zci_adapter(
+                    iface.get_response_data_blocks()[0]);
+
+                SAMOA_ASSERT(rstate->get_local_record(
+                    ).ParseFromZeroCopyStream(&zci_adapter));
+
+                // merge local-record into remote-record
+                rstate->get_table()->get_consistent_merge()(
+                    rstate->get_remote_record(), rstate->get_local_record());
+
+                // mark that a peer read hit
+                rstate->set_peer_read_hit();
+            }
+        }
+
+        if(rstate->peer_replication_success())
+        {
+            // quorum has passed
+            callback();
+        }
+    };
+
+    replication::replicate(on_peer_request, on_peer_response, rstate);
 }
 
 }

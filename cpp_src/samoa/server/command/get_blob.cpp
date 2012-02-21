@@ -33,38 +33,27 @@ void get_blob_handler::handle(const request::state::ptr_t & rstate)
         rstate->get_peer_set()->forward_request(rstate);
         return;
     }
-
     rstate->load_replication_state();
 
-    replication::repaired_read(
-        boost::bind(&get_blob_handler::on_repaired_read,
-            shared_from_this(), _1, rstate),
-        rstate);
-}
-
-void get_blob_handler::on_repaired_read(
-    const boost::system::error_code & ec,
-    const request::state::ptr_t & rstate)
-{
-    if(ec)
+    auto on_read = [rstate](const boost::system::error_code & ec, bool)
     {
-        rstate->send_error(504, ec);
-        return;
-    }
+        if(ec)
+        {
+            rstate->send_error(504, ec);
+            return;
+        }
 
-    spb::SamoaResponse & response = rstate->get_samoa_response();
+        rstate->get_samoa_response().mutable_cluster_clock()->CopyFrom(
+            rstate->get_local_record().cluster_clock());
 
-    response.set_replication_success(rstate->get_peer_success_count());
-    response.set_replication_failure(rstate->get_peer_failure_count());
+        datamodel::blob::value(rstate->get_local_record(),
+            [&](const std::string & value)
+            { rstate->add_response_data_block(begin(value), end(value)); });
 
-    response.mutable_cluster_clock()->CopyFrom(
-        rstate->get_local_record().cluster_clock());
+        rstate->flush_response();
+    };
 
-    datamodel::blob::value(rstate->get_local_record(),
-        [&](const std::string & value)
-        { rstate->add_response_data_block(begin(value), end(value)); });
-
-    rstate->flush_response();
+    rstate->get_primary_partition()->read(on_read, rstate);
 }
 
 }
