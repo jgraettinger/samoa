@@ -20,7 +20,9 @@ using namespace std;
 
 persister::persister()
  : _proactor(core::proactor::get_proactor()),
-   _strand(*_proactor->concurrent_io_service())
+   _strand(*_proactor->concurrent_io_service()),
+   _total_inner_compaction_bytes(0),
+   _total_leaf_compaction_bytes(0)
 {}
 
 persister::~persister()
@@ -33,6 +35,9 @@ persister::~persister()
 
 const rolling_hash::hash_ring & persister::layer(size_t index) const
 { return *_layers.at(index); }
+
+const rolling_hash::hash_ring & persister::leaf_layer() const
+{ return _layers.back(); }
 
 void persister::add_heap_hash_ring(uint32_t storage_size, uint32_t index_size)
 {
@@ -529,6 +534,7 @@ uint32_t persister::inner_compaction(size_t layer_ind,
         	if(it->packet == head)
         		it->packet = layer.head();
         }
+        _total_inner_compaction_bytes += compacted_bytes;
         return compacted_bytes;
     }
 
@@ -589,6 +595,7 @@ uint32_t persister::inner_compaction(size_t layer_ind,
             it->packet = next_head;
         }
     }
+    _total_inner_compaction_bytes += compacted_bytes;
     return compacted_bytes;
 }
 
@@ -690,6 +697,7 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
         		it->packet = layer.head();
         }
     }
+    _total_leaf_compaction_bytes += compacted_bytes;
     return compacted_bytes;
 }
 

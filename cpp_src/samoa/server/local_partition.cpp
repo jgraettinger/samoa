@@ -42,6 +42,8 @@ local_partition::local_partition(
             //  previously written clock
             _author_id = current->get_author_id();
         }
+
+        _digest_compaction_threshold = current->_digest_compaction_threshold;
     }
     else
     {
@@ -64,6 +66,9 @@ local_partition::local_partition(
                     it->storage_size(), it->index_size());
             }
         }
+
+        // threshold is size of leaf persister layer
+        _digest_compaction_threshold = _persister->leaf_layer().region_size();
     }
 }
 
@@ -113,7 +118,7 @@ void local_partition::on_local_write(
     const request::state_ptr_t & rstate,
     bool is_novel_write)
 {
-    auto callback = [=]()
+    auto callback = [client_callback, rstate, merge_result]()
     {
         // update response with quorum success/failure
         rstate->get_samoa_response().set_replication_success(
@@ -121,13 +126,13 @@ void local_partition::on_local_write(
         rstate->get_samoa_response().set_replication_failure(
             rstate->get_peer_failure_count());
 
-        client_callback(ec, merge_result);
+        client_callback(boost::system::error_code(), merge_result);
     };
 
     if(ec || (is_novel_write && !merge_result.local_was_updated))
     {
         // an error occurred, or novel write was aborted
-        callback();
+        client_callback(ec, merge_result);
         return;
     }
 
@@ -157,7 +162,7 @@ void local_partition::on_local_write(
         return;
     }
 
-    auto on_peer_request = [=](
+    auto on_peer_request = [rstate](
         samoa::client::server_request_interface & iface,
         const partition::ptr_t &) -> bool
     {
@@ -171,7 +176,7 @@ void local_partition::on_local_write(
         return true;
     };
 
-    auto on_peer_response = [=](
+    auto on_peer_response = [callback, rstate, checksum](
         const boost::system::error_code & ec,
         samoa::client::server_response_interface &,
         const partition::ptr_t & partition)
@@ -207,7 +212,9 @@ void local_partition::read(
     const local_partition::read_callback_t & client_callback,
     const request::state_ptr_t & rstate)
 {
-    auto callback = [=]()
+    local_partition::ptr_t self = shared_from_this();
+
+    auto callback = [self, client_callback, rstate]()
     {
         // update response with quorum success/failure
         rstate->get_samoa_response().set_replication_success(
@@ -219,7 +226,7 @@ void local_partition::read(
         {
             // speculatively write the merged remote record; as a side-effect,
             //  local-record will be populated with the merged result
-            get_persister()->put(
+            self->get_persister()->put(
                 boost::bind(client_callback, _1, true),
                 datamodel::merge_func_t(
                     rstate->get_table()->get_consistent_merge()),
@@ -230,7 +237,7 @@ void local_partition::read(
         else
         {
             // no populated remote record; fall back on simple persister read
-            get_persister()->get(
+            self->get_persister()->get(
                 boost::bind(client_callback, boost::system::error_code(), _1),
                 rstate->get_key(),
                 rstate->get_local_record());
@@ -244,7 +251,7 @@ void local_partition::read(
         return;
     }
 
-    auto on_peer_request = [=](
+    auto on_peer_request = [rstate](
         samoa::client::server_request_interface &,
         const partition::ptr_t &) -> bool
     {
@@ -252,7 +259,7 @@ void local_partition::read(
         return !rstate->is_replication_finished();
     };
 
-    auto on_peer_response = [=](
+    auto on_peer_response = [callback, rstate](
         const boost::system::error_code & ec,
         samoa::client::server_response_interface & iface,
         const partition::ptr_t & partition)
@@ -317,6 +324,19 @@ void local_partition::read(
     };
 
     replication::replicate(on_peer_request, on_peer_response, rstate);
+}
+
+void local_partition::poll_digest_gossip(const context::ptr_t & context,
+    const table::ptr_t & table)
+{
+    if(_persister->total_leaf_compaction_bytes() < _digest_gossip_threshold)
+    {
+        return;
+    }
+
+
+
+
 }
 
 }

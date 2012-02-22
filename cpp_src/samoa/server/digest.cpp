@@ -12,14 +12,15 @@ std::string digest::_path_base;
 uint32_t digest::_default_byte_length;
 
 digest::digest(const core::uuid & partition_uuid)
+ :  _partition_uuid(partition_uuid)
 {
     // open or create the digest properties
     {
         std::stringstream spath;
-        spath << digest::_path_base << partition_uuid << "_digest.properties";
+        spath << digest::_path_base << _partition_uuid << "_digest.properties";
         std::string path = spath.str();
 
-        LOG_DBG("Digest " << partition_uuid << " properties: " << path);
+        LOG_DBG("Digest " << _partition_uuid << " properties: " << path);
 
         std::fstream fs(path, std::ios_base::in);
 
@@ -29,21 +30,21 @@ digest::digest(const core::uuid & partition_uuid)
             _properties.set_byte_length(digest::_default_byte_length);
 
             fs.open(path, std::ios_base::out);
-            SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
+            SAMOA_ABORT_IF(!_properties.SerializeToOstream(&fs));
         }
         else
         {
-            SAMOA_ASSERT(_properties.ParseFromIstream(&fs));
+            SAMOA_ABORT_IF(!_properties.ParseFromIstream(&fs));
         }
     }
 
     // memory-map the digest bloom filter
     {
         std::stringstream spath;
-        spath << digest::_path_base << partition_uuid << "_digest.filter";
+        spath << digest::_path_base << _partition_uuid << "_digest.filter";
         std::string path = spath.str();
 
-        LOG_DBG("Digest " << partition_uuid << " filter: " << path);
+        LOG_DBG("Digest " << _partition_uuid << " filter: " << path);
 
         _memory_map.reset(new core::memory_map(
             path, _properties.byte_length()));
@@ -55,6 +56,21 @@ digest::digest(const core::uuid & partition_uuid)
                 _memory_map->get_region_size());
         }
     }
+}
+
+void digest::clear()
+{
+    std::stringstream spath;
+    spath << digest::_path_base << _partition_uuid << "_digest.properties";
+    std::string path = spath.str();
+
+    _properties.set_seed(core::random::generate_uint64());
+
+    std::fstream fs(path, std::ios_base::out);
+    SAMOA_ABORT_IF(!_properties.SerializeToOstream(&fs));
+
+    memset(_memory_map->get_region_address(), 0,
+        _memory_map->get_region_size());
 }
 
 void digest::add(const core::murmur_checksum_t & checksum)

@@ -1,0 +1,13 @@
+
+digest => shared_ptr
+
+local_digest
+    - random file name
+    - deletes itself on dtor
+
+remote_digest
+    - known (partition-conditioned) file name
+
+how do we handle digests where there are multiple local partitions?
+ - local_partition has local_digest & remote_digest?
+

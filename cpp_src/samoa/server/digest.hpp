@@ -23,6 +23,10 @@ public:
 
     bool test(const core::murmur_checksum_t &) const;
 
+    void clear();
+
+    // Static methods
+
     static const std::string & get_path_base()
     { return _path_base; }
 
@@ -38,6 +42,7 @@ private:
     static std::string _path_base;
     static uint32_t _default_byte_length;
 
+    core::uuid _partition_uuid;
     spb::DigestProperties _properties;
     core::memory_map_ptr_t _memory_map;
 };

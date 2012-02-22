@@ -58,6 +58,8 @@ public:
 
     const rolling_hash::hash_ring & layer(size_t index) const;
 
+    const rolling_hash::hash_ring & leaf_layer() const;
+
     void add_heap_hash_ring(uint32_t storage_size, uint32_t index_size);
 
     void add_mapped_hash_ring(
@@ -100,6 +102,12 @@ public:
     { return 3.0; }
 
     void bottom_up_compaction(bottom_up_compaction_callback_t &&);
+
+    uint64_t total_inner_compaction_bytes() const
+    { return _total_inner_compaction_bytes; }
+
+    uint64_t total_leaf_compaction_bytes() const
+    { return _total_leaf_compaction_bytes; }
 
 private:
 
@@ -160,6 +168,9 @@ private:
 
     spinlock _upkeep_lock;
     upkeep_callback_t _upkeep;
+
+    uint64_t _total_inner_compaction_bytes;
+    uint64_t _total_leaf_compaction_bytes;
 };
 
 }

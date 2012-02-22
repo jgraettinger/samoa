@@ -67,6 +67,8 @@ public:
         const read_callback_t &,
         const request::state_ptr_t &);
 
+    void poll_digest_gossip(const context_ptr_t &, const table_ptr_t &);
+
 private:
 
     void on_local_write(
@@ -77,8 +79,10 @@ private:
         const request::state_ptr_t &,
         bool);
 
-    uint64_t _author_id;
     persistence::persister_ptr_t _persister;
+
+    uint64_t _author_id;
+    uint64_t _digest_gossip_threshold;
 };
 
 }
