@@ -1,13 +1,16 @@
 
-digest => shared_ptr
+finish local_partition digest gossip implementation
 
-local_digest
-    - random file name
-    - deletes itself on dtor
+test_local_partition test:
+    - fixture with main and peer
+    - main writes a record
+    - performs enough compactions to reach the gossip threshold
+    - writes additional records
+    - pre-condition: peer digest knows of original records only
+    - poll_digest_gossip
+    - validation step: peer digest of local partition knows of all records
 
-remote_digest
-    - known (partition-conditioned) file name
-
-how do we handle digests where there are multiple local partitions?
- - local_partition has local_digest & remote_digest?
+update eventual-consistency tests to check for digest update
+update replication tests to check for digest update
+    - move to local_partition tests?
 

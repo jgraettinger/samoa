@@ -1,4 +1,4 @@
-
+import os
 import logging
 
 from samoa.module import Module
@@ -15,9 +15,12 @@ class TestModule(Module):
     def configure(self, binder):
         self.cluster_state = self.fixture.state
 
+        digest_directory = "/tmp/samoa_test_%s" % \
+            self.fixture.server_uuid.to_hex()
+        os.makedirs(digest_directory)
+
         Digest.set_default_byte_length(1024)
-        Digest.set_path_base("/tmp/samoa_test_%s_" % \
-            self.fixture.server_uuid.to_hex())
+        Digest.set_directory(digest_directory)
 
         binder = Module.configure(self, binder)
 

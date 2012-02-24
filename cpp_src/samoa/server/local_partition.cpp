@@ -3,7 +3,7 @@
 #include "samoa/server/context.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/eventual_consistency.hpp"
-#include "samoa/server/digest.hpp"
+#include "samoa/server/local_digest.hpp"
 #include "samoa/server/replication.hpp"
 #include "samoa/client/server.hpp"
 #include "samoa/persistence/persister.hpp"
@@ -43,7 +43,9 @@ local_partition::local_partition(
             _author_id = current->get_author_id();
         }
 
-        _digest_compaction_threshold = current->_digest_compaction_threshold;
+        // take over current digest & compaction threshold
+        _digest_gossip_threshold = current->_digest_gossip_threshold;
+        _digest = current->get_digest();
     }
     else
     {
@@ -67,8 +69,9 @@ local_partition::local_partition(
             }
         }
 
-        // threshold is size of leaf persister layer
-        _digest_compaction_threshold = _persister->leaf_layer().region_size();
+        // begin a new digest; threshold is size of leaf persister layer
+        _digest_gossip_threshold = _persister->leaf_layer().region_size();
+        _digest = boost::make_shared<local_digest>(get_uuid());
     }
 }
 
@@ -326,8 +329,8 @@ void local_partition::read(
     replication::replicate(on_peer_request, on_peer_response, rstate);
 }
 
-void local_partition::poll_digest_gossip(const context::ptr_t & context,
-    const table::ptr_t & table)
+void local_partition::poll_digest_gossip(const context::ptr_t &,
+    const table::ptr_t &)
 {
     if(_persister->total_leaf_compaction_bytes() < _digest_gossip_threshold)
     {

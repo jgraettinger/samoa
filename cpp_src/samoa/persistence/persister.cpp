@@ -37,7 +37,7 @@ const rolling_hash::hash_ring & persister::layer(size_t index) const
 { return *_layers.at(index); }
 
 const rolling_hash::hash_ring & persister::leaf_layer() const
-{ return _layers.back(); }
+{ return *_layers.back(); }
 
 void persister::add_heap_hash_ring(uint32_t storage_size, uint32_t index_size)
 {

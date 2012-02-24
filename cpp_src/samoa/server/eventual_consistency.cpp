@@ -52,7 +52,7 @@ void eventual_consistency::upkeep(
     try {
         rstate->load_route_state();
 
-        auto on_peer_request = [=](
+        auto on_peer_request = [rstate, old_checksum, new_checksum](
             samoa::client::server_request_interface & iface,
             const partition::ptr_t & partition) -> bool
         {
@@ -76,11 +76,18 @@ void eventual_consistency::upkeep(
             return true;
         };
 
-        auto on_peer_response = [](
-            const boost::system::error_code &,
-            samoa::client::server_response_interface &,
-            const partition::ptr_t &)
-        { };
+        auto on_peer_response = [new_checksum](
+            const boost::system::error_code & ec,
+            samoa::client::server_response_interface & iface,
+            const partition::ptr_t & partition)
+        {
+            if(ec || iface.get_error_code())
+            {
+            	LOG_DBG("replication failed");
+            	return;
+            }
+            partition->get_digest()->add(new_checksum);
+        };
 
         replication::replicate(on_peer_request, on_peer_response, rstate);
     }

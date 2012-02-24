@@ -8,69 +8,27 @@
 namespace samoa {
 namespace server {
 
-std::string digest::_path_base;
+namespace bfs = boost::filesystem;
+
+bfs::path digest::_directory = "/tmp";
 uint32_t digest::_default_byte_length;
 
-digest::digest(const core::uuid & partition_uuid)
- :  _partition_uuid(partition_uuid)
+digest::digest(const core::uuid & uuid)
 {
-    // open or create the digest properties
-    {
-        std::stringstream spath;
-        spath << digest::_path_base << _partition_uuid << "_digest.properties";
-        std::string path = spath.str();
-
-        LOG_DBG("Digest " << _partition_uuid << " properties: " << path);
-
-        std::fstream fs(path, std::ios_base::in);
-
-        if(fs.fail())
-        {
-            _properties.set_seed(core::random::generate_uint64());
-            _properties.set_byte_length(digest::_default_byte_length);
-
-            fs.open(path, std::ios_base::out);
-            SAMOA_ABORT_IF(!_properties.SerializeToOstream(&fs));
-        }
-        else
-        {
-            SAMOA_ABORT_IF(!_properties.ParseFromIstream(&fs));
-        }
-    }
-
-    // memory-map the digest bloom filter
-    {
-        std::stringstream spath;
-        spath << digest::_path_base << _partition_uuid << "_digest.filter";
-        std::string path = spath.str();
-
-        LOG_DBG("Digest " << _partition_uuid << " filter: " << path);
-
-        _memory_map.reset(new core::memory_map(
-            path, _properties.byte_length()));
-
-        if(_memory_map->was_resized())
-        {
-            LOG_DBG("Filter was resized; zeroing");
-            memset(_memory_map->get_region_address(), 0,
-                _memory_map->get_region_size());
-        }
-    }
+	// assign reasonable defaults, to be over-ridden by subclasses
+    _properties.mutable_partition_uuid(
+        )->assign(std::begin(uuid), std::end(uuid));
+    _properties.set_seed(core::random::generate_uint64());
+    _properties.set_byte_length(digest::get_default_byte_length());
+    _properties.set_element_count(0);
 }
 
-void digest::clear()
+digest::~digest()
+{ }
+
+void digest::open_filter(const bfs::path & path)
 {
-    std::stringstream spath;
-    spath << digest::_path_base << _partition_uuid << "_digest.properties";
-    std::string path = spath.str();
-
-    _properties.set_seed(core::random::generate_uint64());
-
-    std::fstream fs(path, std::ios_base::out);
-    SAMOA_ABORT_IF(!_properties.SerializeToOstream(&fs));
-
-    memset(_memory_map->get_region_address(), 0,
-        _memory_map->get_region_size());
+    _memory_map.reset(new core::memory_map(path, _properties.byte_length()));
 }
 
 void digest::add(const core::murmur_checksum_t & checksum)
@@ -82,6 +40,15 @@ void digest::add(const core::murmur_checksum_t & checksum)
 
     uint64_t bit1 = (_properties.seed() ^ checksum[0]) % filter_size;
     uint64_t bit2 = (_properties.seed() ^ checksum[1]) % filter_size;
+
+    if( (filter[bit1 >> 3] >> (bit1 % 8)) & \
+    	(filter[bit2 >> 3] >> (bit2 % 8)) & 1)
+    {
+    	// already set
+    	return;
+    }
+
+    _properties.set_element_count(_properties.element_count() + 1);
 
     filter[bit1 >> 3] |= 1 << (bit1 % 8);
     filter[bit2 >> 3] |= 1 << (bit2 % 8);
@@ -101,9 +68,10 @@ bool digest::test(const core::murmur_checksum_t & checksum) const
            (filter[bit2 >> 3] >> (bit2 % 8)) & 1;
 }
 
-void digest::set_path_base(const std::string & path_str)
+void digest::set_directory(const bfs::path & directory)
 {
-    digest::_path_base = path_str;
+	SAMOA_ASSERT(bfs::is_directory(directory));
+    digest::_directory = directory;
 }
 
 void digest::set_default_byte_length(uint32_t length)

@@ -165,8 +165,10 @@ message PersistedRecord
 
 message DigestProperties
 {
-    required fixed64 seed = 1;
-    required uint32 byte_length = 2;
+    required bytes partition_uuid = 1;
+    required fixed64 seed = 2;
+    required uint32 byte_length = 3;
+    required uint64 element_count = 4;
 };
 
 // Union container type

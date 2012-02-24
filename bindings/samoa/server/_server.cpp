@@ -17,6 +17,8 @@ namespace server {
     void make_remote_partition_bindings();
     void make_peer_discovery_bindings();
     void make_digest_bindings();
+    void make_local_digest_bindings();
+    void make_remote_digest_bindings();
 }
 }
 
@@ -36,5 +38,7 @@ BOOST_PYTHON_MODULE(_server)
     samoa::server::make_remote_partition_bindings();
     samoa::server::make_peer_discovery_bindings();
     samoa::server::make_digest_bindings();
+    samoa::server::make_local_digest_bindings();
+    samoa::server::make_remote_digest_bindings();
 }
 

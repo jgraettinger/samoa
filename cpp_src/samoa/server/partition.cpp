@@ -17,8 +17,7 @@ partition::partition(
    _range_end(range_end),
    _consistent_range_begin(part.consistent_range_begin()),
    _consistent_range_end(part.consistent_range_end()),
-   _lamport_ts(part.lamport_ts()),
-   _digest(new digest(_uuid))
+   _lamport_ts(part.lamport_ts())
 {}
 
 partition::~partition()

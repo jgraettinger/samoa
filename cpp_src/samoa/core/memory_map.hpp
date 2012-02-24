@@ -3,6 +3,7 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <boost/filesystem/path.hpp>
 #include <memory>
 #include <string>
 
@@ -19,7 +20,7 @@ public:
     typedef std::unique_ptr<bip::file_lock> file_lock_ptr_t;
     typedef std::unique_ptr<bip::mapped_region> mapped_region_ptr_t;
 
-    memory_map(const std::string & file, uint64_t region_size);
+    memory_map(const boost::filesystem::path & path, uint64_t region_size);
 
     ~memory_map();
 
@@ -38,8 +39,14 @@ public:
     void * get_region_address() const
     { return _region->get_address(); }
 
+    const boost::filesystem::path & get_path() const
+    { return _path; }
+
+    void close();
+
 private:
 
+    boost::filesystem::path _path;
     uint64_t _region_size;
     bool _was_resized;
 
