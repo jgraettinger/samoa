@@ -1,6 +1,8 @@
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/remote_partition.hpp"
 #include "samoa/server/context.hpp"
+#include "samoa/server/table_set.hpp"
+#include "samoa/server/peer_set.hpp"
 #include "samoa/server/table.hpp"
 #include "samoa/server/eventual_consistency.hpp"
 #include "samoa/server/local_digest.hpp"
@@ -12,67 +14,75 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
+#include "samoa/core/memory_map.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/bind.hpp>
+#include <set>
 
 namespace samoa {
 namespace server {
 
 local_partition::local_partition(
     const spb::ClusterState::Table::Partition & part,
-    uint64_t range_begin, uint64_t range_end,
-    const ptr_t & current)
- :  partition(part, range_begin, range_end),
-    _author_id(datamodel::clock_util::generate_author_id())
+    uint64_t range_begin, uint64_t range_end)
+ :
+    partition(part, range_begin, range_end),
+    _persister(boost::make_shared<persistence::persister>()),
+    _persister_strand(
+        boost::make_shared<boost::asio::strand>(
+            *core::proactor::get_proactor()->concurrent_io_service())),
+    _author_id(core::random::generate_uint64())
 {
     SAMOA_ASSERT(part.ring_layer_size());
 
-    if(current)
+    // add persister layers
+    typedef spb::ClusterState::Table::Partition::RingLayer layer_t;
+    for(const layer_t & layer : part.ring_layer())
     {
-        _persister = current->_persister;
-
-        if(current->get_range_begin() == get_range_begin() &&
-            current->get_range_end() == get_range_end())
+        if(layer.has_file_path())
         {
-            // safe to preserve author id only if we have identical ranges of
-            //  responsibility; otherwise, we open ourselves to the possibility
-            //  of writing a new version of an existing key with an existing
-            //  author clock, such that we appear to be more recent than that
-            //  previously written clock
-            _author_id = current->get_author_id();
+            _persister->add_mapped_hash_ring(
+                layer.file_path(), layer.storage_size(), layer.index_size());
         }
-
-        // take over current digest & compaction threshold
-        _digest_gossip_threshold = current->_digest_gossip_threshold;
-        _digest = current->get_digest();
-    }
-    else
-    {
-        _persister.reset(new persistence::persister());
-
-        LOG_DBG("local_partition " << part.uuid() \
-            << " built persister " << _persister.get());
-
-        for(auto it = part.ring_layer().begin();
-            it != part.ring_layer().end(); ++it)
+        else
         {
-            if(it->has_file_path())
-            {
-                _persister->add_mapped_hash_ring(
-                    it->file_path(), it->storage_size(), it->index_size());
-            }
-            else
-            {
-                _persister->add_heap_hash_ring(
-                    it->storage_size(), it->index_size());
-            }
+            _persister->add_heap_hash_ring(
+                layer.storage_size(), layer.index_size());
         }
-
-        // begin a new digest; threshold is size of leaf persister layer
-        _digest_gossip_threshold = _persister->leaf_layer().region_size();
-        _digest = boost::make_shared<local_digest>(get_uuid());
     }
+
+    // begin a new digest; threshold is size of leaf persister layer
+    set_digest(boost::make_shared<local_digest>(get_uuid()));
+    _digest_gossip_threshold = _persister->leaf_layer().region_size();
+}
+
+local_partition::local_partition(
+    const spb::ClusterState::Table::Partition & part,
+    uint64_t range_begin, uint64_t range_end,
+    const local_partition & current)
+ :
+    partition(part, range_begin, range_end),
+    _persister(current._persister),
+    _persister_strand(current._persister_strand),
+    _author_id(
+        (current.get_range_begin() == get_range_begin() &&
+         current.get_range_end()   == get_range_end()) ?
+         current.get_author_id() : core::random::generate_uint64())
+{
+    SAMOA_ASSERT((unsigned)part.ring_layer_size() == _persister->layer_count());
+
+    // Note on the _author_id initializer:
+    //
+    // It's safe to preserve current's author id only if *this has
+    //  identical ranges of responsibility; otherwise, we open ourselves
+    //  to the possibility of writing a new version of an existing key
+    //  with an existing author clock, such that we appear to be more
+    //  recent than that previously written clock
+
+    // take over current digest & compaction threshold
+    set_digest(current.get_digest());
+    _digest_gossip_threshold = current._digest_gossip_threshold;
 }
 
 bool local_partition::merge_partition(
@@ -88,14 +98,21 @@ bool local_partition::merge_partition(
 void local_partition::initialize(
     const context::ptr_t & context, const table::ptr_t & table)
 {
-    _persister->set_prune_callback(
-        table->get_consistent_prune());
+    local_partition::ptr_t self = shared_from_this();
+	auto isolate = [self, context, table]()
+	{
+        self->_persister->set_prune_callback(
+            table->get_consistent_prune());
 
-    _persister->set_upkeep_callback(
-        boost::bind(&eventual_consistency::upkeep,
+        eventual_consistency::ptr_t tmp = 
             boost::make_shared<eventual_consistency>(
-                context, table->get_uuid(), get_uuid()),
-            _1, _2, _3));
+                context, table->get_uuid(), self->get_uuid());
+
+        self->_persister->set_upkeep_callback(
+            boost::bind(&eventual_consistency::upkeep,
+                tmp, _1, _2, _3));
+    };
+    _persister_strand->dispatch(isolate);
 }
 
 void local_partition::write(
@@ -329,17 +346,144 @@ void local_partition::read(
     replication::replicate(on_peer_request, on_peer_response, rstate);
 }
 
-void local_partition::poll_digest_gossip(const context::ptr_t &,
-    const table::ptr_t &)
+void local_partition::poll_digest_gossip(const context::ptr_t & context,
+    const core::uuid & table_uuid, const core::uuid & partition_uuid)
 {
-    if(_persister->total_leaf_compaction_bytes() < _digest_gossip_threshold)
+    // We want to synchronize swapping out digests with cluster state
+    //  transactions which may be going on; isolate using the cluster
+    //  state transaction io_service
+
+    auto digest_transaction = [context, table_uuid, partition_uuid]
     {
-        return;
-    }
+        cluster_state::ptr_t cluster_state = context->get_cluster_state();
 
+        table::ptr_t table = cluster_state->get_table_set(
+            )->get_table(table_uuid);
 
+        if(!table)
+        {
+            // race condition: table dropped
+            return;
+        }
 
+        local_partition::ptr_t self = \
+            boost::dynamic_pointer_cast<local_partition>(
+                table->get_partition(partition_uuid));
 
+        if(!self)
+        {
+            // race condition: local partition dropped
+            return;
+        }
+
+        uint64_t current = self->get_persister()->total_leaf_compaction_bytes();
+        if(current < self->_digest_gossip_threshold)
+        {
+            return;
+        }
+
+        // swap out the current digest for an empty one
+        digest::ptr_t digest = self->get_digest();
+        self->set_digest(boost::make_shared<local_digest>(self->get_uuid()));
+
+        // update threshold for the new digest
+        self->_digest_gossip_threshold = \
+            self->_persister->leaf_layer().region_size() + current;
+
+        // identify this partition's location in the table ring
+        table::ring_t::const_iterator this_it = std::lower_bound(
+            std::begin(table->get_ring()), std::end(table->get_ring()), self,
+            [](const partition::ptr_t & lhs, const partition::ptr_t & rhs)
+            {
+                if(lhs->get_ring_position() == rhs->get_ring_position())
+                    return lhs->get_uuid() < rhs->get_uuid();
+
+                return lhs->get_ring_position() < rhs->get_ring_position();
+            });
+
+        std::set<core::uuid> peer_servers;
+
+        // collect servers by walking backwards replication-factor steps
+        table::ring_t::const_iterator it = this_it;
+        for(unsigned i = 0; i != table->get_replication_factor(); ++i)
+        {
+            if(it == std::begin(table->get_ring()))
+                it = std::end(table->get_ring());
+
+            peer_servers.insert((*(--it))->get_server_uuid());
+        }
+
+        // collect servers by walking forwards replication-factor steps
+        it = this_it;
+        for(unsigned i = 0; i != table->get_replication_factor(); ++i)
+        {
+            if(++it == std::end(table->get_ring()))
+                it = std::begin(table->get_ring());
+
+            peer_servers.insert((*it)->get_server_uuid());
+        }
+
+        peer_servers.erase(context->get_server_uuid());
+
+        // begin a digest sync request for each peer
+        for(const core::uuid & peer_uuid: peer_servers)
+        {
+            auto on_request = [peer_uuid, table_uuid, partition_uuid, digest](
+                const boost::system::error_code & ec,
+                samoa::client::server_request_interface iface)
+            {
+                if(ec)
+                {
+                    LOG_WARN("digest sync to " << peer_uuid << \
+                        "failed: " << ec.message());
+                    return;
+                }
+
+                spb::SamoaRequest & samoa_request = iface.get_message();
+                samoa_request.set_type(spb::DIGEST_SYNC);
+
+                samoa_request.mutable_table_uuid()->assign(
+                    std::begin(table_uuid), std::end(table_uuid));
+                samoa_request.mutable_partition_uuid()->assign(
+                    std::begin(partition_uuid), std::end(partition_uuid));
+
+                samoa_request.mutable_digest_properties()->CopyFrom(
+                    digest->get_properties());
+
+                char * r_begin = reinterpret_cast<char *>(
+                    digest->get_memory_map()->get_region_address());
+
+                iface.add_data_block(core::buffer_region(
+                    r_begin,
+                    r_begin + digest->get_memory_map()->get_region_size()));
+
+                // on_response closure captures digest to guard lifetime
+                auto on_response = [peer_uuid, digest](
+                    const boost::system::error_code & ec,
+                    samoa::client::server_response_interface iface)
+                {
+                    if(ec)
+                    {
+                        LOG_WARN("digest sync to " << peer_uuid << \
+                            " failed: " << ec.message());
+                        return;
+                    }
+                    else if(iface.get_error_code())
+                    {
+                        LOG_WARN("server " << peer_uuid << \
+                            " remote error on digest sync" << \
+                            iface.get_message().error().ShortDebugString()); 
+                    }
+                    iface.finish_response();
+                };
+                iface.flush_request(on_response);
+            };
+            cluster_state->get_peer_set()->schedule_request(
+                on_request, peer_uuid); 
+        }
+    };
+    context->get_cluster_state_transaction_service()->dispatch(
+        digest_transaction);
 }
 
 }

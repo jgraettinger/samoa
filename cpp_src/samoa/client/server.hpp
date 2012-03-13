@@ -51,6 +51,12 @@ public:
     void abort_request();
 
     /*!
+     * \brief Adds the single buffer_region as a request datablock
+     * SamoaRequest::data_block_length is appropriately updated.
+     */
+    void add_data_block(const core::buffer_region &);
+
+    /*!
      * \brief Adds the const buffer-regions as a request datablock
      * SamoaRequest::data_block_length is appropriately updated.
      */

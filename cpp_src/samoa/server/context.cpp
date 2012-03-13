@@ -18,7 +18,7 @@ context::context(const spb::ClusterState & state)
    _hostname(state.local_hostname()),
    _port(state.local_port()),
    _proactor(core::proactor::get_proactor()),
-   _io_srv(_proactor->serial_io_service())
+   _cluster_transaction_srv(_proactor->serial_io_service())
 {
     SAMOA_ASSERT(state.IsInitialized());
 
@@ -79,8 +79,37 @@ void context::shutdown()
 void context::cluster_state_transaction(
     const cluster_state_callback_t & callback)
 {
-    _io_srv->post(boost::bind(&context::on_cluster_state_transaction,
-        shared_from_this(), callback));
+    context::ptr_t self = shared_from_this();
+    auto transaction = [self, callback]()
+    {
+        // copy current protobuf description
+        std::unique_ptr<spb::ClusterState> next_pb_state(
+            new spb::ClusterState(
+                self->get_cluster_state()->get_protobuf_description()));
+
+        bool commit = callback(*next_pb_state);
+
+        if(!commit)
+            return;
+
+        SAMOA_ASSERT(next_pb_state->IsInitialized());
+
+        // build runtime instance; cluster_state (and descendant) ctors are
+        //   responsible for checking invariants of the new description
+        cluster_state::ptr_t next_state = boost::make_shared<cluster_state>(
+            std::move(next_pb_state), self->get_cluster_state());
+
+        // TODO(johng) commit next_cluster_state to disk
+
+        // 'commit' transaction by atomically updating held instance
+        {
+            spinlock::guard guard(self->_cluster_state_lock);
+            self->_cluster_state = next_state;
+        }
+
+        self->initialize();
+    };
+    _cluster_transaction_srv->dispatch(transaction);
 }
 
 void context::add_client(size_t client_id, const client::ptr_t & client)
@@ -116,36 +145,6 @@ void context::drop_listener(size_t listener_id)
     listeners_t::iterator it = _listeners.find(listener_id);
     SAMOA_ASSERT(it != _listeners.end());
     _listeners.erase(it);
-}
-
-void context::on_cluster_state_transaction(
-    const cluster_state_callback_t & callback)
-{
-    // copy current protobuf description
-    std::unique_ptr<spb::ClusterState> next_pb_state(
-        new spb::ClusterState(_cluster_state->get_protobuf_description()));
-
-    bool commit = callback(*next_pb_state);
-
-    if(!commit)
-        return;
-
-    SAMOA_ASSERT(next_pb_state->IsInitialized());
-
-    // build runtime instance; cluster_state (and descendant) ctors are
-    //   responsible for checking invariants of the new description
-    cluster_state::ptr_t next_state = boost::make_shared<cluster_state>(
-        std::move(next_pb_state), _cluster_state);
-
-    // TODO(johng) commit next_cluster_state to disk
-
-    // 'commit' transaction by atomically updating held instance
-    {
-        spinlock::guard guard(_cluster_state_lock);
-        _cluster_state = next_state;
-    }
-
-    initialize();
 }
 
 }

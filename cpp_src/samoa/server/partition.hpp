@@ -4,6 +4,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
+#include "samoa/spinlock.hpp"
 
 namespace samoa {
 namespace server {
@@ -46,10 +47,9 @@ public:
     uint64_t get_lamport_ts() const
     { return _lamport_ts; }
 
-    bool position_in_responsible_range(uint64_t ring_position) const;
+    digest_ptr_t get_digest() const;
 
-    const digest_ptr_t & get_digest() const
-    { return _digest; }
+    bool position_in_responsible_range(uint64_t ring_position) const;
 
     //! Merges a peer partition description into the local description
     /*!
@@ -66,15 +66,21 @@ protected:
     partition(const spb::ClusterState::Table::Partition &,
         uint64_t range_begin, uint64_t range_end);
 
-    core::uuid _uuid;
-    core::uuid _server_uuid;
-    uint64_t   _ring_position;
-    uint64_t   _range_begin;
-    uint64_t   _range_end;
-    uint64_t   _consistent_range_begin;
-    uint64_t   _consistent_range_end;
-    uint64_t   _lamport_ts;
+    void set_digest(const digest_ptr_t &);
+
+    const core::uuid _uuid;
+    const core::uuid _server_uuid;
+    const uint64_t   _ring_position;
+    const uint64_t   _range_begin;
+    const uint64_t   _range_end;
+    const uint64_t   _consistent_range_begin;
+    const uint64_t   _consistent_range_end;
+    const uint64_t   _lamport_ts;
+
+private:
+
     digest_ptr_t _digest;
+    spinlock _digest_lock;
 };
 
 }

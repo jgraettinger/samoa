@@ -44,7 +44,7 @@ public:
 
 protected:
 
-    digest(const core::uuid & partition_uuid);
+    digest();
     
     void open_filter(const boost::filesystem::path &);
 

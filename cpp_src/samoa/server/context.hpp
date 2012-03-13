@@ -78,6 +78,9 @@ public:
     void cluster_state_transaction(
         const cluster_state_callback_t &);
 
+    const core::io_service_ptr_t & get_cluster_state_transaction_service() const
+    { return _cluster_transaction_srv; }
+
     void add_listener(size_t listener_id, const listener_ptr_t &);
 
     void drop_listener(size_t listener_id);
@@ -88,14 +91,14 @@ public:
 
 private:
 
-    void on_cluster_state_transaction(const cluster_state_callback_t &);
-
     const core::uuid  _uuid;
     const std::string _hostname;
     const unsigned short _port;
 
+    // lifetime management
     const core::proactor_ptr_t   _proactor;
-    const core::io_service_ptr_t _io_srv;
+
+    const core::io_service_ptr_t _cluster_transaction_srv;
 
     mutable spinlock _cluster_state_lock;
     cluster_state_ptr_t _cluster_state;

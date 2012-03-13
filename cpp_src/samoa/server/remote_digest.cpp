@@ -12,21 +12,19 @@ using std::begin;
 using std::end;
 
 remote_digest::remote_digest(const core::uuid & uuid)
- :  digest(uuid)
+ :  _properties_path(properties_path(uuid))
 {
     {
-    	bfs::path prop_path = properties_path(uuid);
-
-        if(bfs::exists(prop_path))
+        if(bfs::exists(_properties_path))
         {
         	// read existing properties
-            std::ifstream fs(prop_path.string());
+            std::ifstream fs(_properties_path.string());
             SAMOA_ASSERT(_properties.ParseFromIstream(&fs));
         }
         else
         {
         	// write generated properties
-            std::ofstream fs(prop_path.string());
+            std::ofstream fs(_properties_path.string());
             SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
         }
     }
@@ -40,15 +38,15 @@ remote_digest::remote_digest(const core::uuid & uuid)
 }
 
 remote_digest::remote_digest(
+    const core::uuid & uuid,
     const spb::DigestProperties & properties,
     const core::buffer_regions_t & buffers)
- :  digest(core::uuid())
+ :  _properties_path(properties_path(uuid))
 {
     _properties.CopyFrom(properties);
-    core::uuid uuid = core::parse_uuid(_properties.partition_uuid());
 
     // write out properties
-    std::ofstream fs(properties_path(uuid).string());
+    std::ofstream fs(_properties_path.string());
     SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
 
     open_filter(filter_path(uuid));
@@ -74,10 +72,8 @@ remote_digest::remote_digest(
 
 remote_digest::~remote_digest()
 {
-    core::uuid uuid = core::parse_uuid(_properties.partition_uuid());
-
-    std::ofstream fs(properties_path(uuid).string());
-    SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
+    std::ofstream fs(_properties_path.string());
+    SAMOA_ABORT_IF(!_properties.SerializeToOstream(&fs));
 }
 
 bfs::path remote_digest::properties_path(const core::uuid & uuid)

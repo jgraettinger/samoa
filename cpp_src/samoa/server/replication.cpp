@@ -4,7 +4,6 @@
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/partition.hpp"
 #include "samoa/server/table.hpp"
-#include "samoa/server/digest.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"

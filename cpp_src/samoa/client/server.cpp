@@ -90,6 +90,13 @@ core::protobuf::SamoaRequest & server_request_interface::get_message()
 { return _srv->_samoa_request; }
 
 void server_request_interface::add_data_block(
+    const core::buffer_region & b)
+{
+    _srv->_samoa_request.add_data_block_length(b.size());
+    _srv->_request_data.push_back(b);
+}
+
+void server_request_interface::add_data_block(
     const core::const_buffer_regions_t & bs)
 {
     size_t length = 0;

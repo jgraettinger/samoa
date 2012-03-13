@@ -13,15 +13,18 @@ public:
 
     remote_digest(const core::uuid & partition_uuid);
 
-    remote_digest(const spb::DigestProperties &,
+    remote_digest(const core::uuid & partition_uuid,
+        const spb::DigestProperties &,
         const core::buffer_regions_t &);
 
     virtual ~remote_digest();
 
 private:
 
-    boost::filesystem::path properties_path(const core::uuid &);
-    boost::filesystem::path filter_path(const core::uuid &);
+    static boost::filesystem::path properties_path(const core::uuid &);
+    static boost::filesystem::path filter_path(const core::uuid &);
+
+    boost::filesystem::path _properties_path;
 };
 
 }

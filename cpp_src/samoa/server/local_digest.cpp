@@ -13,7 +13,6 @@ using std::begin;
 using std::end;
 
 local_digest::local_digest(const core::uuid & uuid)
- :  digest(uuid)
 {
     // TODO: compute length from target element count & false positive rate?
 

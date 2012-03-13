@@ -23,6 +23,18 @@ partition::partition(
 partition::~partition()
 {}
 
+digest_ptr_t partition::get_digest() const
+{
+    spinlock::guard guard(_digest_lock);
+    return _digest;
+}
+
+void partition::set_digest(const digest_ptr_t & d)
+{
+    spinlock::guard guard(_digest_lock);
+    _digest = d;
+}
+
 bool partition::position_in_responsible_range(uint64_t pos) const
 {
     if(_range_end < _range_begin)

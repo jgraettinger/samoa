@@ -13,11 +13,9 @@ namespace bfs = boost::filesystem;
 bfs::path digest::_directory = "/tmp";
 uint32_t digest::_default_byte_length;
 
-digest::digest(const core::uuid & uuid)
+digest::digest()
 {
 	// assign reasonable defaults, to be over-ridden by subclasses
-    _properties.mutable_partition_uuid(
-        )->assign(std::begin(uuid), std::end(uuid));
     _properties.set_seed(core::random::generate_uint64());
     _properties.set_byte_length(digest::get_default_byte_length());
     _properties.set_element_count(0);
