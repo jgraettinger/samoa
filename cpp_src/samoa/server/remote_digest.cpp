@@ -12,7 +12,8 @@ using std::begin;
 using std::end;
 
 remote_digest::remote_digest(const core::uuid & uuid)
- :  _properties_path(properties_path(uuid))
+ :  _properties_path(properties_path(uuid)),
+    _marked_for_deletion(false)
 {
     {
         if(bfs::exists(_properties_path))
@@ -23,12 +24,14 @@ remote_digest::remote_digest(const core::uuid & uuid)
         }
         else
         {
+            _properties.set_filter_path(generate_filter_path(uuid).string());
+
         	// write generated properties
             std::ofstream fs(_properties_path.string());
             SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
         }
     }
-    open_filter(filter_path(uuid));
+    open_filter(_properties.filter_path());
 
 	if(_memory_map->was_resized())
     {
@@ -41,15 +44,13 @@ remote_digest::remote_digest(
     const core::uuid & uuid,
     const spb::DigestProperties & properties,
     const core::buffer_regions_t & buffers)
- :  _properties_path(properties_path(uuid))
+ :  _properties_path(properties_path(uuid)),
+    _marked_for_deletion(false)
 {
     _properties.CopyFrom(properties);
+    _properties.set_filter_path(generate_filter_path(uuid).string());
 
-    // write out properties
-    std::ofstream fs(_properties_path.string());
-    SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
-
-    open_filter(filter_path(uuid));
+    open_filter(_properties.filter_path());
 
     // copy buffers into digest filter
     uint64_t total_size = 0;
@@ -68,25 +69,32 @@ remote_digest::remote_digest(
     {
     	it_out = std::copy(region.begin(), region.end(), it_out);
     }
+
+    // write new properties to disk
+    std::ofstream fs(_properties_path.string());
+    SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
 }
 
 remote_digest::~remote_digest()
 {
-    std::ofstream fs(_properties_path.string());
-    SAMOA_ABORT_IF(!_properties.SerializeToOstream(&fs));
+	if(_marked_for_deletion)
+    {
+    	// delete filter backing this digest
+        _memory_map->close();
+        SAMOA_ASSERT(boost::filesystem::remove(_properties.filter_path()));
+    }
+    else
+    {
+    	// sync current properties to disk
+        std::ofstream fs(_properties_path.string());
+        SAMOA_ABORT_UNLESS(_properties.SerializeToOstream(&fs));
+    }
 }
 
 bfs::path remote_digest::properties_path(const core::uuid & uuid)
 {
     bfs::path path = digest::get_directory();
     path /= "digest_" + core::to_hex(uuid) + ".properties";
-    return path;
-}
-
-bfs::path remote_digest::filter_path(const core::uuid & uuid)
-{
-    bfs::path path = digest::get_directory();
-    path /= "digest_" + core::to_hex(uuid) + ".filter";
     return path;
 }
 

@@ -77,6 +77,23 @@ void digest::set_default_byte_length(uint32_t length)
     digest::_default_byte_length = length;
 }
 
+bfs::path digest::generate_filter_path(const core::uuid & uuid)
+{
+    while(true)
+    {
+        std::stringstream s;
+        s << "digest_" << uuid << "_";
+        s << (core::random::generate_uint64() >> 48) << ".filter";
+
+        // TODO: make transactional; there's a race condition here
+        bfs::path path = digest::get_directory() / s.str();
+        if(!bfs::exists(path))
+        {
+        	return path;
+        }
+    }
+}
+
 }
 }
 

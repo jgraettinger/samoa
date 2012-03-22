@@ -34,7 +34,7 @@
     }\
 }
 
-#define SAMOA_ABORT_IF(arg)\
+#define SAMOA_ABORT_UNLESS(arg)\
 {\
     if(__builtin_expect(!(bool)(arg), 0))\
     {\

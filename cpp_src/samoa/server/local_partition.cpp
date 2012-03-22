@@ -99,8 +99,8 @@ void local_partition::initialize(
     const context::ptr_t & context, const table::ptr_t & table)
 {
     local_partition::ptr_t self = shared_from_this();
-	auto isolate = [self, context, table]()
-	{
+    auto isolate = [self, context, table]()
+    {
         self->_persister->set_prune_callback(
             table->get_consistent_prune());
 
@@ -353,7 +353,7 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
     //  transactions which may be going on; isolate using the cluster
     //  state transaction io_service
 
-    auto digest_transaction = [context, table_uuid, partition_uuid]
+    auto digest_transaction = [context, table_uuid, partition_uuid]()
     {
         cluster_state::ptr_t cluster_state = context->get_cluster_state();
 
@@ -376,7 +376,9 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
             return;
         }
 
-        uint64_t current = self->get_persister()->total_leaf_compaction_bytes();
+        uint64_t current = self->get_persister(
+            )->total_leaf_compaction_bytes();
+
         if(current < self->_digest_gossip_threshold)
         {
             return;
@@ -447,8 +449,10 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
                 samoa_request.mutable_partition_uuid()->assign(
                     std::begin(partition_uuid), std::end(partition_uuid));
 
-                samoa_request.mutable_digest_properties()->CopyFrom(
-                    digest->get_properties());
+                samoa_request.mutable_digest_properties(
+                    )->CopyFrom(digest->get_properties());
+                samoa_request.mutable_digest_properties(
+                    )->clear_filter_path();
 
                 char * r_begin = reinterpret_cast<char *>(
                     digest->get_memory_map()->get_region_address());

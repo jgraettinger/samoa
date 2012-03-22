@@ -14,8 +14,11 @@ void make_remote_digest_bindings()
 {
     bpl::class_<remote_digest, bpl::bases<digest>, boost::noncopyable>(
             "RemoteDigest", bpl::init<const core::uuid &>())
-        .def(bpl::init<const spb::DigestProperties &,
+        .def(bpl::init<const core::uuid &,
+            const spb::DigestProperties &,
             const core::buffer_regions_t &>())
+        .def("mark_filter_for_deletion",
+            &remote_digest::mark_filter_for_deletion)
         ;
 }
 

@@ -20,7 +20,7 @@ class TestLocalPartition(unittest.TestCase):
         pgen = self.gen.clone_peer()
         pstate = pgen.state.table[0].partition[0]
 
-        part = LocalPartition(self.state, 0, 0, None)
+        part = LocalPartition(self.state, 0, 0)
 
         # null hypothesis - doesn't throw
         part.merge_partition(pstate,

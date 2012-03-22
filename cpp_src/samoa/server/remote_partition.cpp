@@ -7,18 +7,19 @@ namespace server {
 
 remote_partition::remote_partition(
     const spb::ClusterState::Table::Partition & part,
-    uint64_t range_begin, uint64_t range_end,
-    const remote_partition::ptr_t & current)
+    uint64_t range_begin, uint64_t range_end)
  :  partition(part, range_begin, range_end)
 {
-	if(current)
-    {
-    	_digest = current->get_digest();
-    }
-    else
-    {
-        _digest = boost::make_shared<remote_digest>(get_uuid());
-    }
+    set_digest(boost::make_shared<remote_digest>(get_uuid()));
+}
+
+remote_partition::remote_partition(
+    const spb::ClusterState::Table::Partition & part,
+    uint64_t range_begin, uint64_t range_end,
+    const remote_partition & current)
+ :  partition(part, range_begin, range_end)
+{
+    set_digest(current.get_digest());
 }
 
 bool remote_partition::merge_partition(

@@ -19,12 +19,15 @@ public:
 
     virtual ~remote_digest();
 
+    void mark_filter_for_deletion()
+    { _marked_for_deletion = true; }
+
 private:
 
     static boost::filesystem::path properties_path(const core::uuid &);
-    static boost::filesystem::path filter_path(const core::uuid &);
 
     boost::filesystem::path _properties_path;
+    bool _marked_for_deletion;
 };
 
 }

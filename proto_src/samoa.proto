@@ -170,6 +170,8 @@ message DigestProperties
     required fixed64 seed = 1;
     required uint32 byte_length = 2;
     required uint64 element_count = 3;
+
+    optional string filter_path = 4;
 };
 
 // Union container type

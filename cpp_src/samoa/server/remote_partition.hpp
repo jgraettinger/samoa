@@ -18,21 +18,22 @@ public:
 
     typedef remote_partition_ptr_t ptr_t;
 
-    //! Constructs a runtime remote_partition from protobuf description
-    /*!
-        \param current The remote_partition which this instance will
-            be replacing. May be nullptr if there is none.
-    */
+    remote_partition(
+        const spb::ClusterState::Table::Partition &,
+        uint64_t range_begin, uint64_t range_end);
+
     remote_partition(
         const spb::ClusterState::Table::Partition &,
         uint64_t range_begin, uint64_t range_end,
-        const ptr_t & current);
+        const remote_partition & current);
 
     bool merge_partition(
         const spb::ClusterState::Table::Partition & peer,
         spb::ClusterState::Table::Partition & local) const;
 
     void initialize(const context_ptr_t &, const table_ptr_t &);
+
+    using partition::set_digest;
 };
 
 }

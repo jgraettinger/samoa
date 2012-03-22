@@ -68,6 +68,42 @@ table::table(const spb::ClusterState::Table & ptable,
         core::uuid p_server_uuid = core::parse_uuid(p_part.server_uuid());
 
         partition::ptr_t previous_partition;
+        uint64_t range_begin, range_end;
+
+        // local_partition factory functor
+        auto make_local = [&]() -> partition::ptr_t
+        {
+            if(previous_partition)
+            {
+                return boost::make_shared<local_partition>(p_part,
+                    range_begin, range_end,
+                        dynamic_cast<const local_partition &>(
+                            *previous_partition));
+            }
+            else
+            {
+            	return boost::make_shared<local_partition>(p_part,
+            	    range_begin, range_end);
+            }
+        };
+
+        // remote_partition factory functor
+        auto make_remote = [&]() -> partition::ptr_t
+        {
+        	if(previous_partition)
+            {
+            	return boost::make_shared<remote_partition>(p_part,
+            	    range_begin, range_end,
+            	        dynamic_cast<const remote_partition &>(
+            	            *previous_partition));
+            }
+            else
+            {
+            	return boost::make_shared<remote_partition>(p_part,
+            	    range_begin, range_end);
+            }
+        };
+
         if(current)
         {
             // look for a previous runtime instance of the partition
@@ -89,12 +125,11 @@ table::table(const spb::ClusterState::Table & ptable,
 
                 // construct a local partition, but assign an empty
                 //  responsible range, and don't insert into the ring
-                partition = boost::make_shared<local_partition>(p_part, 0, 0,
-                    boost::dynamic_pointer_cast<local_partition>(
-                        previous_partition));
+                range_begin = range_end = 0;
+                partition = make_local();
             }
 
-            // index even nullptr, to enforce uuid uniqueness
+            // include nullptr in uuid index, to enforce uniqueness
             SAMOA_ASSERT(_index.insert(
                 std::make_pair(p_uuid, partition)).second);
             continue;
@@ -102,28 +137,14 @@ table::table(const spb::ClusterState::Table & ptable,
 
         // map to (inclusive) ring positions which bound the
         //  partition's range of responsible ring positions
-        uint64_t range_begin = _ring.size() + ring_positions.size() - 1;
-        uint64_t range_end   = _ring.size() + _replication_factor - 1;
+        range_begin = _ring.size() + ring_positions.size() - 1;
+        range_end   = _ring.size() + _replication_factor - 1;
 
         range_begin = ring_positions[range_begin % ring_positions.size()];
         range_end = ring_positions[range_end % ring_positions.size()] - 1;
 
-        partition::ptr_t partition;
-
-        if(p_server_uuid == _server_uuid)
-        {
-            partition = boost::make_shared<local_partition>(p_part,
-                range_begin, range_end,
-                boost::dynamic_pointer_cast<local_partition>(
-                    previous_partition));
-        }
-        else
-        {
-            partition = boost::make_shared<remote_partition>(p_part,
-                range_begin, range_end,
-                boost::dynamic_pointer_cast<remote_partition>(
-                    previous_partition));
-        }
+        partition::ptr_t partition = (p_server_uuid == _server_uuid) ?
+            make_local() : make_remote();
 
         // index partition on uuid, checking for duplicates
         SAMOA_ASSERT(_index.insert(
@@ -276,8 +297,7 @@ bool table::merge_table(
 
                 // build a temporary remote_partition instance to build
                 //  our local view of the partition
-                remote_partition(*new_part, 0, 0,
-                        remote_partition::ptr_t()
+                remote_partition(*new_part, 0, 0
                     ).merge_partition(*p_it, *new_part);
             }
 

@@ -32,7 +32,7 @@ class TestRemotePartition(unittest.TestCase):
         lstate.set_consistent_range_begin(2)
         lstate.set_consistent_range_end(2)
 
-        part = RemotePartition(lstate, 0, 0, None)
+        part = RemotePartition(lstate, 0, 0)
 
         # MERGE peer state - no changes
         out = pb.ClusterState_Table_Partition(lstate)

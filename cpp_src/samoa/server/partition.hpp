@@ -80,7 +80,7 @@ protected:
 private:
 
     digest_ptr_t _digest;
-    spinlock _digest_lock;
+    mutable spinlock _digest_lock;
 };
 
 }
