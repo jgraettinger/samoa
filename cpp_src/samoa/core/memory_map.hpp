@@ -22,10 +22,9 @@ public:
 
     memory_map(const boost::filesystem::path & path, uint64_t region_size);
 
-    ~memory_map();
+    memory_map(const boost::filesystem::path & path);
 
-    bool was_resized() const
-    { return _was_resized; }
+    ~memory_map();
 
     const file_mapping_ptr_t & get_mapping() const
     { return _mapping; }
@@ -46,9 +45,10 @@ public:
 
 private:
 
+    void init();
+
     boost::filesystem::path _path;
     uint64_t _region_size;
-    bool _was_resized;
 
     file_lock_ptr_t _lock;
     file_mapping_ptr_t _mapping;

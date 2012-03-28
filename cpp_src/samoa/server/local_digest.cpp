@@ -16,9 +16,10 @@ local_digest::local_digest(const core::uuid & uuid)
 {
     // TODO: compute length from target element count & false positive rate?
 
-    bfs::path filter_path = generate_filter_path(uuid);
-    open_filter(filter_path);
+    _memory_map.reset(new core::memory_map(
+        generate_filter_path(uuid), get_default_byte_length()));
 
+    // zero bloom filter
     memset(_memory_map->get_region_address(), 0,
         _memory_map->get_region_size());
 }

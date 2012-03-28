@@ -10,6 +10,7 @@ namespace command {
     void make_update_counter_handler_bindings();
     void make_counter_value_handler_bindings();
     void make_replicate_handler_bindings();
+    void make_digest_sync_handler_bindings();
 }
 }
 }
@@ -22,4 +23,5 @@ BOOST_PYTHON_MODULE(_command)
     samoa::server::command::make_update_counter_handler_bindings();
     samoa::server::command::make_counter_value_handler_bindings();
     samoa::server::command::make_replicate_handler_bindings();
+    samoa::server::command::make_digest_sync_handler_bindings();
 }

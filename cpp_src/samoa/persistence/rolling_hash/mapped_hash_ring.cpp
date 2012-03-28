@@ -3,20 +3,21 @@
 #include "samoa/persistence/rolling_hash/error.hpp"
 #include "samoa/core/memory_map.hpp"
 #include "samoa/log.hpp"
+#include <boost/filesystem.hpp>
 #include <fstream>
 
 namespace samoa {
 namespace persistence {
 namespace rolling_hash {
 
-mapped_hash_ring::mapped_hash_ring(core::memory_map_ptr_t && mmp,
-    uint32_t region_size, uint32_t index_size)
+mapped_hash_ring::mapped_hash_ring(core::memory_map_ptr_t mmp,
+    uint32_t region_size, uint32_t index_size, bool is_new)
  :  hash_ring::hash_ring(
         reinterpret_cast<uint8_t*>(mmp->get_region_address()),
         region_size, index_size),
    _memory_map(std::move(mmp))
 {
-    if(_memory_map->was_resized())
+    if(is_new)
     {
         // zero-initialize the table header & index
         memset(_region_ptr, 0,
@@ -41,10 +42,12 @@ mapped_hash_ring::~mapped_hash_ring()
 std::unique_ptr<mapped_hash_ring> mapped_hash_ring::open(
     const std::string & file, uint32_t region_size, uint32_t index_size)
 {
+    bool is_new = !boost::filesystem::exists(file);
+
     core::memory_map_ptr_t mmp(new core::memory_map(file, region_size));
 
-    std::unique_ptr<mapped_hash_ring> mhr(
-        new mapped_hash_ring(std::move(mmp), region_size, index_size));
+    std::unique_ptr<mapped_hash_ring> mhr(new mapped_hash_ring(
+        std::move(mmp), region_size, index_size, is_new));
 
     return mhr;
 }

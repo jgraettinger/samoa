@@ -47,7 +47,6 @@ protected:
     digest();
 
     boost::filesystem::path generate_filter_path(const core::uuid &);
-    void open_filter(const boost::filesystem::path &);
 
     static uint32_t _default_byte_length;
     static boost::filesystem::path _directory;

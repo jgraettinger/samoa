@@ -22,9 +22,10 @@ public:
 
 private:
 
-    mapped_hash_ring(core::memory_map_ptr_t &&,
+    mapped_hash_ring(core::memory_map_ptr_t,
         uint32_t region_size,
-        uint32_t index_size);
+        uint32_t index_size,
+        bool is_new);
 
     core::memory_map_ptr_t _memory_map;
 };

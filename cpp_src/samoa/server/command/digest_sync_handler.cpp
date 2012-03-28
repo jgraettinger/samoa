@@ -18,19 +18,31 @@ namespace spb = samoa::core::protobuf;
 
 void digest_sync_handler::handle(const request::state::ptr_t & rstate)
 {
-    if(rstate->get_request_data_blocks().empty())
-    {
-    	throw request::state_exception(400,
-    	    "expected exactly one data block");
-    }
-
     rstate->load_table_state();
+
+    if(!rstate->get_samoa_request().has_partition_uuid())
+    {
+        throw request::state_exception(400,
+            "expected partition_uuid");
+    }
 
     if(!rstate->get_table()->get_partition(
         rstate->get_primary_partition_uuid()))
     {
     	throw request::state_exception(404,
     	    "no such partition");
+    }
+
+    if(rstate->get_request_data_blocks().empty())
+    {
+    	throw request::state_exception(400,
+    	    "expected exactly one data block");
+    }
+
+    if(!rstate->get_samoa_request().has_digest_properties())
+    {
+        throw request::state_exception(400,
+            "expected digest_properties");
     }
 
     remote_digest::ptr_t digest = boost::make_shared<remote_digest>(
@@ -70,6 +82,7 @@ void digest_sync_handler::handle(const request::state::ptr_t & rstate)
             ).mark_filter_for_deletion();
 
         partition->set_digest(digest);
+        rstate->flush_response();
     };
     rstate->get_context()->get_cluster_state_transaction_service()->dispatch(
         digest_transaction);
