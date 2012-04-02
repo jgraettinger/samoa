@@ -1,5 +1,6 @@
 #include "samoa/server/remote_partition.hpp"
 #include "samoa/server/remote_digest.hpp"
+#include "samoa/server/context.hpp"
 #include "samoa/error.hpp"
 
 namespace samoa {
@@ -9,9 +10,7 @@ remote_partition::remote_partition(
     const spb::ClusterState::Table::Partition & part,
     uint64_t range_begin, uint64_t range_end)
  :  partition(part, range_begin, range_end)
-{
-    set_digest(boost::make_shared<remote_digest>(get_uuid()));
-}
+{ }
 
 remote_partition::remote_partition(
     const spb::ClusterState::Table::Partition & part,
@@ -36,8 +35,11 @@ bool remote_partition::merge_partition(
 }
 
 void remote_partition::initialize(
-    const context_ptr_t &, const table_ptr_t &)
-{ }
+    const context_ptr_t & context, const table_ptr_t &)
+{ 
+    set_digest(boost::make_shared<remote_digest>(
+        context->get_server_uuid(), get_uuid()));
+}
 
 }
 }

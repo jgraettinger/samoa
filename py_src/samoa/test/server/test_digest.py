@@ -42,8 +42,9 @@ class TestDigest(unittest.TestCase):
         self.assertFalse(os.path.exists(tmp_path))
 
     def test_remote_digest(self):
+        server_uuid = UUID.from_random()
         partition_uuid = UUID.from_random()
-        d = RemoteDigest(partition_uuid)
+        d = RemoteDigest(server_uuid, partition_uuid)
 
         obj1 = self._make_obj()
         obj2 = self._make_obj()
@@ -64,7 +65,7 @@ class TestDigest(unittest.TestCase):
 
         # close & re-open
         del d
-        d = RemoteDigest(partition_uuid)
+        d = RemoteDigest(server_uuid, partition_uuid)
 
         # membership persists
         self.assertTrue(d.test(obj1))

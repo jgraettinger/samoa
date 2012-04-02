@@ -46,6 +46,7 @@ void digest_sync_handler::handle(const request::state::ptr_t & rstate)
     }
 
     remote_digest::ptr_t digest = boost::make_shared<remote_digest>(
+        rstate->get_context()->get_server_uuid(),
         rstate->get_primary_partition_uuid(),
         rstate->get_samoa_request().digest_properties(),
         rstate->get_request_data_blocks()[0]);

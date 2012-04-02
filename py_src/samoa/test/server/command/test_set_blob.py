@@ -1,4 +1,3 @@
-import getty
 import unittest
 
 from samoa.core.protobuf import CommandType, PersistedRecord, ClusterClock

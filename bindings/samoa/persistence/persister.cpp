@@ -290,6 +290,8 @@ void make_persister_bindings()
         .def("layer_count", &persister::layer_count)
         .def("layer", &persister::layer,
             bpl::return_value_policy<bpl::reference_existing_object>())
+        .def("leaf_layer", &persister::leaf_layer,
+            bpl::return_value_policy<bpl::reference_existing_object>())
         .def("add_heap_hash_ring", &persister::add_heap_hash_ring)
         .def("add_mapped_hash_ring", &persister::add_mapped_hash_ring)
         .def("get", &py_get)
@@ -302,6 +304,8 @@ void make_persister_bindings()
         .def("max_compaction_factor",
             &persister::max_compaction_factor)
         .def("bottom_up_compaction", &py_bottom_up_compaction)
+        .def("total_storage", &persister::total_storage)
+        .def("used_storage", &persister::used_storage)
         ;
 
     boost::python::register_ptr_to_python<prec_ptr_t>();

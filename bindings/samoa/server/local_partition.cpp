@@ -22,6 +22,8 @@ void make_local_partition_bindings()
         .def("get_author_id", &local_partition::get_author_id)
         .def("get_persister", &local_partition::get_persister,
             bpl::return_value_policy<bpl::copy_const_reference>())
+        .def("poll_digest_gossip", &local_partition::poll_digest_gossip)
+        .staticmethod("poll_digest_gossip")
         ;
 
     bpl::implicitly_convertible<local_partition::ptr_t, partition::ptr_t>();

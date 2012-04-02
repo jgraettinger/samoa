@@ -54,7 +54,7 @@ local_partition::local_partition(
 
     // begin a new digest; threshold is size of leaf persister layer
     set_digest(boost::make_shared<local_digest>(get_uuid()));
-    _digest_gossip_threshold = _persister->leaf_layer().region_size();
+    _digest_gossip_threshold = _persister->used_storage();
 }
 
 local_partition::local_partition(
@@ -388,9 +388,10 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
         digest::ptr_t digest = self->get_digest();
         self->set_digest(boost::make_shared<local_digest>(self->get_uuid()));
 
-        // update threshold for the new digest
+        // new threshold for the new digest; we'll want to gossip again when
+        //  we've performed leaf compactions over all current records
         self->_digest_gossip_threshold = \
-            self->_persister->leaf_layer().region_size() + current;
+            self->_persister->used_storage() + current;
 
         // identify this partition's location in the table ring
         table::ring_t::const_iterator this_it = std::lower_bound(
@@ -405,9 +406,9 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
 
         std::set<core::uuid> peer_servers;
 
-        // collect servers by walking backwards replication-factor steps
+        // collect servers by walking backwards over replicating partitions
         table::ring_t::const_iterator it = this_it;
-        for(unsigned i = 0; i != table->get_replication_factor(); ++i)
+        for(unsigned i = 1; i != table->get_replication_factor(); ++i)
         {
             if(it == std::begin(table->get_ring()))
                 it = std::end(table->get_ring());
@@ -415,9 +416,9 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
             peer_servers.insert((*(--it))->get_server_uuid());
         }
 
-        // collect servers by walking forwards replication-factor steps
+        // collect servers by walking forwards over replicating partitions
         it = this_it;
-        for(unsigned i = 0; i != table->get_replication_factor(); ++i)
+        for(unsigned i = 1; i != table->get_replication_factor(); ++i)
         {
             if(++it == std::end(table->get_ring()))
                 it = std::begin(table->get_ring());

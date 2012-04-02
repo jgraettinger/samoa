@@ -248,6 +248,17 @@ uint32_t hash_ring::packet_offset(const packet * pkt) const
         reinterpret_cast<const uint8_t*>(pkt));
 }
 
+uint32_t hash_ring::ring_used() const
+{
+    if(is_wrapped())
+    {
+        return (region_size() - begin_offset()) + \
+            (end_offset() - ring_region_offset());
+    }
+    else
+        return end_offset() - begin_offset();
+}
+
 }
 }
 }

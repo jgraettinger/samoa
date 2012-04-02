@@ -55,6 +55,11 @@ public:
     uint32_t index_size() const
     { return _index_size; }
 
+    uint32_t ring_size() const
+    { return _region_size - ring_region_offset(); }
+
+    uint32_t ring_used() const;
+
     uint32_t index_region_offset() const
     { return sizeof(table_header); }
 

@@ -11,8 +11,10 @@ namespace bfs = boost::filesystem;
 using std::begin;
 using std::end;
 
-remote_digest::remote_digest(const core::uuid & uuid)
- :  _properties_path(properties_path(uuid)),
+remote_digest::remote_digest(
+    const core::uuid & server_uuid,
+    const core::uuid & partition_uuid)
+ :  _properties_path(properties_path(server_uuid, partition_uuid)),
     _marked_for_deletion(false)
 {
     {
@@ -26,7 +28,8 @@ remote_digest::remote_digest(const core::uuid & uuid)
         }
         else
         {
-            _properties.set_filter_path(generate_filter_path(uuid).string());
+            _properties.set_filter_path(
+                generate_filter_path(partition_uuid).string());
 
         	// write new, generated properties
             std::ofstream fs(_properties_path.string());
@@ -43,14 +46,16 @@ remote_digest::remote_digest(const core::uuid & uuid)
 }
 
 remote_digest::remote_digest(
-    const core::uuid & uuid,
+    const core::uuid & server_uuid,
+    const core::uuid & partition_uuid,
     const spb::DigestProperties & properties,
     const core::buffer_regions_t & buffers)
- :  _properties_path(properties_path(uuid)),
+ :  _properties_path(properties_path(server_uuid, partition_uuid)),
     _marked_for_deletion(false)
 {
     _properties.CopyFrom(properties);
-    _properties.set_filter_path(generate_filter_path(uuid).string());
+    _properties.set_filter_path(
+        generate_filter_path(partition_uuid).string());
 
     // copy buffers into digest filter
     uint64_t total_size = 0;
@@ -91,10 +96,13 @@ remote_digest::~remote_digest()
     }
 }
 
-bfs::path remote_digest::properties_path(const core::uuid & uuid)
+bfs::path remote_digest::properties_path(
+    const core::uuid & server_uuid, const core::uuid & partition_uuid)
 {
     bfs::path path = digest::get_directory();
-    path /= "digest_" + core::to_hex(uuid) + ".properties";
+    path /= "server_" + core::to_hex(server_uuid) + \
+            "_digest_" + core::to_hex(partition_uuid) + \
+            ".properties";
     return path;
 }
 

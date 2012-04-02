@@ -17,6 +17,9 @@ class TestHashRing(unittest.TestCase):
 
         ring = HeapHashRing.open(16572, 1)
 
+        self.assertEquals(ring.ring_region_offset(), 20)
+        self.assertEquals(ring.ring_size(), 16552)
+
         # simple allocation
         pkt = ring.allocate_packets(100)
         self.assertEquals(pkt.header_length(), 13)
@@ -47,6 +50,7 @@ class TestHashRing(unittest.TestCase):
         self.assertTrue(pkt.completes_sequence())
         self.assertFalse(ring.next_packet(pkt))
         self.assertEquals(ring.end_offset(), 8356)
+        self.assertEquals(ring.ring_used(), 8336)
 
         # allocation which fails (one byte to large)
         self.assertFalse(ring.allocate_packets(8191))
@@ -72,11 +76,13 @@ class TestHashRing(unittest.TestCase):
 
         self.assertTrue(ring.is_wrapped())
         self.assertEquals(ring.begin_offset(), ring.end_offset())
+        self.assertEquals(ring.ring_used(), 16552)
 
         # free the first allocation
         ring.head().set_dead()
         self.assertEquals(ring.reclaim_head(), 116)
         self.assertEquals(ring.begin_offset(), 136)
+        self.assertEquals(ring.ring_used(), 16436)
 
         # allocation which is sized up into a larger packet,
         #  so as not to leave a remainder less than a
@@ -113,6 +119,7 @@ class TestHashRing(unittest.TestCase):
         self.assertTrue(pkt.completes_sequence())
         self.assertEquals(ring.begin_offset(), 20)
         self.assertEquals(ring.end_offset(), 4116)
+        self.assertEquals(ring.ring_used(), 4096)
 
         # reclaim packet from allocation of 91
         ring.head().set_dead()
@@ -127,6 +134,7 @@ class TestHashRing(unittest.TestCase):
         self.assertEquals(ring.begin_offset(), 4116)
         self.assertEquals(ring.end_offset(), 4116)
         self.assertFalse(ring.is_wrapped())
+        self.assertEquals(ring.ring_used(), 0)
 
     def test_bulkhead_boundaries_with_fixtures(self):
 

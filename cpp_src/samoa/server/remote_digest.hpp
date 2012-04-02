@@ -11,9 +11,13 @@ class remote_digest : public digest
 {
 public:
 
-    remote_digest(const core::uuid & partition_uuid);
+    remote_digest(
+        const core::uuid & server_uuid,
+        const core::uuid & partition_uuid);
 
-    remote_digest(const core::uuid & partition_uuid,
+    remote_digest(
+        const core::uuid & server_uuid,
+        const core::uuid & partition_uuid,
         const spb::DigestProperties &,
         const core::buffer_regions_t &);
 
@@ -24,7 +28,8 @@ public:
 
 private:
 
-    static boost::filesystem::path properties_path(const core::uuid &);
+    static boost::filesystem::path properties_path(
+        const core::uuid &, const core::uuid &);
 
     boost::filesystem::path _properties_path;
     bool _marked_for_deletion;

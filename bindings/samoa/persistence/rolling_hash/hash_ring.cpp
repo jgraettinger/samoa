@@ -51,6 +51,8 @@ std::string py_repr_hash_ring(hash_ring & r)
 
     out << "region " << r.region_size() << ", ";
     out << "index " << r.index_size() << ", ";
+    out << "ring " << r.ring_size() << ", ";
+    out << "used " << r.ring_used() << ", ";
     out << "ring offset " << r.ring_region_offset() << ", ";
     out << "begin " << r.begin_offset() << ", ";
     out << "end " << r.end_offset() << ", ";
@@ -146,6 +148,8 @@ void make_hash_ring_bindings()
         .def("packet_offset", &hash_ring::packet_offset)
         .def("region_size", &hash_ring::region_size)
         .def("index_size", &hash_ring::index_size)
+        .def("ring_size", &hash_ring::ring_size)
+        .def("ring_used", &hash_ring::ring_used)
         .def("index_region_offset", &hash_ring::index_region_offset)
         .def("ring_region_offset", &hash_ring::ring_region_offset)
         .def("begin_offset", &hash_ring::begin_offset)

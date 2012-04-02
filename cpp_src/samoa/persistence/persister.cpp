@@ -718,6 +718,27 @@ void persister::write_record_with_cached_sizes(
     SAMOA_ASSERT(!result);
 }
 
+uint64_t persister::total_storage() const
+{
+    uint64_t sum = 0;
+    for(const rolling_hash::hash_ring * layer : _layers)
+    {
+        sum += layer->ring_size();
+    }
+    return sum;
+}
+
+uint64_t persister::used_storage() const
+{
+    uint64_t sum = 0;
+    for(const rolling_hash::hash_ring * layer : _layers)
+    {
+        sum += layer->ring_used();
+    }
+    return sum;
+}
+
+
 }
 }
 

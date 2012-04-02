@@ -109,6 +109,10 @@ public:
     uint64_t total_leaf_compaction_bytes() const
     { return _total_leaf_compaction_bytes; }
 
+    uint64_t total_storage() const;
+
+    uint64_t used_storage() const;
+
 private:
 
     struct iterator {
