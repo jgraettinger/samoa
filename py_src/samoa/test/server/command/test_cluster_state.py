@@ -59,7 +59,7 @@ class TestClusterState(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_simple_with_request_state(self):
         self._build_simple_fixture()
@@ -94,5 +94,5 @@ class TestClusterState(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 

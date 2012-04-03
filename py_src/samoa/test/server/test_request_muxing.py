@@ -84,20 +84,25 @@ class TestRequestMuxing(unittest.TestCase):
         yield
 
     def test_basic(self):
+        def test():
+            yield self._build_connection()
 
-        Proactor.get_proactor().run_test([
-            self._build_connection,
-            functools.partial(self._make_request, 1, []),
-            functools.partial(self._make_request, 2, []),
-            functools.partial(self._make_request, 3, [3, 1]),
-            functools.partial(self._validate_responses, [3, 1]),
-            functools.partial(self._make_request, 4, [2]),
-            functools.partial(self._validate_responses, [2]),
-            functools.partial(self._make_request, 5, []),
-            functools.partial(self._make_request, 6, [6, 4, 5]),
-            functools.partial(self._validate_responses, [6, 4, 5]),
-            self.context.shutdown
-        ])
+            yield self._make_request(1, [])
+            yield self._make_request(2, [])
+            yield self._make_request(3, [3, 1])
+            yield self._validate_responses([3, 1])
+
+            yield self._make_request(4, [2])
+            yield self._validate_responses([2])
+
+            yield self._make_request(5, [])
+            yield self._make_request(6, [6, 4, 5])
+            yield self._validate_responses([6, 4, 5])
+
+            self.context.shutdown()
+            yield
+
+        Proactor.get_proactor().run(test())
 
     def test_concurrency_limit(self):
 
@@ -119,9 +124,7 @@ class TestRequestMuxing(unittest.TestCase):
             yield self._make_request(Client.max_request_concurrency,
                 release_order)
 
-            yield
-
-        def validate():
+            yield Proactor.get_proactor().wait_until_idle()
 
             # Assert none of the requests were actually released
             self.assertEquals(len(self.handler.pending),
@@ -141,5 +144,5 @@ class TestRequestMuxing(unittest.TestCase):
             self.context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test([test, validate])
+        Proactor.get_proactor().run(test())
 

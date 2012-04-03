@@ -58,7 +58,7 @@ class TestDropPartition(unittest.TestCase):
             self.context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_drop_local_partition(self):
 
@@ -89,7 +89,7 @@ class TestDropPartition(unittest.TestCase):
             self.context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _make_request(self, partition_uuid):
 
@@ -139,5 +139,5 @@ class TestDropPartition(unittest.TestCase):
             self.context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 

@@ -51,7 +51,7 @@ class WriteLikeCommandTestMixin(object):
         self.is_new = True
 
         # building most of the fixture must be done prior to
-        #  Proactor.run_test(), to allow discovery to run;
+        #  Proactor.run(), to allow discovery to run;
         # populating persisters cannot be, so pass back a callable
         #  to be invoked within the Proactor context
 
@@ -78,7 +78,7 @@ class WriteLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_forwarded_existing_key(self):
         populate = self._build_simple_fixture()
@@ -91,14 +91,16 @@ class WriteLikeCommandTestMixin(object):
             yield self._validate_response(response, 'forwarder')
 
             response.finish_response()
+
+            yield Proactor.get_proactor().wait_until_idle()
+
+            yield self._validate_persisters(
+                [self.main_persister, self.peer_persister], [])
+
+            self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test([
-            test,
-            # run as separate test step, to allow for replication delay
-            functools.partial(self._validate_persisters,
-                [self.main_persister, self.peer_persister], []),
-            self.cluster.stop_server_contexts])
+        Proactor.get_proactor().run(test())
 
     def test_direct_new_key(self):
         populate = self._build_simple_fixture()
@@ -113,7 +115,7 @@ class WriteLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_common_error_cases(self):
         populate = self._build_simple_fixture()
@@ -144,7 +146,7 @@ class WriteLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _build_diverged_fixture(self, fixture_record_A, fixture_record_B):
         """
@@ -198,17 +200,19 @@ class WriteLikeCommandTestMixin(object):
 
             yield self._validate_response(response, 'A')
             response.finish_response()
-            yield
 
-        Proactor.get_proactor().run_test([
-            test,
-            # run as separate step, to allow for replication delay
-            functools.partial(self._validate_persisters, [
+            yield Proactor.get_proactor().wait_until_idle()
+
+            yield self._validate_persisters([
                     self.persisters[self.part_A],
                     self.persisters[self.part_B],
                     self.persisters[self.part_nil]],
-                ['B']),
-            self.cluster.stop_server_contexts])
+                ['B'])
+
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run(test())
 
     def test_diverged_write_nil(self):
         populate = self._build_diverged_fixture()
@@ -220,17 +224,19 @@ class WriteLikeCommandTestMixin(object):
 
             yield self._validate_response(response, 'nil')
             response.finish_response()
-            yield
 
-        Proactor.get_proactor().run_test([
-            test,
-            # run as separate step, to allow for replication delay
-            functools.partial(self._validate_persisters, [
+            yield Proactor.get_proactor().wait_until_idle()
+
+            yield self._validate_persisters([
                     self.persisters[self.part_A],
                     self.persisters[self.part_B],
                     self.persisters[self.part_nil]],
-                ['A', 'B']),
-            self.cluster.stop_server_contexts])
+                ['A', 'B'])
+
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run(test())
 
     def test_quorum_write_nil(self):
         populate = self._build_diverged_fixture()
@@ -252,18 +258,21 @@ class WriteLikeCommandTestMixin(object):
                     self.persisters[self.part_A],
                     self.persisters[self.part_B],
                     self.persisters[self.part_nil]],
-                [])
-            yield
+                ['A', 'B'])
 
-        Proactor.get_proactor().run_test([
-            test,
-            # run as separate step, to allow for replication delay
-            functools.partial(self._validate_persisters, [
+            yield Proactor.get_proactor().wait_until_idle()
+
+            # after replication delay, presets are present as well
+            yield self._validate_persisters([
                     self.persisters[self.part_A],
                     self.persisters[self.part_B],
                     self.persisters[self.part_nil]],
-                ['A', 'B']),
-            self.cluster.stop_server_contexts])
+                [])
+
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run(test())
 
     def _make_request(self, server_name, quorum = 1):
 

@@ -64,5 +64,5 @@ class TestContext(unittest.TestCase):
             context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 

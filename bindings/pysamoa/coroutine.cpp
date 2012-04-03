@@ -15,6 +15,7 @@ coroutine::coroutine(const bpl::object & generator,
     const samoa::core::io_service_ptr_t & io_srv)
  : _stack(1, generator), _exception_set(false), _io_srv(io_srv)
 {
+    SAMOA_ASSERT(PyGen_Check(generator.ptr()));
     LOG_DBG("created " << this << " " << \
         bpl::extract<string>(bpl::str(generator))());
 }

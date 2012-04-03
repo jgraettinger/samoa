@@ -106,7 +106,7 @@ class TestPersister(unittest.TestCase):
 
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_drop(self):
         def test():
@@ -152,7 +152,7 @@ class TestPersister(unittest.TestCase):
             self.assertFalse((yield persister.get('foo')))
             yield        
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_iteration(self):
         def test():
@@ -226,7 +226,7 @@ class TestPersister(unittest.TestCase):
 
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_bottom_up_compaction(self):
         def test():
@@ -354,7 +354,7 @@ class TestPersister(unittest.TestCase):
             self.assertEquals(leaf.begin_offset(), leaf.end_offset())
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_synthetic_load(self):
 
@@ -480,7 +480,7 @@ class TestPersister(unittest.TestCase):
                     	ticket = None
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _replace_callback(self, local_record, remote_record):
         # A merge function which always replaced local with remote

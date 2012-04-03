@@ -49,7 +49,7 @@ class ReadLikeCommandTestMixin(object):
         self.key = common_fixture.generate_bytes()
 
         # building most of the fixture must be done prior to
-        #  Proactor.run_test(), to allow discovery to run;
+        #  Proactor.run(), to allow discovery to run;
         # populating persisters cannot be, so past back a callable
         #  to be invoked within the Proactor context
 
@@ -72,7 +72,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_forwarded_hit(self):
         populate = self._build_simple_fixture()
@@ -86,7 +86,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_direct_miss(self):
         populate = self._build_simple_fixture()
@@ -100,7 +100,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_error_cases(self):
         populate = self._build_simple_fixture()
@@ -137,7 +137,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _build_diverged_fixture(self, fixture_record_A, fixture_record_B):
         """
@@ -197,7 +197,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_quorum_hit_nil(self):
         populate = self._build_diverged_fixture()
@@ -216,7 +216,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_quorum_miss_nil(self):
         populate = self._build_diverged_fixture()
@@ -235,7 +235,7 @@ class ReadLikeCommandTestMixin(object):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _make_request(self, server_name, key, quorum = 1):
 

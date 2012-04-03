@@ -68,9 +68,8 @@ class TestDigestGossip(unittest.TestCase):
             #    self.common_fixture.generate_bytes())
 
             #persister = self.cluster.persisters[self.partition_uuid]
-            yield
 
-        def validate():
+            yield Proactor.get_proactor().wait_until_idle()
 
             matched = 0
             for peer in self.peers:
@@ -84,7 +83,9 @@ class TestDigestGossip(unittest.TestCase):
                     matched += 1
 
             self.assertEquals(matched, len(self.peers) - 1)
-            self.cluster.stop_server_contexts()
 
-        Proactor.get_proactor().run_test([test, validate])
+            self.cluster.stop_server_contexts()
+            yield
+
+        Proactor.get_proactor().run(test())
 

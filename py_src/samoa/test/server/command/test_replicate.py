@@ -56,7 +56,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_direct_quorum_write(self):
 
@@ -76,7 +76,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_forwarded_quorum_write(self):
 
@@ -96,7 +96,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_direct_simple_read(self):
 
@@ -116,7 +116,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_direct_quorum_read(self):
 
@@ -137,7 +137,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_forwarded_simple_read(self):
 
@@ -158,7 +158,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_forwarded_quorum_read(self):
 
@@ -179,7 +179,7 @@ class TestReplicate(unittest.TestCase):
             self.cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _make_request(self, is_direct, is_write, quorum):
 

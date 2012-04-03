@@ -59,7 +59,7 @@ class TestPeerDiscovery(unittest.TestCase):
             cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_extended(self):
 
@@ -204,5 +204,5 @@ class TestPeerDiscovery(unittest.TestCase):
             cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 

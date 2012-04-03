@@ -71,7 +71,7 @@ class TestDigestSync(unittest.TestCase):
             self.context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_error_cases(self):
 
@@ -119,7 +119,7 @@ class TestDigestSync(unittest.TestCase):
             self.context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def _make_request(self, digest, table_uuid, partition_uuid,
             digest_properties = None):

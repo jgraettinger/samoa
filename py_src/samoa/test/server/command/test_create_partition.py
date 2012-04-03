@@ -69,7 +69,7 @@ class TestCreatePartition(unittest.TestCase):
             context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 
     def test_error_cases(self):
 
@@ -126,5 +126,5 @@ class TestCreatePartition(unittest.TestCase):
             context.shutdown()
             yield
 
-        Proactor.get_proactor().run_test(test)
+        Proactor.get_proactor().run(test())
 

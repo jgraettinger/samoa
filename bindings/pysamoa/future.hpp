@@ -22,6 +22,9 @@ public:
     // Precondition: Python GIL is held
     void set_yielding_coroutine(const coroutine_ptr_t & coro);
 
+    const coroutine_ptr_t & yielding_coroutine() const
+    { return _coroutine; }
+
     void set_reenter_via_post();
 
     bool is_called() const

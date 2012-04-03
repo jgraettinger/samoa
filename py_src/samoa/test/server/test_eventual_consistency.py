@@ -42,9 +42,9 @@ class TestEventualConsistency(unittest.TestCase):
         value_B = common_fixture.generate_bytes()
 
         cluster.start_server_contexts()
+        proactor = Proactor.get_proactor()
 
-        def populate():
-
+        def test():
             record = PersistedRecord()
             Blob.update(record, ClockUtil.generate_author_id(), value_A)
             yield cluster.persisters[part_A].put(None, key, record)
@@ -52,13 +52,9 @@ class TestEventualConsistency(unittest.TestCase):
             record = PersistedRecord()
             Blob.update(record, ClockUtil.generate_author_id(), value_B)
             yield cluster.persisters[part_B].put(None, key, record)
-            yield
 
-        def compact():
             yield cluster.persisters[part_A].bottom_up_compaction()
-            yield
-
-        def validate():
+            yield proactor.wait_until_idle()
 
             for part_uuid in part_A, part_B:
                 record = yield cluster.persisters[part_uuid].get(key)
@@ -69,7 +65,7 @@ class TestEventualConsistency(unittest.TestCase):
             cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test([populate, compact, validate])
+        proactor.run(test())
 
     def test_move_succeeds_dropped_partition(self):
 
@@ -98,18 +94,16 @@ class TestEventualConsistency(unittest.TestCase):
         value = common_fixture.generate_bytes()
 
         cluster.start_server_contexts()
+        proactor = Proactor.get_proactor()
 
-        def populate():
+        def test():
             record = PersistedRecord()
             Blob.update(record, ClockUtil.generate_author_id(), value)
             yield cluster.persisters[part_drop].put(None, key, record)
-            yield
 
-        def compact():
             yield cluster.persisters[part_drop].bottom_up_compaction()
-            yield
+            yield proactor.wait_until_idle()
 
-        def validate():
             for part_uuid in part_A, part_B:
                 # part_A & part_B have part_drop's value
                 record = yield cluster.persisters[part_uuid].get(key)
@@ -122,7 +116,7 @@ class TestEventualConsistency(unittest.TestCase):
             cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test([populate, compact, validate])
+        proactor.run(test())
 
     def test_move_fails_dropped_partition(self):
 
@@ -154,18 +148,15 @@ class TestEventualConsistency(unittest.TestCase):
         value = common_fixture.generate_bytes()
 
         cluster.start_server_contexts()
+        proactor = Proactor.get_proactor()
 
-        def populate():
+        def test():
             record = PersistedRecord()
             Blob.update(record, ClockUtil.generate_author_id(), value)
             yield cluster.persisters[part_drop].put(None, key, record)
-            yield
 
-        def compact():
             yield cluster.persisters[part_drop].bottom_up_compaction()
-            yield
-
-        def validate():
+            yield proactor.wait_until_idle()
 
             # both part_A & part_drop should have part_drop's value
             for part_uuid in part_A, part_drop:
@@ -175,7 +166,7 @@ class TestEventualConsistency(unittest.TestCase):
             cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test([populate, compact, validate])
+        proactor.run(test())
 
     def test_move_succeeds_with_divergent_partitions(self):
 
@@ -202,22 +193,20 @@ class TestEventualConsistency(unittest.TestCase):
             for p in [part_A, part_B, part_C])
 
         cluster.start_server_contexts()
+        proactor = Proactor.get_proactor()
 
-        def populate():
+        def test():
             for part_uuid, value in part_values.items():
 
                 # place divergent fixtures under each peer partition
                 record = PersistedRecord()
                 Blob.update(record, ClockUtil.generate_author_id(), value)
                 yield cluster.persisters[part_uuid].put(None, key, record)
-            yield
 
-        def compact():
             for part_uuid in part_values.keys():
                 yield cluster.persisters[part_uuid].bottom_up_compaction()
-            yield
 
-        def validate():
+            yield proactor.wait_until_idle()
 
             # two of three peers (replication factor) should have
             #  all values, and one shouldn't have the key
@@ -237,6 +226,5 @@ class TestEventualConsistency(unittest.TestCase):
             cluster.stop_server_contexts()
             yield
 
-        Proactor.get_proactor().run_test(
-            [populate, compact, validate])
+        proactor.run(test())
 

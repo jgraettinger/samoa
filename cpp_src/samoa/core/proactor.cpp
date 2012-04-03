@@ -95,19 +95,6 @@ io_service_ptr_t proactor::concurrent_io_service()
     return result;
 }
 
-// helper for proactor::run_later callback dispatch
-void on_run_later(const boost::system::error_code & ec,
-    const proactor::run_later_callback_t & callback,
-    const io_service_ptr_t & io_srv,
-    const timer_ptr_t &)
-{
-    // if cancelled
-    if(ec)
-    { return; }
-
-    callback(io_srv);
-}
-
 // deadline_timer doesn't work across shared-library boundaries,
 //  so it's use needs to be encapsulated into libsamoa.
 timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
@@ -116,11 +103,20 @@ timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
     io_service_ptr_t io_srv = serial_io_service();
 
     timer_ptr_t timer = boost::make_shared<boost::asio::deadline_timer>(*io_srv);
-    timer->expires_from_now(boost::posix_time::milliseconds(delay_ms));
 
-    // timer reference count is passed to boost::bind callback argument
-    timer->async_wait(boost::bind(&on_run_later,
-        _1, callback, io_srv, timer));
+    auto callback_closure = [callback, io_srv, timer](
+        const boost::system::error_code & ec)
+    {
+        // note that io_srv & timer are passed to guard lifetime
+
+        if(ec) // cancelled?
+        {
+            return;
+        }
+        callback();
+    };
+    timer->expires_from_now(boost::posix_time::milliseconds(delay_ms));
+    timer->async_wait(callback_closure);
 
     return timer;
 }

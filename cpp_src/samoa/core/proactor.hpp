@@ -17,9 +17,7 @@ public:
 
     typedef proactor_ptr_t ptr_t;
 
-    typedef boost::function<
-        void (const io_service_ptr_t &)
-    > run_later_callback_t;
+    typedef boost::function<void()> run_later_callback_t;
 
     /*!
     * Reference-counted singleton
