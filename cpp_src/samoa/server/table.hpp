@@ -27,6 +27,7 @@ public:
     typedef table_ptr_t ptr_t;
 
     typedef std::vector<partition_ptr_t> ring_t;
+    typedef boost::unordered_map<core::uuid, partition_ptr_t> uuid_index_t;
 
     //! Constructs a runtime table from protobuf description
     /*!
@@ -54,6 +55,9 @@ public:
     /// Returns nullptr if none exists
     partition_ptr_t get_partition(const core::uuid &) const;
 
+    const uuid_index_t & get_uuid_index() const
+    { return _index; }
+
     const datamodel::merge_func_t & get_consistent_merge() const;
 
     const datamodel::prune_func_t & get_consistent_prune() const;
@@ -71,8 +75,6 @@ public:
         spb::ClusterState::Table & local_table) const;
 
 private:
-
-    typedef boost::unordered_map<core::uuid, partition_ptr_t> uuid_index_t;
 
     core::uuid _uuid;
     core::uuid _server_uuid;

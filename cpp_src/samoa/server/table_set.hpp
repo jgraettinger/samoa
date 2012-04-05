@@ -19,6 +19,9 @@ public:
 
     typedef table_set_ptr_t ptr_t;
 
+    typedef boost::unordered_map<core::uuid,  table_ptr_t> uuid_index_t;
+    typedef boost::unordered_map<std::string, table_ptr_t> name_index_t;
+
     table_set(const spb::ClusterState &, const ptr_t & current);
 
     /// Returns nullptr if none exists
@@ -26,6 +29,12 @@ public:
 
     /// Returns nullptr if none exists
     table_ptr_t get_table_by_name(const std::string &);
+
+    const uuid_index_t & get_uuid_index() const
+    { return _uuid_index; }
+
+    const name_index_t & get_name_index() const
+    { return _name_index; }
 
     void initialize(const context_ptr_t &);
 
@@ -37,9 +46,6 @@ public:
         spb::ClusterState & local) const;
 
 private:
-
-    typedef boost::unordered_map<core::uuid,  table_ptr_t> uuid_index_t;
-    typedef boost::unordered_map<std::string, table_ptr_t> name_index_t;
 
     uuid_index_t _uuid_index;
     name_index_t _name_index;

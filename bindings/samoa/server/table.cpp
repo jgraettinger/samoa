@@ -23,6 +23,16 @@ bpl::list py_get_ring(const table & t)
     return l;
 }
 
+bpl::dict py_get_uuid_index(const table & t)
+{
+    bpl::dict d;
+    for(const auto & entry : t.get_uuid_index())
+    {
+        d[entry.first] = entry.second;
+    }
+    return d;
+}
+
 void make_table_bindings()
 {
     bpl::class_<table, table::ptr_t, boost::noncopyable>(
@@ -38,6 +48,7 @@ void make_table_bindings()
         .def("get_consistency_horizon", &table::get_consistency_horizon)
         .def("get_ring", &py_get_ring)
         .def("get_partition", &table::get_partition)
+        .def("get_uuid_index", &py_get_uuid_index)
         .def("ring_position", &table::ring_position)
         .def("merge_table", &table::merge_table);
 }

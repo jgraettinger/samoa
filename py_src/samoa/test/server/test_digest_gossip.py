@@ -27,8 +27,8 @@ class TestDigestGossip(unittest.TestCase):
                 replication_factor = 3).uuid)
 
         # create a fixture with a 'main' partition and three peers,
-        #  each with partitions; with replication factor of 3, 4
-        #  will track main's digest, and one will not
+        #  each with partitions; with replication factor of three,
+        #  four will track main's digest, and one will not
 
         self.peers = ['peer_1', 'peer_2', 'peer_3', 'peer_4', 'peer_5']
         self.cluster = PeeredCluster(self.common_fixture,
@@ -37,15 +37,41 @@ class TestDigestGossip(unittest.TestCase):
         self.partition_uuid = self.cluster.add_partition(
             self.table_uuid, 'main')
 
+        self.peer_partitions = {}
         for peer in self.peers:
-            self.cluster.add_partition(self.table_uuid, peer)
+            peer_part_uuid = self.cluster.add_partition(self.table_uuid, peer)
+            self.peer_partitions[peer_part_uuid] = peer
 
         self.cluster.start_server_contexts()
 
     def test_digest_gossip(self):
 
-        test_element = (random.randint(0, 1<<63), random.randint(0, 1<<63))
-        test_element = (random.randint(0, 1<<63), random.randint(0, 1<<63))
+        def validate(self, test_entry, should_be_set):
+
+            ring = self.cluster.contexts['main'].get_cluster_state(
+                ).get_table_set(
+                ).get_table(self.table_uuid
+                ).get_ring()
+
+            # enumerate peer names, and whether we expect test_entry to be set
+            expected = dict((p, should_be_set) for p in self.peers)
+
+            for ind, part in enumerate(ring):
+                if part.get_uuid() == self.partition_uuid:
+
+                    # this partition isn't replicated to from main
+                    peer_part_uuid = ring[(ind + 3) % len(ring)].get_uuid()
+                    expected[self.peer_partitions[peer_part_uuid]] = False
+                    break
+
+            for peer, expect in expected.items():
+
+                partition = self.cluster.contexts[peer].get_cluster_state(
+                    ).get_table_set(
+                    ).get_table(self.table_uuid
+                    ).get_partition(self.partition_uuid)
+
+                self.assertEquals(expect, partition.get_digest().test(test_entry))
 
         def test():
 
@@ -54,35 +80,56 @@ class TestDigestGossip(unittest.TestCase):
                 ).get_table(self.table_uuid
                 ).get_partition(self.partition_uuid)
 
-            partition.get_digest().add(test_element)
+            # As the persister is empty, the initial digest gossip threshold is 0.
+            #  Write two records; we'll have to perform two compactions before
+            #  another gossip occurs
+            persister = partition.get_persister()
+
+            yield persister.put(None,
+                self.common_fixture.generate_bytes(), PersistedRecord())
+            yield persister.put(None,
+                self.common_fixture.generate_bytes(), PersistedRecord())
+
+            def random_entry():
+                return (random.randint(0, 1<<63), random.randint(0, 1<<63))
+
+            # set a test digest entry
+            test_entry = random_entry()
+            partition.get_digest().add(test_entry)
+
+            # peers don't know of the entry
+            validate(self, test_entry, False)
+
+            # initiate digest gossip
+            LocalPartition.poll_digest_gossip(self.cluster.contexts['main'],
+                self.table_uuid, self.partition_uuid)
+            yield Proactor.get_proactor().wait_until_idle()
+
+            # assert that replication peers (only) now know of the entry
+            validate(self, test_entry, True)
+
+            # set a new test digest entry
+            test_entry = random_entry()
+            partition.get_digest().add(test_entry)
+
+            # one round of compaction isn't enough to go over threshold
+            yield persister.bottom_up_compaction()
 
             LocalPartition.poll_digest_gossip(self.cluster.contexts['main'],
                 self.table_uuid, self.partition_uuid)
-
-
-            # Next: write two records; vet we have to perform two compactions before another gossip occurs
-            #key = self.common_fixture.generate_bytes()
-
-            #record = PersistedRecord()
-            #Blob.update(record, ClockUtil.generate_author_id(),
-            #    self.common_fixture.generate_bytes())
-
-            #persister = self.cluster.persisters[self.partition_uuid]
-
             yield Proactor.get_proactor().wait_until_idle()
 
-            matched = 0
-            for peer in self.peers:
+            validate(self, test_entry, False)
 
-                partition = self.cluster.contexts[peer].get_cluster_state(
-                    ).get_table_set(
-                    ).get_table(self.table_uuid
-                    ).get_partition(self.partition_uuid)
+            # another round of compaction puts us over threshold
+            yield persister.bottom_up_compaction()
 
-                if partition.get_digest().test(test_element):
-                    matched += 1
+            LocalPartition.poll_digest_gossip(self.cluster.contexts['main'],
+                self.table_uuid, self.partition_uuid)
+            yield Proactor.get_proactor().wait_until_idle()
 
-            self.assertEquals(matched, len(self.peers) - 1)
+            # again, assert that replication peers now know of the entry
+            validate(self, test_entry, True)
 
             self.cluster.stop_server_contexts()
             yield
