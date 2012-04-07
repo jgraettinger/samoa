@@ -23,6 +23,12 @@ element * py_element_with_key_value(const hash_ring * ring,
         PyString_GET_SIZE(value.ptr()), PyString_AS_STRING(value.ptr()));
 }
 
+bpl::tuple py_content_checksum(const element & elem)
+{
+    core::murmur_checksum_t cs = elem.content_checksum();
+    return bpl::make_tuple(cs[0], cs[1]);
+}
+
 void py_set_value(element & elem, const bpl::str & value)
 {
     elem.set_value(
@@ -69,19 +75,21 @@ void make_element_bindings()
             bpl::default_call_policies(),
             (bpl::arg("hash_ring"), bpl::arg("head"),
                 bpl::arg("key"), bpl::arg("value"))))
+        .def("is_null", &element::is_null)
         .def("key_length", &element::key_length)
         .def("value_length", &element::value_length)
         .def("capacity", &element::capacity)
+        .def("content_checksum", &py_content_checksum)
         .def("set_value", &py_set_value)
         .def("set_dead", &element::set_dead)
-        .def("parse_persisted_record", &py_parse_persisted_record)
-        .def("write_persisted_record", &py_write_persisted_record)
         .def("head", &element::head,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("step", &element::step,
             bpl::return_value_policy<bpl::reference_existing_object>())
         .def("key", &py_key)
         .def("value", &py_value)
+        .def("parse_persisted_record", &py_parse_persisted_record)
+        .def("write_persisted_record", &py_write_persisted_record)
         ;
 }
 

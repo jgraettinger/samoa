@@ -52,6 +52,9 @@ void eventual_consistency::upkeep(
     try {
         rstate->load_route_state();
 
+        // update the local digest with new, pruned checksum
+        rstate->get_primary_partition()->get_digest()->add(new_checksum);
+
         auto on_peer_request = [rstate, old_checksum, new_checksum](
             samoa::client::server_request_interface & iface,
             const partition::ptr_t & partition) -> bool

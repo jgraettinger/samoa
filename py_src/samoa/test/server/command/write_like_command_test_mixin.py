@@ -1,5 +1,4 @@
 
-import functools
 import unittest
 
 from samoa.core.protobuf import CommandType, PersistedRecord, ClusterClock

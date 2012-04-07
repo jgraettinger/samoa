@@ -246,8 +246,21 @@ void local_partition::read(
         {
             // speculatively write the merged remote record; as a side-effect,
             //  local-record will be populated with the merged result
+            auto on_put = [self, client_callback, rstate](
+                const boost::system::error_code & ec,
+                const datamodel::merge_result & merge_result,
+                const core::murmur_checksum_t & content_checksum)
+            {
+                if(!ec && merge_result.local_was_updated)
+                {
+                    // a repair occurred; track the new checksum
+                    self->get_digest()->add(content_checksum);
+                }
+                client_callback(ec, true);
+            };
+
             self->get_persister()->put(
-                boost::bind(client_callback, _1, true),
+                on_put,
                 datamodel::merge_func_t(
                     rstate->get_table()->get_consistent_merge()),
                 rstate->get_key(),

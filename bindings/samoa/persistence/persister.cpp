@@ -153,8 +153,8 @@ future::ptr_t py_put(
 
     auto on_put = [f, key, local_record, remote_record](
         const boost::system::error_code & ec,
-        const datamodel::merge_result & result,
-        const core::murmur_checksum_t &)
+        const datamodel::merge_result & merge_result,
+        const core::murmur_checksum_t & checksum)
     {
         // guard key, local_record, remote_record lifetime
 
@@ -165,7 +165,8 @@ future::ptr_t py_put(
             f->on_error(ec);
             return;
         }
-        f->on_result(bpl::object(result));
+        f->on_result(bpl::make_tuple(merge_result,
+            bpl::make_tuple(checksum[0], checksum[1])));
         return;
     };
         

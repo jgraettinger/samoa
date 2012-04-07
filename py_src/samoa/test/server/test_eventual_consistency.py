@@ -1,5 +1,4 @@
 
-import getty
 import unittest
 
 from samoa.core.protobuf import CommandType, PersistedRecord, ClusterClock
@@ -15,7 +14,6 @@ from samoa.persistence.persister import Persister
 from samoa.test.module import TestModule
 from samoa.test.peered_cluster import PeeredCluster
 from samoa.test.cluster_state_fixture import ClusterStateFixture
-
 
 class TestEventualConsistency(unittest.TestCase):
 
