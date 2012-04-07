@@ -20,24 +20,6 @@ typedef boost::shared_ptr<spb::PersistedRecord> prec_ptr_t;
 
 /////////// get support
 
-void py_on_get(
-    const future::ptr_t & future,
-    bool found,
-    const str_ptr_t & /*key_lifetime_guard*/,
-    const prec_ptr_t & record)
-{
-    python_scoped_lock block;
-
-    if(found)
-    {
-        future->on_result(bpl::object(record));
-    }
-    else
-    {
-        future->on_result(bpl::object(prec_ptr_t()));
-    }
-}
-
 future::ptr_t py_get(persister & p, const bpl::str & py_key)
 {
     future::ptr_t f(boost::make_shared<future>());
@@ -49,35 +31,26 @@ future::ptr_t py_get(persister & p, const bpl::str & py_key)
 
     prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
 
-    p.get(boost::bind(py_on_get, f, _1, key, local_record),
-        *key, *local_record);
+    auto on_get = [f, key, local_record](bool found)
+    {
+        // key & local_record are captured to guard lifetime
+
+        python_scoped_lock block;
+
+        if(found)
+        {
+            f->on_result(bpl::object(local_record));
+        }
+        else
+        {
+            f->on_result(bpl::object(prec_ptr_t()));
+        }
+    };
+    p.get(on_get, *key, *local_record);
     return f; 
 }
 
 /////////// drop support
-
-bool py_on_drop(
-    const future::ptr_t & future,
-    const bpl::object & drop_callback,
-    const str_ptr_t & /*key_lifetime_guard*/,
-    const prec_ptr_t & record,
-    bool found)
-{
-    pysamoa::python_scoped_lock block;
-
-    if(found && bpl::extract<bool>(drop_callback(record))())
-    {
-        // the record is to be dropped; yield true, and
-        //   return true to the persister
-        future->on_result(bpl::object(true));
-        return true;
-    }
-
-    // record isn't to be dropped; yield false, and
-    //   return false to the persister
-    future->on_result(bpl::object(false));
-    return false;
-}
 
 future::ptr_t py_drop(persister & p,
     const bpl::object & drop_callback, const bpl::str & py_key)
@@ -98,34 +71,28 @@ future::ptr_t py_drop(persister & p,
 
     prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
 
-    p.drop(
-        boost::bind(&py_on_drop, f, drop_callback, key, local_record, _1),
-        *key, *local_record);
+    auto on_drop = [f, key, local_record, drop_callback](bool found)
+    {
+        pysamoa::python_scoped_lock block;
 
+        if(found && bpl::extract<bool>(drop_callback(local_record))())
+        {
+            // the record is to be dropped; yield true, and
+            //   return true to the persister
+            f->on_result(bpl::object(true));
+            return true;
+        }
+
+        // record isn't to be dropped; yield false, and
+        //   return false to the persister
+        f->on_result(bpl::object(false));
+        return false;
+    };
+    p.drop(on_drop, *key, *local_record);
     return f; 
 }
 
 /////////// iteration support
-
-void py_on_iteration_next(
-    const future::ptr_t & future,
-    const bpl::object & iteration_callback,
-    rolling_hash::element element)
-{
-    pysamoa::python_scoped_lock block;
-
-    if(element.is_null())
-    {
-        // no more elements; yield false and don't callback
-        future->on_result(bpl::object(false));
-    }
-    else
-    {
-        // have another element; callback & yield true
-        iteration_callback(element);
-        future->on_result(bpl::object(true));
-    }
-}
 
 future::ptr_t py_iteration_next(persister & p,
     const bpl::object & iteration_callback, unsigned ticket)
@@ -140,58 +107,27 @@ future::ptr_t py_iteration_next(persister & p,
     future::ptr_t f(boost::make_shared<future>());
     f->set_reenter_via_post();
 
-    p.iteration_next(
-        boost::bind(&py_on_iteration_next, f, iteration_callback, _1),
-        ticket);
+    auto on_next = [f, iteration_callback](rolling_hash::element element)
+    {
+        pysamoa::python_scoped_lock block;
 
+        if(element.is_null())
+        {
+            // no more elements; yield false and don't callback
+            f->on_result(bpl::object(false));
+        }
+        else
+        {
+            // have another element; callback & yield true
+            iteration_callback(element);
+            f->on_result(bpl::object(true));
+        }
+    };
+    p.iteration_next(on_next, ticket);
     return f; 
 }
 
 /////////// put support
-
-void py_on_put(
-    const future::ptr_t & future,
-    const boost::system::error_code & ec,
-    const datamodel::merge_result & result,
-    const str_ptr_t & /*key_lifetime_guard*/,
-    const prec_ptr_t & /*local_record_lifetime_guard*/)
-{
-    pysamoa::python_scoped_lock block;
-
-    if(ec)
-    {
-        future->on_error(ec);
-        return;
-    }
-
-    future->on_result(bpl::object(result));
-    return;
-}
-
-datamodel::merge_result py_on_merge(
-    const bpl::object & merge_callback,
-    spb::PersistedRecord & local_record,
-    const spb::PersistedRecord & remote_record)
-{
-    pysamoa::python_scoped_lock block;
-
-    datamodel::merge_result result(true, false);
-
-    if(merge_callback)
-    {
-        bpl::reference_existing_object::apply<
-            spb::PersistedRecord &>::type convert;
-
-        bpl::reference_existing_object::apply<
-            const spb::PersistedRecord &>::type const_convert;
-
-        result = bpl::extract<datamodel::merge_result>(
-            merge_callback(
-                bpl::handle<>(convert(local_record)),
-                bpl::handle<>(const_convert(remote_record))));
-    }
-    return result;
-}
 
 future::ptr_t py_put(
     persister & p,
@@ -215,69 +151,94 @@ future::ptr_t py_put(
 
     prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
 
-    p.put(
-        boost::bind(&py_on_put, f, _1, _2, key, local_record),
-        boost::bind(&py_on_merge, merge_callback, _1, _2),
-        *key, *remote_record, *local_record);
+    auto on_put = [f, key, local_record, remote_record](
+        const boost::system::error_code & ec,
+        const datamodel::merge_result & result,
+        const core::murmur_checksum_t &)
+    {
+        // guard key, local_record, remote_record lifetime
 
+        pysamoa::python_scoped_lock block;
+
+        if(ec)
+        {
+            f->on_error(ec);
+            return;
+        }
+        f->on_result(bpl::object(result));
+        return;
+    };
+        
+    auto on_merge = [merge_callback](
+        spb::PersistedRecord & local_record,
+        const spb::PersistedRecord & remote_record) -> datamodel::merge_result
+    {
+        pysamoa::python_scoped_lock block;
+    
+        datamodel::merge_result result(true, false);
+    
+        if(merge_callback)
+        {
+            bpl::reference_existing_object::apply<
+                spb::PersistedRecord &>::type convert;
+    
+            bpl::reference_existing_object::apply<
+                const spb::PersistedRecord &>::type const_convert;
+    
+            result = bpl::extract<datamodel::merge_result>(
+                merge_callback(
+                    bpl::handle<>(convert(local_record)),
+                    bpl::handle<>(const_convert(remote_record))));
+        }
+        return result;
+    };
+    p.put(on_put, on_merge, *key, *remote_record, *local_record);
     return f; 
 }
 
 /////////// bottom_up_compaction support
-
-void py_on_bottom_up_compaction(const future::ptr_t & future)
-{
-    pysamoa::python_scoped_lock block;
-    future->on_result(bpl::object());
-}
 
 future::ptr_t py_bottom_up_compaction(persister & p)
 {
     future::ptr_t f(boost::make_shared<future>());
     f->set_reenter_via_post();
 
-    p.bottom_up_compaction(boost::bind(&py_on_bottom_up_compaction, f));
+    auto on_compaction = [f]()
+    {
+        pysamoa::python_scoped_lock block;
+        f->on_result(bpl::object());
+    };
+    p.bottom_up_compaction(on_compaction);
     return f; 
 }
 
 /////////// set_prune_callback support
 
-bool py_on_prune_callback(
-    const bpl::object & prune_callback,
-    spb::PersistedRecord & record)
-{
-    pysamoa::python_scoped_lock block;
-
-    return bpl::extract<bool>(prune_callback(record));
-}
-
 void py_set_prune_callback(persister & p,
     const bpl::object & prune_callback)
 {
-    datamodel::prune_func_t callback = \
-        boost::bind(&py_on_prune_callback,
-            prune_callback, _1);
-
+    auto callback = [prune_callback](
+        spb::PersistedRecord & record) -> bool
+    {
+        pysamoa::python_scoped_lock block;
+        return bpl::extract<bool>(prune_callback(record));
+    };
     p.set_prune_callback(callback);
 }
 
 /////////// set_upkeep_callback support
 
-void py_on_upkeep_callback(
-    const bpl::object & upkeep_callback,
-    const request::state::ptr_t & rstate)
-{
-    pysamoa::python_scoped_lock block;
-    upkeep_callback(rstate);
-}
-
 void py_set_upkeep_callback(persister & p,
     const bpl::object & upkeep_callback)
 {
-    persister::upkeep_callback_t callback = \
-        boost::bind(&py_on_upkeep_callback,
-            upkeep_callback, _1);
-
+    auto callback = [upkeep_callback](
+        const request::state::ptr_t & rstate,
+        const core::murmur_checksum_t &,
+        const core::murmur_checksum_t &)
+    {
+        pysamoa::python_scoped_lock block;
+        upkeep_callback(rstate);
+    };
     p.set_upkeep_callback(callback);
 }
 

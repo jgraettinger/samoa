@@ -37,6 +37,11 @@ public:
             if(_next_packet->completes_sequence())
             {
                 // end-of-stream condition
+                _element._last = _next_packet;
+                _element._content_cs = _new_content_cs;
+
+                _next_packet = nullptr;
+                _next_offset = 0;
                 return false;
             }
 
