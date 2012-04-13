@@ -41,16 +41,18 @@ class PeeredCluster(object):
         self.contexts = None
         self.persisters = None
 
-    def set_known_peer(self, server_name, peer_name):
+    def set_known_peer(self, server_name, peer_name, seed = False):
 
         peer_uuid = self.fixtures[peer_name].server_uuid
         peer_port = self.fixtures[peer_name].server_port
 
-        if self.fixtures[server_name].get_peer(peer_uuid):
-            return
+        current = self.fixtures[server_name].get_peer(peer_uuid)
 
-        self.fixtures[server_name].add_peer(
-            uuid = peer_uuid, port = peer_port)
+        if current:
+            current.set_seed(seed)
+        else:
+            self.fixtures[server_name].add_peer(
+                uuid = peer_uuid, port = peer_port, seed = seed)
 
     def add_partition(self, table_uuid, server_name):
 
@@ -88,7 +90,8 @@ class PeeredCluster(object):
     def get_connection(self, name):
 
         connection = yield Server.connect_to(
-            self.listeners[name].get_address(), self.listeners[name].get_port())
+            self.listeners[name].get_address(),
+            self.listeners[name].get_port())
         yield connection
 
     def schedule_request(self, name):

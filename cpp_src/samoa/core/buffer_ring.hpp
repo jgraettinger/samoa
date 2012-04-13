@@ -53,26 +53,14 @@ public:
 
     // Returns a sequence of buffer regions which may be written into
     template<typename BufferRegion>
-    void get_write_regions(
-        std::vector<BufferRegion> & regions,
-        size_t max_total_size = (size_t)-1
-    )
+    void get_write_regions(std::vector<BufferRegion> & regions)
     {
-        for(size_t ind = _w_ind; ind != _buffers.size() && max_total_size; ++ind)
+        for(size_t ind = _w_ind; ind != _buffers.size(); ++ind)
         {
             size_t b_begin = ind == _w_ind ? _w_pos : 0;
             size_t b_end   = _buffers[ind]->size();
 
-            if((b_end - b_begin) > max_total_size)
-                b_end = b_begin + max_total_size;
-
-            regions.push_back(
-                BufferRegion(
-                    _buffers[ind],
-                    b_begin, b_end
-                )
-            );
-            max_total_size -= (b_end - b_begin);
+            regions.push_back(BufferRegion(_buffers[ind], b_begin, b_end));
         }
         return;
     }

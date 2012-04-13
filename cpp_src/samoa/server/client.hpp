@@ -23,15 +23,23 @@ typedef boost::function<
  *
  * This facilitates delivery of out-of-order responses to the client:
  * as responses become available, handlers call schedule_response()
- * to arrange for eventual callback with an exclusive client_response_interface.
+ * to arrange for eventual callback with an exclusive
+ * client_response_interface.
  *
- * When the response generation is complete, finish_response() is called to
- * flush remaining writes and notify the client that the next response handler
- * can be called back.
+ * When the response generation is complete, finish_response() is
+ * called to flush remaining writes and notify the client that the
+ * next response handler can be called back.
  */
 class client_response_interface
 {
 public:
+
+    client_response_interface() = default;
+
+    // Moveable, but not copyable
+    client_response_interface(client_response_interface &&) = default;
+    client_response_interface(client_response_interface &) = delete;
+    client_response_interface(const client_response_interface &) = delete;
 
     /*!
      * Exposes the client's underlying write_interface_t
@@ -48,7 +56,7 @@ public:
 private:
 
     friend class client;
-    explicit client_response_interface(const client_ptr_t & c);
+    explicit client_response_interface(client_ptr_t);
 
     client_ptr_t _client;
 };
@@ -61,18 +69,16 @@ class client :
 public:
 
     typedef client_ptr_t ptr_t;
-    typedef client_weak_ptr_t weak_ptr_t;
 
-    typedef client_response_callback_t response_callback_t;
     typedef client_response_interface response_interface;
+    typedef client_response_callback_t response_callback_t;
 
     static const unsigned max_request_concurrency;
 
     client(context_ptr_t, protocol_ptr_t,
-        core::io_service_ptr_t,
-        std::unique_ptr<boost::asio::ip::tcp::socket> &);
+        std::unique_ptr<boost::asio::ip::tcp::socket>);
 
-    ~client();
+    virtual ~client();
 
     using core::stream_protocol::get_io_service;
 
@@ -82,12 +88,6 @@ public:
     const protocol_ptr_t & get_protocol() const
     { return _protocol; }
 
-    unsigned get_timeout_ms()
-    { return _timeout_ms; }
-
-    void set_timeout_ms(unsigned timeout_ms)
-    { _timeout_ms = timeout_ms; }
-
     /*!
      * \brief Schedules writing of response.
      *
@@ -95,13 +95,14 @@ public:
      *  client::response_interface, which may be used to write the
      *  response to the client
      */
-    void schedule_response(const response_callback_t &);
+    void schedule_response(response_callback_t);
 
     void initialize();
 
-    void shutdown();
-
 private:
+
+    using stream_protocol::read_interface_t;
+    using stream_protocol::write_interface_t;
 
     friend class client_response_interface;
 
@@ -115,14 +116,19 @@ private:
     /*
      * Begins read of SamoaRequest body
      */
-    void on_request_length(const boost::system::error_code &,
-        const core::buffer_regions_t &);
+    static void on_request_length(
+        read_interface_t::ptr_t,
+        boost::system::error_code,
+        core::buffer_regions_t);
 
     /*
-     * Allocates a request::state; parses SamoaRequest; enters on_request_data_block
+     * Allocates a request::state, parses SamoaRequest,
+     *  and enters on_request_data_block
      */
-    void on_request_body(const boost::system::error_code &,
-        const core::buffer_regions_t &);
+    static void on_request_body(
+        read_interface_t::ptr_t,
+        boost::system::error_code,
+        core::buffer_regions_t);
 
     /*
      * Re-entrant: reads request data blocks.
@@ -157,27 +163,16 @@ private:
      */
     void on_response_finish(const boost::system::error_code &);
 
-    /*
-     * If a client hasn't responded within the timeout period, and has
-     *  no pending requests, then the client is stopped (socket is closed,
-     *  timeout cancelled, etc).
-     */
-    void on_timeout(boost::system::error_code);
-
     const context_ptr_t _context;
     const protocol_ptr_t _protocol;
 
-    bool _ready_for_read;
-    bool _ready_for_write; // xthread
+    bool _ready_for_read = true;
+    bool _ready_for_write = true; // xthread
 
     std::list<response_callback_t> _queued_response_callbacks; // xthread
 
-    unsigned _cur_requests_outstanding;
+    unsigned _cur_requests_outstanding = 0;
 
-    bool _ignore_timeout;
-    unsigned _timeout_ms;
-    boost::asio::deadline_timer _timeout_timer;
-    
     spinlock _lock;
 };
 

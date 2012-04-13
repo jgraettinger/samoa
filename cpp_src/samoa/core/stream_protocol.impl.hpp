@@ -10,10 +10,10 @@ template<typename Iterator>
 void stream_protocol_write_interface::queue_write(
     const Iterator & begin, const Iterator & end)
 {
-    assert(_w_ring.available_read() == 0);
-    _w_ring.produce_range(begin, end);
-    _w_ring.get_read_regions(_w_regions);
-    _w_ring.consumed(_w_ring.available_read());
+    SAMOA_ASSERT(_ring.available_read() == 0);
+    _ring.produce_range(begin, end);
+    _ring.get_read_regions(_regions);
+    _ring.consumed(_ring.available_read());
 }
 
 }

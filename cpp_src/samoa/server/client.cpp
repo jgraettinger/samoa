@@ -21,16 +21,13 @@ namespace server {
 
 using namespace boost::asio;
 
-// default timeout of 1 minute
-unsigned default_timeout_ms = 10 * 1000;
-
 const unsigned client::max_request_concurrency = 100;
 
 //////////////////////////////////////////////////////////////////////////////
 //  client::response_interface
 
-client_response_interface::client_response_interface(const client::ptr_t & p)
- : _client(p)
+client_response_interface::client_response_interface(client::ptr_t p)
+ : _client(std::move(p))
 {
     SAMOA_ASSERT(_client && !_client->has_queued_writes())
 }
@@ -43,8 +40,8 @@ client_response_interface::write_interface()
 
 void client_response_interface::finish_response()
 {
-    write_interface().write_queued(
-        boost::bind(&client::on_response_finish, _client, _1));
+    write_interface().write(_client,
+        boost::bind(&client::on_response_finish, _1, _2));
 
     // release ownership of client::response_interface
     _client.reset();
@@ -56,50 +53,22 @@ void client_response_interface::finish_response()
 //  client
 
 client::client(context::ptr_t context, protocol::ptr_t protocol,
-    core::io_service_ptr_t io_srv,
-    std::unique_ptr<ip::tcp::socket> & sock)
- : core::stream_protocol(io_srv, sock),
+    std::unique_ptr<ip::tcp::socket> sock)
+ : core::stream_protocol(std::move(sock)),
    _context(context),
-   _protocol(protocol),
-   _ready_for_read(true),
-   _ready_for_write(true),
-   _cur_requests_outstanding(0),
-   _ignore_timeout(false),
-   _timeout_ms(default_timeout_ms),
-   _timeout_timer(*get_io_service())
+   _protocol(protocol)
 {
     LOG_DBG("");
 }
 
 client::~client()
 {
-	_context->drop_client(reinterpret_cast<size_t>(this));
     LOG_DBG("");
 }
 
 void client::initialize()
 {
-	_context->add_client(reinterpret_cast<size_t>(this),
-        shared_from_this());
-
     on_next_request();
-
-    // start a timeout timer, waiting for requests from the client
-    _timeout_timer.expires_from_now(
-        boost::posix_time::milliseconds(_timeout_ms));
-    _timeout_timer.async_wait(boost::bind(
-        &client::on_timeout, shared_from_this(), _1));
-}
-
-void client::shutdown()
-{
-    core::stream_protocol::close();
-    _timeout_timer.cancel();
-}
-
-void client::schedule_response(const response_callback_t & callback)
-{
-    on_next_response(false, &callback);
 }
 
 void client::on_next_request()
@@ -109,8 +78,8 @@ void client::on_next_request()
         ++_cur_requests_outstanding;
         _ready_for_read = false;
 
-        read_data(boost::bind(&client::on_request_length,
-            shared_from_this(), _1, _3), 2);
+        read(boost::bind(&client::on_request_length, _1, _2, _3),
+            shared_from_this(), 2);
     }
     else
     {
@@ -118,38 +87,53 @@ void client::on_next_request()
     }
 }
 
-void client::on_request_length(const boost::system::error_code & ec,
-    const core::buffer_regions_t & read_body)
+/* static */
+void client::on_request_length(
+    read_interface_t::ptr_t b_self,
+    boost::system::error_code ec,
+    core::buffer_regions_t read_body)
 {
+    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    SAMOA_ASSERT(self);
+
     if(ec)
     {
-        LOG_WARN(ec.message());
-        _timeout_timer.cancel();
+        LOG_WARN(ec);
+        self->on_connection_error(ec);
+        // break read loop
         return;
     }
 
+    // parse upcoming protobuf message length
     uint16_t len;
     std::copy(buffers_begin(read_body), buffers_end(read_body),
         (char*) &len);
 
-    read_data(boost::bind(&client::on_request_body,
-        shared_from_this(), _1, _3), ntohs(len));
+    read_data(boost::bind(&client::on_request_body, _1, _2, _3),
+        self, ntohs(len));
 }
 
-void client::on_request_body(const boost::system::error_code & ec,
-    const core::buffer_regions_t & read_body)
+/* static */
+void client::on_request_body(
+    read_interface_t::ptr_t b_self,
+    boost::system::error_code ec,
+    core::buffer_regions_t read_body)
 {
+    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    SAMOA_ASSERT(self);
+
     if(ec)
     {
-        LOG_WARN(ec.message());
-        _timeout_timer.cancel();
+        LOG_WARN(ec);
+        self->on_connection_error(ec);
+        // break read loop
         return;
     }
 
     request::state::ptr_t rstate = boost::make_shared<request::state>();
 
     request::client_state & client_state = \
-        rstate->initialize_from_client(shared_from_this());
+        rstate->initialize_from_client(std::move(self));
 
     core::protobuf::zero_copy_input_adapter zci_adapter(read_body);
     if(!client_state.mutable_samoa_request(
@@ -175,7 +159,6 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     if(ec)
     {
         LOG_WARN(ec.message());
-        _timeout_timer.cancel();
         return;
     }
 
@@ -232,6 +215,11 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     {
         rstate->send_error(501, "unknown operation type");
     }
+}
+
+void client::schedule_response(response_callback_t callback)
+{
+    on_next_response(false, std::move(callback));
 }
 
 void client::on_next_response(bool is_write_complete,
@@ -306,34 +294,6 @@ void client::on_response_finish(const boost::system::error_code & ec)
     --_cur_requests_outstanding;
 
     on_next_response(true, 0);
-}
-
-void client::on_timeout(boost::system::error_code ec)
-{
-    if(ec)
-    {
-        // timer cancelled; ignore
-        return;
-    }
-
-    if(_ignore_timeout || _cur_requests_outstanding > 1)
-    {
-        // we've recently receieved a request from this client,
-        //  or they have pending responses still in flight
-
-        // start a timeout timer, waiting for requests from the client
-        _timeout_timer.expires_from_now(
-            boost::posix_time::milliseconds(_timeout_ms));
-        _timeout_timer.async_wait(boost::bind(
-            &client::on_timeout, shared_from_this(), _1));
-
-        _ignore_timeout = false;
-    }
-    else
-    {
-        LOG_INFO("client timeout");
-        core::stream_protocol::close();
-    }
 }
 
 }

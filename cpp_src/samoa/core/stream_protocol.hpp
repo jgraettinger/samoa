@@ -7,7 +7,6 @@
 #include "samoa/core/buffer_ring.hpp"
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
-#include <boost/regex.hpp>
 #include <boost/system/error_code.hpp>
 
 namespace samoa {
@@ -18,75 +17,26 @@ class stream_protocol_read_interface
 {
 public:
 
-    stream_protocol_read_interface();
+    typedef boost::shared_ptr<stream_protocol_read_interface> ptr_t;
+    typedef boost::weak_ptr<stream_protocol_read_interface> weak_ptr_t;
 
-    typedef boost::match_results<buffers_iterator_t
-        > match_results_t;
-
-    // match_results_t argument is invalidated by
-    //  the next call to read_*
     typedef boost::function<
-        void(const boost::system::error_code &,
-            const match_results_t &)
-    > read_regex_callback_t;
+        void(ptr_t, boost::system::error_code, buffer_regions_t)
+    > read_callback_t;
 
-    void read_regex(
-        const  read_regex_callback_t &,
-        const  boost::regex &,
-        size_t max_read_length);
-
-    // iteration range is invalidated by
-    //  the next call to read_*
-    typedef boost::function<
-        void(const boost::system::error_code &,
-            const buffers_iterator_t & begin,
-            const buffers_iterator_t & end)
-    > read_line_callback_t;
-
-    void read_line(
-        const  read_line_callback_t &,
-        char   delim_char = '\n',
-        size_t max_read_length = 1024);
-
-    // buffer_regions_t argument is invalidated by
-    //  the next call to read_*
-    typedef boost::function<
-        void(const boost::system::error_code &,
-            size_t, const buffer_regions_t &)
-    > read_data_callback_t;
-
-    void read_data(
-        const read_data_callback_t &,
-        size_t read_length);
+    void read(read_callback_t, weak_ptr_t self, size_t length);
 
 private:
 
-    void pre_socket_read(size_t read_target);
-    void post_socket_read(size_t bytes_read);
-
-    void on_regex_read(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
-        const  boost::regex & regex,
-        size_t max_read_length,
-        const  read_regex_callback_t &);
-
-    void on_read_line(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
-        char   delim,
-        size_t max_read_length,
-        const  read_line_callback_t &);
-
-    void on_read_data(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
+    static void on_read(
+        weak_ptr_t self,
+        read_callback_t,
+        boost::system::error_code,
         size_t read_length,
-        const  read_data_callback_t &);
+        size_t bytes_transferred);
 
-    bool _in_read;
-    buffer_ring _r_ring;
-    buffer_regions_t _r_regions;
+    bool _in_read = false;
+    buffer_ring _ring;
 };
 
 class stream_protocol_write_interface
@@ -94,53 +44,40 @@ class stream_protocol_write_interface
 {
 public:
 
-    stream_protocol_write_interface();
+    typedef boost::shared_ptr<stream_protocol_write_interface> ptr_t;
+    typedef boost::weak_ptr<stream_protocol_write_interface> weak_ptr_t;
 
     bool has_queued_writes() const;
 
-    // queue_write(*) - schedule buffer for writing to the client,
-    //  using gather-IO.
+    // queue_write(*) - schedule buffer for later write using gather-IO
     //
     // It is an error to call queue_write() while a
     //  write operation is in progress.
-    void queue_write(const const_buffer_region &);
-    void queue_write(const const_buffer_regions_t &);
     void queue_write(const buffer_regions_t &);
 
     template<typename Iterator>
     void queue_write(const Iterator & begin, const Iterator & end);
 
     void queue_write(const std::string & str)
-    { queue_write(str.begin(), str.end()); }
+    { queue_write(std::begin(str), std::end(str)); }
 
     typedef boost::function<
-        void(const boost::system::error_code &, size_t)
-    > write_queued_callback_t;
+        void(ptr_t, boost::system::error_code)
+    > write_callback_t;
 
     // Initiates an asynchronous write of queued buffer
-    //  regions to the socket.
-    //
-    // Callback signature:
-    //
-    //   callback(boost::system::error_code,
-    //       size_t write_length)
-    //
-    // Note: write_length is returned for convienence only.
-    //   The operation will either write the entire amount of
-    //   requested data, or will return with an error.
-    //
-    void write_queued(const write_queued_callback_t &);
+    //  regions to the socket. Callback is invoked when
+    //  the entire write has completed, or an error occurs
+    void write(write_callback_t, weak_ptr_t self);
 
 private:
 
-    void on_write_queued(
-        const  boost::system::error_code & ec,
-        size_t bytes_transferred,
-        const  write_queued_callback_t &);
+    static void on_write(weak_ptr_t,
+        write_callback_t, boost::system::error_code);
 
-    bool _in_write;
-    buffer_ring _w_ring;
-    const_buffer_regions_t _w_regions;
+    bool _in_write = false;
+    buffer_ring _ring;
+    buffer_regions_t _regions;
 };
 
 class stream_protocol :
@@ -149,13 +86,10 @@ class stream_protocol :
 {
 public:
 
-    stream_protocol_read_interface::match_results_t;
-
     typedef stream_protocol_read_interface read_interface_t;
     typedef stream_protocol_write_interface write_interface_t;
 
-    stream_protocol(const io_service_ptr_t &,
-        std::unique_ptr<boost::asio::ip::tcp::socket> & sock);
+    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> sock);
 
     virtual ~stream_protocol();
 
@@ -164,9 +98,6 @@ public:
 
     unsigned get_local_port() const;
     unsigned get_remote_port() const;
-
-    const io_service_ptr_t & get_io_service()
-    { return _io_srv; }
 
     bool is_open() const;
 
@@ -187,13 +118,15 @@ protected:
     const boost::asio::ip::tcp::socket & get_socket() const
     { return *_sock; }
 
+    boost::asio::io_service & get_io_service()
+    { return _sock->get_io_service(); }
+
 private:
 
     friend class stream_protocol_read_interface;
     friend class stream_protocol_write_interface;
 
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
-    io_service_ptr_t _io_srv;
 };
 
 }

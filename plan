@@ -1,16 +1,27 @@
 
-finish local_partition digest gossip implementation
+currently:
 
-test_local_partition test:
-    - fixture with main and peer
-    - main writes a record
-    - performs enough compactions to reach the gossip threshold
-    - writes additional records
-    - pre-condition: peer digest knows of original records only
-    - poll_digest_gossip
-    - validation step: peer digest of local partition knows of all records
+    - server doesn't time out
+    - server holds strong-pointer on read-loop
 
-update eventual-consistency tests to check for digest update
-update replication tests to check for digest update
-    - move to local_partition tests?
+    - client does time out
+    - client holds strong-pointer on read-loop
+
+
+* no need to guard io_service
+
+* reads don't need to be strong
+    - server : why read responses if nobody's listening?
+    - client : throw away client to close connection
+
+* writes don't need to be strong
+    - server : writer holds strong ptr from server_pool
+    - client : strong ptr held by rstate
+
+* client & server should update with last read timestamp
+    - server_pool will periodically check servers for timeouts
+    - listener will periodically check clients for timeouts
+
+* client/server destructor should move socket into lambda for
+    dispatched destruction in it's own io_loop
 
