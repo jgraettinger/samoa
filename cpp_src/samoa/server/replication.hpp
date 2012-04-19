@@ -7,7 +7,7 @@
 #include "samoa/request/request_state.hpp"
 #include "samoa/core/fwd.hpp"
 #include <boost/system/error_code.hpp>
-#include <boost/function.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -16,12 +16,12 @@ class replication
 {
 public:
 
-    typedef boost::function<bool(
+    typedef std::function<bool(
         samoa::client::server_request_interface &,
         const partition_ptr_t &)
     > peer_request_callback_t;
 
-    typedef boost::function<void(
+    typedef std::function<void(
         const boost::system::error_code &,
         samoa::client::server_response_interface &,
         const partition_ptr_t &)

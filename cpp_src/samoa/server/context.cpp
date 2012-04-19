@@ -8,7 +8,6 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
-#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {
@@ -70,7 +69,7 @@ void context::shutdown()
 
             if(client)
             {
-            	client->shutdown();
+            	//client->shutdown();
             }
         }
     }

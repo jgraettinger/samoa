@@ -6,7 +6,7 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
 #include "samoa/spinlock.hpp"
-#include <boost/function.hpp>
+#include <functional>
 #include <unordered_map>
 #include <string>
 
@@ -41,7 +41,7 @@ public:
 
     void shutdown();
 
-    typedef boost::function<bool(spb::ClusterState &)
+    typedef std::function<bool(spb::ClusterState &)
         > cluster_state_callback_t;
 
     //! Begins a cluster state transaction

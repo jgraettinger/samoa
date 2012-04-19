@@ -13,7 +13,6 @@
 #include "samoa/datamodel/counter.hpp"
 #include "samoa/datamodel/clock_util.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {

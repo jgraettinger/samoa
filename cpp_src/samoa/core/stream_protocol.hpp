@@ -80,12 +80,9 @@ public:
 
 private:
 
-    static void on_write(weak_ptr_t,
-        write_callback_t, boost::system::error_code);
-
     bool _in_write;
     buffer_ring _ring;
-    buffer_regions_t _regions;
+    const_buffer_regions_t _regions;
 };
 
 class stream_protocol :

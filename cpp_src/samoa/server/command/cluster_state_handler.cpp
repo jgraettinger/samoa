@@ -7,7 +7,7 @@
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include "samoa/core/protobuf/zero_copy_input_adapter.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -28,7 +28,7 @@ void cluster_state_handler::handle(const request::state::ptr_t & rstate)
     else
     {
         rstate->get_context()->cluster_state_transaction(
-            boost::bind(&cluster_state_handler::on_state_transaction,
+            std::bind(&cluster_state_handler::on_state_transaction,
                 shared_from_this(), _1, rstate));
     }
 }
@@ -44,7 +44,7 @@ bool cluster_state_handler::on_state_transaction(
     SAMOA_ASSERT(remote_state.ParseFromZeroCopyStream(&zci_adapter));
 
     rstate->get_io_service()->post(
-        boost::bind(&cluster_state_handler::on_complete,
+        std::bind(&cluster_state_handler::on_complete,
             shared_from_this(), rstate));
 
     return rstate->get_context()->get_cluster_state(

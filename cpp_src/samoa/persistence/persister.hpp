@@ -10,7 +10,7 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
-#include <boost/function.hpp>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -26,28 +26,28 @@ public:
 
     typedef persister_ptr_t ptr_t;
 
-    typedef boost::function<void(bool) // found
+    typedef std::function<void(bool) // found
     > get_callback_t;
 
-    typedef boost::function<bool(bool) // found
+    typedef std::function<bool(bool) // found
     > drop_callback_t;
 
-    typedef boost::function<void(rolling_hash::element)
+    typedef std::function<void(rolling_hash::element)
     > iterate_callback_t;
 
-    typedef boost::function<void(
+    typedef std::function<void(
         const boost::system::error_code &,
         const datamodel::merge_result &,
         const core::murmur_checksum_t &)
     > put_callback_t;
 
-    typedef boost::function<void(
+    typedef std::function<void(
         const request::state_ptr_t &,
         const core::murmur_checksum_t & old_checksum,
         const core::murmur_checksum_t & new_checksum)
     > upkeep_callback_t;
 
-    typedef boost::function<void(void)
+    typedef std::function<void(void)
     > bottom_up_compaction_callback_t;
 
     persister();

@@ -36,6 +36,12 @@ client_state & state::mutable_client_state()
     return *this;
 }
 
+boost::asio::io_service & state::get_io_service()
+{
+    SAMOA_ASSERT(get_client());
+    return get_client()->get_io_service();
+}
+
 void state::load_table_state()
 {
     table_state::load_table_state(get_table_set());

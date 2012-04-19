@@ -10,7 +10,7 @@
 #include "samoa/request/request_state.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
+#include <functional>
 #include <algorithm>
 
 namespace samoa {
@@ -64,7 +64,7 @@ void persister::get(
     spb::PersistedRecord & record)
 {
     _strand.post(
-        boost::bind(&persister::on_get,
+        std::bind(&persister::on_get,
             shared_from_this(),
             std::move(callback),
             boost::cref(key),
@@ -77,7 +77,7 @@ void persister::drop(
     spb::PersistedRecord & record)
 {
     _strand.post(
-        boost::bind(&persister::on_drop,
+        std::bind(&persister::on_drop,
             shared_from_this(),
             std::move(callback),
             boost::cref(key),
@@ -120,7 +120,7 @@ void persister::iteration_next(iterate_callback_t && callback, size_t ticket)
     SAMOA_ASSERT(_iterators.at(ticket).state != iterator::POSTED);
 
     _strand.post(
-        boost::bind(&persister::on_iteration_next,
+        std::bind(&persister::on_iteration_next,
             shared_from_this(),
             std::move(callback),
             ticket));
@@ -136,7 +136,7 @@ void persister::put(
     spb::PersistedRecord & local_record)
 {
     _strand.post(
-        boost::bind(&persister::on_put,
+        std::bind(&persister::on_put,
             shared_from_this(),
             std::move(callback),
             std::move(merge_func),
@@ -163,7 +163,7 @@ void persister::bottom_up_compaction(
     bottom_up_compaction_callback_t && callback)
 {
     _strand.post(
-        boost::bind(&persister::on_bottom_up_compaction,
+        std::bind(&persister::on_bottom_up_compaction,
             shared_from_this(),
             std::move(callback)));
 }

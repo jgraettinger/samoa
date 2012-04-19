@@ -47,6 +47,8 @@ public:
         const boost::system::error_code & err_msg);
     client_state & mutable_client_state();
 
+    boost::asio::io_service & get_io_service();
+
     void load_table_state();
 
     using table_state::get_table_uuid;

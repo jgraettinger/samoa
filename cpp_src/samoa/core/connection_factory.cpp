@@ -3,57 +3,46 @@
 #include <boost/smart_ptr/make_shared.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace core {
 
 using namespace boost::asio;
 
-// private constructor-class for use with boost::make_shared
-class connection_factory_priv : public connection_factory
-{
-public:
+connection_factory::connect_timeout_ms = 60000;
 
-    connection_factory_priv(const core::io_service_ptr_t & io_srv,
-         unsigned t)
-     : connection_factory(io_srv, t)
-    { }
-};
-
-connection_factory::connection_factory(
-    const core::io_service_ptr_t & io_srv, unsigned timeout_ms)
- :  _timeout_ms(timeout_ms),
-    _io_srv(io_srv),
-    _sock(new ip::tcp::socket(*io_srv)),
+connection_factory::connection_factory()
+ :  _sock(new ip::tcp::socket(proactor::get_proactor()->serial_io_service())),
     _resolver(_sock->get_io_service()),
     _timer(_sock->get_io_service())
 { }
 
-/* static */ connection_factory::ptr_t connection_factory::connect_to(
-    const connection_factory::callback_t & callback,
+/* static */
+connection_factory::ptr_t connection_factory::connect_to(
+    connection_factory::callback_t callback,
     const std::string & host,
     unsigned short port)
 {
     core::io_service_ptr_t io_srv = \
         proactor::get_proactor()->serial_io_service();
 
-    ptr_t p(boost::make_shared<connection_factory_priv>(io_srv, 60000));
+    ptr_t p(boost::make_shared<connection_factory>());
 
     ip::tcp::resolver::query query(host,
         boost::lexical_cast<std::string>(port));
 
     // start an async resolution of the host & port
-    p->_resolver.async_resolve(query, boost::bind(
+    p->_resolver.async_resolve(query, std::bind(
         &connection_factory::on_resolve, p,
         boost::asio::placeholders::error,
         boost::asio::placeholders::iterator,
-        callback));
+        std::move(callback)));
 
     // start a new timeout period
     p->_timer.expires_from_now(
-        boost::posix_time::milliseconds(p->_timeout_ms));
-    p->_timer.async_wait(boost::bind(
+        boost::posix_time::milliseconds(connect_timeout_ms));
+    p->_timer.async_wait(std::bind(
         &connection_factory::on_timeout, p,
         boost::asio::placeholders::error));
     return p;
@@ -88,13 +77,13 @@ void connection_factory::on_connect(
 
         // attempt to connect to the next endpoint
         ip::tcp::endpoint endpoint = *(_endpoint_iter++);
-        _sock->async_connect(endpoint, boost::bind(
+        _sock->async_connect(endpoint, std::bind(
             &connection_factory::on_connect, shared_from_this(),
             boost::asio::placeholders::error, callback));
 
         // start a new timeout period
         _timer.expires_from_now(boost::posix_time::milliseconds(_timeout_ms));
-        _timer.async_wait(boost::bind(
+        _timer.async_wait(std::bind(
             &connection_factory::on_timeout, shared_from_this(),
             boost::asio::placeholders::error));
     }

@@ -6,8 +6,8 @@
 #include "samoa/core/uuid.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/spinlock.hpp"
-#include <boost/function.hpp>
 #include <boost/asio.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -21,7 +21,7 @@ public:
 
     peer_discovery(const context_ptr_t &, const core::uuid & peer_uuid);
 
-    typedef boost::function<void(const boost::system::error_code &
+    typedef std::function<void(const boost::system::error_code &
         )> callback_t;
 
     void operator()();
@@ -31,11 +31,11 @@ public:
 
 protected:
 
-    void on_request(const boost::system::error_code &,
-        samoa::client::server_request_interface &);
+    void on_request(boost::system::error_code,
+        samoa::client::server_request_interface);
 
-    void on_response(const boost::system::error_code &,
-        samoa::client::server_response_interface &);
+    void on_response(boost::system::error_code,
+        samoa::client::server_response_interface);
 
     bool on_state_transaction(core::protobuf::ClusterState &);
 

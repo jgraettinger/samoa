@@ -12,7 +12,6 @@
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/datamodel/counter.hpp"
-#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {

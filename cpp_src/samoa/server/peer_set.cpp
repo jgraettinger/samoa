@@ -9,7 +9,7 @@
 #include "samoa/log.hpp"
 #include <boost/unordered_set.hpp>
 #include <boost/uuid/uuid_generators.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -264,7 +264,7 @@ void peer_set::forward_request(const request::state::ptr_t & rstate)
     core::uuid best_peer_uuid = select_best_peer(rstate);
 
     schedule_request(
-        boost::bind(&peer_set::on_forwarded_request,
+        std::bind(&peer_set::on_forwarded_request,
             boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
             _1, _2, rstate, best_peer_uuid),
         best_peer_uuid);
@@ -316,7 +316,7 @@ void peer_set::on_forwarded_request(
     }
 
     iface.flush_request(
-        boost::bind(&peer_set::on_forwarded_response,
+        std::bind(&peer_set::on_forwarded_response,
             boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
             _1, _2, rstate, peer_uuid));
 }

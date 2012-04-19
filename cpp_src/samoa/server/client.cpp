@@ -10,9 +10,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
-#include <boost/lexical_cast.hpp>
-#include <sstream>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -39,7 +37,7 @@ client_response_interface::write_interface()
 void client_response_interface::finish_response()
 {
     write_interface().write(_client,
-        boost::bind(&client::on_response_finish, _1, _2));
+        std::bind(&client::on_response_finish, _1, _2));
 
     // release ownership of client::response_interface
     _client.reset();
@@ -79,7 +77,7 @@ void client::on_next_request()
         ++_cur_requests_outstanding;
         _ready_for_read = false;
 
-        read(boost::bind(&client::on_request_length, _1, _2, _3),
+        read(std::bind(&client::on_request_length, _1, _2, _3),
             shared_from_this(), 2);
     }
     else
@@ -110,7 +108,7 @@ void client::on_request_length(
     std::copy(buffers_begin(read_body), buffers_end(read_body),
         (char*) &len);
 
-    read_data(boost::bind(&client::on_request_body, _1, _2, _3),
+    read_data(std::bind(&client::on_request_body, _1, _2, _3),
         self, ntohs(len));
 }
 
@@ -198,7 +196,7 @@ void client::on_request_data_block(
         // still more data blocks to read
         unsigned next_length = samoa_request.data_block_length(ind);
 
-        read(boost::bind(&client::on_request_data_block, _1, _2, _3, ind),
+        read(std::bind(&client::on_request_data_block, _1, _2, _3, ind),
             self, next_length);
         return;
     }
@@ -207,7 +205,7 @@ void client::on_request_data_block(
     _ready_for_read = true;
 
     // post to continue request read-loop
-    get_io_service()->post(boost::bind(
+    get_io_service().post(std::bind(
         &client::on_next_request, shared_from_this()));
 
     command_handler::ptr_t handler = self->_protocol->get_command_handler(
@@ -267,7 +265,7 @@ void client::on_next_response(bool is_write_complete,
         _ready_for_write = false;
 
         // post call to next queued response callback
-        get_io_service()->post(boost::bind(
+        get_io_service().post(std::bind(
             std::move(_queued_response_callbacks.front()),
             response_interface(shared_from_this())));
 
@@ -278,7 +276,7 @@ void client::on_next_response(bool is_write_complete,
         _ready_for_write = false;
 
         // post call directly to new_callback
-        get_io_service()->post(boost::bind(
+        get_io_service().post(std::bind(
             std::move(*new_callback),
             response_interface(shared_from_this())));
     }
@@ -297,7 +295,7 @@ void client::on_response_finish(const boost::system::error_code & ec)
     {
         // this response caused us to drop back below maximum
         //  request concurrency; restart the request read-loop via post
-        get_io_service()->post(boost::bind(&client::on_next_request,
+        get_io_service().post(std::bind(&client::on_next_request,
             shared_from_this()));
 
         LOG_INFO("request concurrency dropped; restarting read-loop");

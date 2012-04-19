@@ -6,8 +6,8 @@
 #include "samoa/core/proactor.hpp"
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -102,7 +102,7 @@ void listener::on_accept(const boost::system::error_code & ec)
 
     // Schedule call on accept
     _accept_sock.async_accept(*_next_sock,
-        boost::bind(&listener::on_accept, shared_from_this(), _1));
+        std::bind(&listener::on_accept, shared_from_this(), _1));
 
     return;
 }

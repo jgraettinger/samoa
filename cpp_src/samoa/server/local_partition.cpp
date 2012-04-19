@@ -17,7 +17,7 @@
 #include "samoa/core/memory_map.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
+#include <functional>
 #include <set>
 
 namespace samoa {
@@ -109,7 +109,7 @@ void local_partition::initialize(
                 context, table->get_uuid(), self->get_uuid());
 
         self->_persister->set_upkeep_callback(
-            boost::bind(&eventual_consistency::upkeep,
+            std::bind(&eventual_consistency::upkeep,
                 tmp, _1, _2, _3));
     };
     _persister_strand->dispatch(isolate);
@@ -122,7 +122,7 @@ void local_partition::write(
     bool is_novel)
 {
     _persister->put(
-        boost::bind(&local_partition::on_local_write,
+        std::bind(&local_partition::on_local_write,
             shared_from_this(), _1, _2, _3, write_callback, rstate, is_novel),
         datamodel::merge_func_t(merge_callback),
         rstate->get_key(),
@@ -271,7 +271,7 @@ void local_partition::read(
         {
             // no populated remote record; fall back on simple persister read
             self->get_persister()->get(
-                boost::bind(client_callback, boost::system::error_code(), _1),
+                std::bind(client_callback, boost::system::error_code(), _1),
                 rstate->get_key(),
                 rstate->get_local_record());
         }

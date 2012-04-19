@@ -16,7 +16,9 @@ void intrusive_ptr_release(const ref_buffer *);
 class ref_buffer : private boost::noncopyable
 {
 public:
-    
+
+    const static unsigned allocation_size;
+
     typedef boost::intrusive_ptr<ref_buffer> ptr_t;
     typedef boost::intrusive_ptr<const ref_buffer> const_ptr_t;
     

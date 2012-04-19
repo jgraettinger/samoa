@@ -4,8 +4,8 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
-#include <boost/function.hpp>
 #include <boost/thread/tss.hpp>
+#include <functional>
 
 namespace samoa {
 namespace core {
@@ -17,7 +17,7 @@ public:
 
     typedef proactor_ptr_t ptr_t;
 
-    typedef boost::function<void()> run_later_callback_t;
+    typedef std::function<void()> run_later_callback_t;
 
     /*!
     * Reference-counted singleton

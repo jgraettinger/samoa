@@ -11,7 +11,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 #include <ctime>
 
 namespace samoa {
@@ -156,16 +156,16 @@ table::table(const spb::ClusterState::Table & ptable,
     // set appropriate merge & prune functors for the datamodel 
     if(_data_type == datamodel::BLOB_TYPE)
     {
-        _consistent_merge = boost::bind(&datamodel::blob::merge,
+        _consistent_merge = std::bind(&datamodel::blob::merge,
             _1, _2, _consistency_horizon);
-        _consistent_prune = boost::bind(&datamodel::blob::prune,
+        _consistent_prune = std::bind(&datamodel::blob::prune,
             _1, _consistency_horizon);
     }
     else if(_data_type == datamodel::COUNTER_TYPE)
     {
-        _consistent_merge = boost::bind(&datamodel::counter::merge,
+        _consistent_merge = std::bind(&datamodel::counter::merge,
             _1, _2, _consistency_horizon);
-        _consistent_prune = boost::bind(&datamodel::counter::prune,
+        _consistent_prune = std::bind(&datamodel::counter::prune,
             _1, _consistency_horizon);
     }
 }

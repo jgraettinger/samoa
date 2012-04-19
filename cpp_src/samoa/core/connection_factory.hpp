@@ -4,8 +4,8 @@
 #include "samoa/core/proactor.hpp"
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/function.hpp>
 #include <boost/asio.hpp>
+#include <functional>
 
 namespace samoa {
 namespace core {
@@ -15,23 +15,25 @@ class connection_factory :
 {
 public:
 
-    typedef boost::shared_ptr<connection_factory> ptr_t;
+    static unsigned connect_timeout_ms /* = 60000 */;
 
-    typedef boost::function<
+    typedef boost::shared_ptr<connection_factory> ptr_t;
+    typedef boost::weak_ptr<connection_factory> weak_ptr_t;
+
+    connection_factory();
+
+    typedef std::function<
         void(const boost::system::error_code & ec,
             const io_service_ptr_t &,
             std::unique_ptr<boost::asio::ip::tcp::socket> &)
     > callback_t;
 
     static ptr_t connect_to(
-        const callback_t & callback,
+        callback_t callback,
         const std::string & host,
         unsigned short port);
 
 private:
-
-    connection_factory(const core::io_service_ptr_t &,
-        unsigned timeout_ms);
 
     void on_resolve(const boost::system::error_code &,
         const boost::asio::ip::tcp::resolver::iterator &,
@@ -42,14 +44,11 @@ private:
 
     void on_timeout(const boost::system::error_code &);
 
-    unsigned _timeout_ms;
-    io_service_ptr_t _io_srv;
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
+
     boost::asio::ip::tcp::resolver _resolver;
     boost::asio::ip::tcp::resolver::iterator _endpoint_iter;
     boost::asio::deadline_timer _timer;
-
-    friend class connection_factory_priv;
 };
 
 };

@@ -2,7 +2,6 @@
 #include "samoa/core/proactor.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
 
 namespace samoa {
 namespace core {

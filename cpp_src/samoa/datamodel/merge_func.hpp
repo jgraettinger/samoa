@@ -2,7 +2,7 @@
 #define SAMOA_DATAMODEL_MERGE_FUNC_HPP
 
 #include "samoa/core/protobuf/fwd.hpp"
-#include <boost/function.hpp>
+#include <functional>
 
 namespace samoa {
 namespace datamodel {
@@ -23,13 +23,13 @@ struct merge_result
     bool remote_is_stale;
 };
 
-typedef boost::function<
+typedef std::function<
     merge_result (
         core::protobuf::PersistedRecord &, // local record
         const core::protobuf::PersistedRecord &) // remote record
 > merge_func_t;
 
-typedef boost::function<
+typedef std::function<
     bool (core::protobuf::PersistedRecord &)
 > prune_func_t;
 

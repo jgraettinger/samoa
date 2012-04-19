@@ -3,7 +3,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/lexical_cast.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace client {
@@ -96,7 +96,7 @@ void server_pool::connect()
         }
 
         server::connect_to(
-            boost::bind(&server_pool::on_connect, shared_from_this(),
+            std::bind(&server_pool::on_connect, shared_from_this(),
                 _1, _2, uuid),
             entry.second.first, entry.second.second);
 
@@ -133,7 +133,7 @@ void server_pool::schedule_request(
     if(conn_it == _connecting.end())
     {
         server::connect_to(
-            boost::bind(&server_pool::on_connect, shared_from_this(),
+            std::bind(&server_pool::on_connect, shared_from_this(),
                 _1, _2, uuid),
             addr_it->second.first,
             addr_it->second.second);

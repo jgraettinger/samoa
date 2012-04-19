@@ -10,7 +10,7 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/fwd.hpp"
 #include <boost/shared_ptr.hpp>
-#include <boost/function.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -47,7 +47,7 @@ public:
 
     void initialize(const context_ptr_t &, const table_ptr_t &);
 
-    typedef boost::function<void(
+    typedef std::function<void(
         const boost::system::error_code &,
         const datamodel::merge_result &)
     > write_callback_t;
@@ -58,7 +58,7 @@ public:
         const request::state_ptr_t &,
         bool is_novel);
 
-    typedef boost::function<void(
+    typedef std::function<void(
         const boost::system::error_code &,
         bool /* found */)
     > read_callback_t;

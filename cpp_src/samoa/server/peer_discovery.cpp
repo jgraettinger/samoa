@@ -8,8 +8,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
-#include <sstream>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -67,14 +66,16 @@ void peer_discovery::operator()(callback_t && callback)
     }
 
     peer_set->schedule_request(
-        boost::bind(&peer_discovery::on_request,
-            shared_from_this(), _1, _2),
+        std::bind(&peer_discovery::on_request,
+            shared_from_this(),
+            std::placeholders::_1,
+            std::placeholders::_2),
         _peer_uuid);
 }
 
 void peer_discovery::on_request(
-    const boost::system::error_code & ec,
-    samoa::client::server_request_interface & iface)
+    boost::system::error_code ec,
+    samoa::client::server_request_interface iface)
 {
     if(ec)
     {
@@ -92,13 +93,15 @@ void peer_discovery::on_request(
     iface.add_data_block(zco_adapter.output_regions());
 
     iface.flush_request(
-        boost::bind(&peer_discovery::on_response,
-            shared_from_this(), _1, _2));
+        std::bind(&peer_discovery::on_response,
+            shared_from_this(),
+            std::placeholders::_1,
+            std::placeholders::_2));
 }
 
 void peer_discovery::on_response(
-    const boost::system::error_code & ec,
-    samoa::client::server_response_interface & iface)
+    boost::system::error_code ec,
+    samoa::client::server_response_interface iface)
 {
     if(ec)
     {
@@ -126,8 +129,8 @@ void peer_discovery::on_response(
     SAMOA_ASSERT(_remote_state.ParseFromZeroCopyStream(&zci_adapter));
 
     _context->cluster_state_transaction(
-        boost::bind(&peer_discovery::on_state_transaction,
-            shared_from_this(), _1));
+        std::bind(&peer_discovery::on_state_transaction,
+            shared_from_this(), std::placeholders::_1));
 
     iface.finish_response();
 }

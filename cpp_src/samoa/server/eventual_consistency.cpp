@@ -14,7 +14,7 @@
 #include "samoa/core/proactor.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -107,7 +107,7 @@ void eventual_consistency::upkeep(
 
         // replicate value to peers
         rstate->get_peer_set()->schedule_request(
-            boost::bind(&eventual_consistency::on_move_request,
+            std::bind(&eventual_consistency::on_move_request,
                 shared_from_this(), _1, _2, rstate),
             rstate->get_peer_set()->select_best_peer(rstate));
     }
@@ -145,7 +145,7 @@ void eventual_consistency::on_move_request(
     iface.add_data_block(zco_adapter.output_regions());
 
     iface.flush_request(
-        boost::bind(&eventual_consistency::on_move_response,
+        std::bind(&eventual_consistency::on_move_response,
             shared_from_this(), _1, _2, rstate));
 }
 
@@ -183,7 +183,7 @@ void eventual_consistency::on_move_response(
     SAMOA_ASSERT(partition);
 
     partition->get_persister()->drop(
-        boost::bind(&eventual_consistency::on_move_drop,
+        std::bind(&eventual_consistency::on_move_drop,
             shared_from_this(), _1, rstate),
         rstate->get_key(), rstate->get_local_record());
 }

@@ -1,7 +1,8 @@
 
 #include "samoa/core/stream_protocol.hpp"
 #include "samoa/error.hpp"
-#include <boost/bind.hpp>
+#include "samoa/log.hpp"
+#include <functional>
 
 namespace samoa {
 namespace core {
@@ -10,12 +11,12 @@ namespace core {
 //  stream_protocol_read_interface
 
 void stream_protocol_read_interface::read(
-    read_callback_t callback, weak_ptr_t self, size_t length)
+    read_callback_t callback, weak_ptr_t w_self, size_t length)
 {
     SAMOA_ASSERT(!_in_read);
     _in_read = true;
 
-    on_read(std::move(self), std::move(callback),
+    on_read(std::move(w_self), std::move(callback),
         boost::system::error_code(), length, 0);
 }
 
@@ -58,7 +59,7 @@ void stream_protocol_read_interface::on_read(
 
     // ensure the larger of the read remainder, or a half buffer is reserved
     size_t reserve_length = std::max<size_t>(
-        target_length - _ring.available_read(),
+        target_length - self->_ring.available_read(),
         ref_buffer::allocation_size / 2);
 
     self->_ring.reserve(reserve_length);
@@ -70,13 +71,16 @@ void stream_protocol_read_interface::on_read(
         static_cast<stream_protocol&>(*self).get_socket());
 
     // schedule read of available data, bound by _w_regions capacity
-    sock.async_read_some(std::move(regions),
-        boost::bind(&stream_protocol_read_interface::on_read,
-            std::move(w_self),
-            std::move(callback),
-            boost::asio::placeholders::error,
-            target_length,
-            boost::asio::placeholders::bytes_transferred));
+    sock.async_read_some(std::move(regions), [
+            w_self = std::move(w_self),
+            callback = std::move(callback),
+            target_length
+        ](boost::system::error_code ec, size_t read_length)
+        {
+            on_read(std::move(w_self),
+                std::move(callback), ec,
+                target_length, read_length);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -100,47 +104,39 @@ void stream_protocol_write_interface::write(
 
     // Schedule write-till-completion
     boost::asio::async_write(sock, std::move(_regions),
-        boost::bind(&stream_protocol_write_interface::on_write,
-            std::move(w_self),
-            std::move(callback),
-            boost::asio::placeholders::error));
-}
+        [w_self = std::move(w_self),
+            callback = std::move(callback)](
+                boost::system::error_code ec, size_t)
+        {
+            ptr_t self = w_self.lock();
+            if(!self)
+            {
+                // destroyed during operation
+                LOG_INFO("post-dtor callback");
+                return;
+            }
 
-/* static */
-void stream_protocol_write_interface::on_write_queued(
-    weak_ptr_t w_self,
-    write_callback_t callback,
-    boost::system::error_code ec)
-{
-    // was stream_protocol destroyed during the operation?
-    ptr_t self = w_self.lock();
-    if(!self)
-    {
-        LOG_INFO("post-dtor callback");
-        return;
-    }
-
-    self->_in_write = false;
-    callback(std::move(self), ec);
+            self->_in_write = false;
+            callback(std::move(self), ec);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////
 //  stream_protocol
 
-stream_protocol::stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> sock)
+stream_protocol::stream_protocol(
+    std::unique_ptr<boost::asio::ip::tcp::socket> sock)
  :  _sock(std::move(sock))
 {
     SAMOA_ASSERT(_sock);
 }
 
-/* virtual */ stream_protocol::~stream_protocol()
+/* virtual */
+stream_protocol::~stream_protocol()
 {
-    auto sock_killer = [](std::unique_ptr<boost::asio::ip::tcp::socket> sock)
-    { };
-
-    // move & dispatch socket, to destroy from it's own io_service
+    // destroy socket from it's own io_service
     _sock->get_io_service().dispatch(
-        boost::bind(sock_killer, std::move(_sock)));
+        [sock = _sock.release()]{ delete sock; });
 }
 
 std::string stream_protocol::get_local_address() const

@@ -16,8 +16,6 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/lexical_cast.hpp>
-#include <boost/bind.hpp>
 
 namespace samoa {
 namespace server {

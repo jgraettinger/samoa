@@ -11,7 +11,7 @@
 #include "samoa/core/murmur_hash.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -26,8 +26,8 @@ void replication::replicate(
     {
         rstate->get_peer_set()->schedule_request(
             // wrap with request's io-service to synchronize callbacks
-            rstate->get_io_service()->wrap(
-                boost::bind(&replication::on_request, _1, _2,
+            rstate->get_io_service().wrap(
+                std::bind(&replication::on_request, _1, _2,
                     request_callback, response_callback, rstate, partition)),
                 partition->get_server_uuid());
     }
@@ -60,9 +60,9 @@ void replication::on_request(
     build_peer_request(iface, rstate, partition->get_uuid());
 
     iface.flush_request(
-        rstate->get_io_service()->wrap(
+        rstate->get_io_service().wrap(
             // wrap with request's io-service to synchronize callbacks
-            boost::bind(&replication::on_response,
+            std::bind(&replication::on_response,
                 _1, _2, response_callback, rstate, partition)));
 }
 
