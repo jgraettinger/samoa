@@ -26,7 +26,7 @@ public:
     {
         if(_active_buf)
         {
-            _buf_regions.push_back(const_buffer_region(
+            _buf_regions.push_back(buffer_region(
                 _active_buf, 0, _active_buf->size()));
         }
         _active_buf = ref_buffer::aquire_ref_buffer(ALLOC_BUF_SIZE);
@@ -53,7 +53,7 @@ public:
         }
 
         _count -= count;
-        _buf_regions.push_back(const_buffer_region(
+        _buf_regions.push_back(buffer_region(
             _active_buf, 0, _active_buf->size() - count));
         _active_buf.reset();
         return;
@@ -63,13 +63,13 @@ public:
     google::protobuf::int64 ByteCount() const
     { return _count; }
 
-    const_buffer_regions_t & output_regions()
+    buffer_regions_t & output_regions()
     {
         if(_active_buf)
         {
             // 'flush' remaining active buffer; required
             //   only if BackUp() didn't get called
-            _buf_regions.push_back(const_buffer_region(
+            _buf_regions.push_back(buffer_region(
                 _active_buf, 0, _active_buf->size()));
             _active_buf.reset();
         }
@@ -80,7 +80,7 @@ private:
 
     unsigned _count;
     ref_buffer::ptr_t _active_buf;
-    const_buffer_regions_t _buf_regions;
+    buffer_regions_t _buf_regions;
 };
 
 }

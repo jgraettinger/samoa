@@ -9,11 +9,12 @@
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
 #include <list>
+#include <functional>
 
 namespace samoa {
 namespace server {
 
-typedef boost::function<
+typedef std::function<
     void(client_response_interface)
 > client_response_callback_t;
 
@@ -166,12 +167,14 @@ private:
     const context_ptr_t _context;
     const protocol_ptr_t _protocol;
 
-    bool _ready_for_read = true;
-    bool _ready_for_write = true; // xthread
+    request::state_ptr_t _next_rstate;
+
+    bool _ready_for_read /*= true*/;
+    bool _ready_for_write /*= true*/; // xthread
 
     std::list<response_callback_t> _queued_response_callbacks; // xthread
 
-    unsigned _cur_requests_outstanding = 0;
+    unsigned _cur_requests_outstanding /*= 0*/;
 
     spinlock _lock;
 };

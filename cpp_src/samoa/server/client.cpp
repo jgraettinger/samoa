@@ -14,8 +14,6 @@
 #include <boost/lexical_cast.hpp>
 #include <sstream>
 
-#define MAX_DATA_BLOCK_LENGTH 4194304
-
 namespace samoa {
 namespace server {
 
@@ -54,9 +52,12 @@ void client_response_interface::finish_response()
 
 client::client(context::ptr_t context, protocol::ptr_t protocol,
     std::unique_ptr<ip::tcp::socket> sock)
- : core::stream_protocol(std::move(sock)),
-   _context(context),
-   _protocol(protocol)
+ :  core::stream_protocol(std::move(sock)),
+    _context(context),
+    _protocol(protocol),
+    _ready_for_read(true),
+    _ready_for_write(true),
+    _cur_requests_outstanding(0)
 {
     LOG_DBG("");
 }
@@ -130,43 +131,59 @@ void client::on_request_body(
         return;
     }
 
-    request::state::ptr_t rstate = boost::make_shared<request::state>();
-
+    self->_next_rstate = boost::make_shared<request::state>();
     request::client_state & client_state = \
-        rstate->initialize_from_client(std::move(self));
+        self->_next_rstate->mutable_client_state();
 
     core::protobuf::zero_copy_input_adapter zci_adapter(read_body);
     if(!client_state.mutable_samoa_request(
         ).ParseFromZeroCopyStream(&zci_adapter))
     {
-        rstate->send_error(400, "protobuf parse error");
-        // our transport is corrupted: don't begin a new read
+        // our transport is corrupted: don't begin a new read.
         //  this client will be destroyed when remaining responses
         //  complete, & the connection will close
+
+        request::state_ptr_t rstate = std::move(self->_next_rstate);
+        rstate->initialize_from_client(std::move(self));
+        rstate->send_error(400, "protobuf parse error");
         return;
     }
 
-    on_request_data_block(boost::system::error_code(),
-        0, core::buffer_regions_t(), rstate,
-        client_state.mutable_request_data_blocks());
+    on_request_data_block(
+        std::move(b_self),
+        boost::system::error_code(),
+        core::buffer_regions_t(),
+        0);
 }
 
-void client::on_request_data_block(const boost::system::error_code & ec,
-    unsigned ind, const core::buffer_regions_t & data,
-    const request::state::ptr_t & rstate,
-    std::vector<core::buffer_regions_t> & data_blocks)
+/* static */
+void client::on_request_data_block(
+    read_interface_t::ptr_t b_self,
+    boost::system::error_code ec,
+    core::buffer_regions_t data,
+    unsigned ind)
 {
+    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    SAMOA_ASSERT(self);
+
     if(ec)
     {
         LOG_WARN(ec.message());
+        self->on_connection_error(ec);
+        // break read loop
         return;
     }
 
-    const spb::SamoaRequest & samoa_request = rstate->get_samoa_request();
+    const spb::SamoaRequest & samoa_request = \
+        self->_next_rstate->get_samoa_request();
+
+    std::vector<core::buffer_regions_t> & data_blocks = \
+        self->_next_rstate->mutable_client_state(
+                )->mutable_request_data_blocks();
 
     if(ind < data_blocks.size())
     {
-        data_blocks[ind] = data;
+        data_blocks[ind] = std::move(data);
         ++ind;
     }
     else
@@ -179,33 +196,26 @@ void client::on_request_data_block(const boost::system::error_code & ec,
     if(ind != data_blocks.size())
     {
         // still more data blocks to read
-        unsigned block_len = samoa_request.data_block_length(ind);
+        unsigned next_length = samoa_request.data_block_length(ind);
 
-        if(block_len > MAX_DATA_BLOCK_LENGTH)
-        {
-            rstate->send_error(400, "data block too large");
-            // our transport is corrupted: don't begin a new read
-            return;
-        }
-
-        read_data(
-            boost::bind(&client::on_request_data_block, shared_from_this(),
-                _1, ind, _3, rstate, boost::ref(data_blocks)),
-            block_len);
+        read(boost::bind(&client::on_request_data_block, _1, _2, _3, ind),
+            self, next_length);
         return;
     }
 
-    // we're done reading data blocks, and have recieved a 
-    // complete request in the timeout period
-    _ignore_timeout = true;
+    // we're done reading data blocks, and have recieved a complete request
     _ready_for_read = true;
 
     // post to continue request read-loop
     get_io_service()->post(boost::bind(
         &client::on_next_request, shared_from_this()));
 
-    command_handler::ptr_t handler = _protocol->get_command_handler(
+    command_handler::ptr_t handler = self->_protocol->get_command_handler(
         samoa_request.type());
+
+    // release _next_state & self references
+    state::request_state::ptr_t rstate = std::move(self->_next_rstate);
+    rstate->initialize_from_client(std::move(self));
 
     if(handler)
     {
@@ -219,11 +229,11 @@ void client::on_request_data_block(const boost::system::error_code & ec,
 
 void client::schedule_response(response_callback_t callback)
 {
-    on_next_response(false, std::move(callback));
+    on_next_response(false, &callback);
 }
 
 void client::on_next_response(bool is_write_complete,
-    const response_callback_t * new_callback)
+    response_callback_t * new_callback)
 {
     SAMOA_ASSERT(is_write_complete ^ (new_callback != 0));
 
@@ -232,14 +242,13 @@ void client::on_next_response(bool is_write_complete,
     if(is_write_complete)
     {
         _ready_for_write = true;
-
     }
 
     if(!_ready_for_write)
     {
         if(new_callback)
         {
-            _queued_response_callbacks.push_back(*new_callback);
+            _queued_response_callbacks.push_back(std::move(*new_callback));
         }
         return;
     }
@@ -258,7 +267,8 @@ void client::on_next_response(bool is_write_complete,
         _ready_for_write = false;
 
         // post call to next queued response callback
-        get_io_service()->post(boost::bind(_queued_response_callbacks.front(),
+        get_io_service()->post(boost::bind(
+            std::move(_queued_response_callbacks.front()),
             response_interface(shared_from_this())));
 
         _queued_response_callbacks.pop_front();
@@ -268,7 +278,8 @@ void client::on_next_response(bool is_write_complete,
         _ready_for_write = false;
 
         // post call directly to new_callback
-        get_io_service()->post(boost::bind(*new_callback,
+        get_io_service()->post(boost::bind(
+            std::move(*new_callback),
             response_interface(shared_from_this())));
     }
     // else, no response to begin at this point

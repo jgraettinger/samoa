@@ -30,6 +30,12 @@ void state::send_error(unsigned err_code,
     client_state::send_error(shared_from_this(), err_code, err_msg);
 }
 
+client_state & state::mutable_client_state()
+{
+    SAMOA_ASSERT(!get_client());
+    return *this;
+}
+
 void state::load_table_state()
 {
     table_state::load_table_state(get_table_set());
@@ -51,14 +57,10 @@ void state::load_replication_state()
         get_table()->get_replication_factor());
 }
 
-client_state & state::initialize_from_client(
-    const server::client_ptr_t & client)
+void state::initialize_from_client(server::client_ptr_t client)
 {
-    load_io_service_state(client->get_io_service());
     load_context_state(client->get_context());
-    load_client_state(client);
-
-    return *this;
+    load_client_state(std::move(client));
 }
 
 void state::parse_samoa_request()
@@ -132,7 +134,6 @@ void state::parse_samoa_request()
 
 void state::reset_state()
 {
-    reset_io_service_state();
     reset_context_state();
     reset_client_state();
     reset_table_state();

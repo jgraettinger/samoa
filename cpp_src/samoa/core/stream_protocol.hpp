@@ -6,8 +6,8 @@
 #include "samoa/core/buffer_region.hpp"
 #include "samoa/core/buffer_ring.hpp"
 #include <boost/asio.hpp>
-#include <boost/function.hpp>
 #include <boost/system/error_code.hpp>
+#include <functional>
 
 namespace samoa {
 namespace core {
@@ -20,7 +20,11 @@ public:
     typedef boost::shared_ptr<stream_protocol_read_interface> ptr_t;
     typedef boost::weak_ptr<stream_protocol_read_interface> weak_ptr_t;
 
-    typedef boost::function<
+    stream_protocol_read_interface()
+     :  _in_read(false)
+    { }
+
+    typedef std::function<
         void(ptr_t, boost::system::error_code, buffer_regions_t)
     > read_callback_t;
 
@@ -35,7 +39,7 @@ private:
         size_t read_length,
         size_t bytes_transferred);
 
-    bool _in_read = false;
+    bool _in_read;
     buffer_ring _ring;
 };
 
@@ -46,6 +50,10 @@ public:
 
     typedef boost::shared_ptr<stream_protocol_write_interface> ptr_t;
     typedef boost::weak_ptr<stream_protocol_write_interface> weak_ptr_t;
+
+    stream_protocol_write_interface()
+     :  _in_write(false)
+    { }
 
     bool has_queued_writes() const;
 
@@ -61,7 +69,7 @@ public:
     void queue_write(const std::string & str)
     { queue_write(std::begin(str), std::end(str)); }
 
-    typedef boost::function<
+    typedef std::function<
         void(ptr_t, boost::system::error_code)
     > write_callback_t;
 
@@ -75,14 +83,14 @@ private:
     static void on_write(weak_ptr_t,
         write_callback_t, boost::system::error_code);
 
-    bool _in_write = false;
+    bool _in_write;
     buffer_ring _ring;
     buffer_regions_t _regions;
 };
 
 class stream_protocol :
-    protected stream_protocol_read_interface,
-    protected stream_protocol_write_interface
+    public stream_protocol_read_interface,
+    public stream_protocol_write_interface
 {
 public:
 
@@ -103,13 +111,10 @@ public:
 
     void close();
 
+    boost::asio::io_service & get_io_service()
+    { return _sock->get_io_service(); }
+
 protected:
-
-    read_interface_t & read_interface()
-    { return *this; }
-
-    write_interface_t & write_interface()
-    { return *this; }
 
     // Underlying socket
     boost::asio::ip::tcp::socket & get_socket()
@@ -117,9 +122,6 @@ protected:
 
     const boost::asio::ip::tcp::socket & get_socket() const
     { return *_sock; }
-
-    boost::asio::io_service & get_io_service()
-    { return _sock->get_io_service(); }
 
 private:
 

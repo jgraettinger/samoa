@@ -2,7 +2,6 @@
 #define SAMOA_REQUEST_STATE_HPP
 
 #include "samoa/request/fwd.hpp"
-#include "samoa/request/io_service_state.hpp"
 #include "samoa/request/context_state.hpp"
 #include "samoa/request/client_state.hpp"
 #include "samoa/request/table_state.hpp"
@@ -16,7 +15,6 @@ namespace samoa {
 namespace request {
 
 class state :
-    private io_service_state,
     private context_state,
     private client_state,
     private table_state,
@@ -31,9 +29,6 @@ public:
 
     state();
     virtual ~state();
-
-    using io_service_state::get_io_service;
-    using io_service_state::load_io_service_state;
 
     using context_state::get_context;
     using context_state::get_cluster_state;
@@ -50,6 +45,7 @@ public:
     void send_error(unsigned err_code, const std::string & err_msg);
     void send_error(unsigned err_code,
         const boost::system::error_code & err_msg);
+    client_state & mutable_client_state();
 
     void load_table_state();
 
@@ -88,12 +84,9 @@ public:
     using replication_state::set_peer_read_hit;
 
     /*!
-     * Loads io_service_state, context_state, and client_state.
-     *
-     * Returns a reference to the (private) client_state,
-     *  for use by samoa::server::client in populating the request
+     * Loads context_state and client_state.
      */
-    client_state & initialize_from_client(const server::client_ptr_t &);
+    void initialize_from_client(server::client_ptr_t);
 
     /*!
      * Validates and parses the protobuf SamoaRequest of the request::state

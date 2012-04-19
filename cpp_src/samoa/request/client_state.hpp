@@ -61,13 +61,6 @@ public:
     { return _samoa_response; }
 
     /*!
-     * \brief Adds the const buffer-regions as a response datablock
-     *
-     * SamoaResponse::data_block_length is appropriately updated.
-     */
-    void add_response_data_block(const core::const_buffer_regions_t &);
-
-    /*!
      * \brief Adds the buffer-regions as a response datablock
      *
      * SamoaResponse::data_block_length is appropriately updated.
@@ -141,10 +134,10 @@ private:
     spb::SamoaResponse _samoa_response;
 
     std::vector<core::buffer_regions_t> _request_data_blocks;
-    core::const_buffer_regions_t _response_data;
+    core::buffer_regions_t _response_data;
 
     bool _flush_response_called;
-    core::buffer_ring _w_ring;
+    core::buffer_ring _ring;
 };
 
 }

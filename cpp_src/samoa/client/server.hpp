@@ -8,22 +8,23 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/proactor.hpp"
 #include <boost/asio.hpp>
-#include <list>
 #include <unordered_map>
+#include <functional>
 #include <memory>
+#include <list>
 
 namespace samoa {
 namespace client {
 
-typedef boost::function<
+typedef std::function<
     void(boost::system::error_code, server_request_interface)
 > server_request_callback_t;
 
-typedef boost::function<
+typedef std::function<
     void(boost::system::error_code, server_response_interface)
 > server_response_callback_t;
 
-typedef boost::function<
+typedef std::function<
     void(boost::system::error_code, server_ptr_t)
 > server_connect_to_callback_t;
 
@@ -97,7 +98,7 @@ public:
     server_response_interface() = default;
 
     // Moveable, but not copyable
-    server_response_interface(server_request_interface &&) = default;
+    server_response_interface(server_response_interface &&) = default;
     server_response_interface(server_response_interface &) = delete;
     server_response_interface(const server_response_interface &) = delete;
 
@@ -135,8 +136,8 @@ private:
 };
 
 class server :
-    public boost::enable_shared_from_this<server>,
-    public core::stream_protocol
+    public core::stream_protocol,
+    public boost::enable_shared_from_this<server>
 {
 public:
 
@@ -242,19 +243,18 @@ private:
      */
     static void on_request_finish(
         write_interface_t::ptr_t self,
-        boost::system::error_code,
-        unsigned request_id);
+        boost::system::error_code);
 
     // modified exclusively through request_interface
     core::protobuf::SamoaRequest _samoa_request;
-    core::const_buffer_regions_t _request_data;
-    unsigned _next_request_id = 1;
+    core::buffer_regions_t _request_data;
+    unsigned _next_request_id /*= 1*/;
 
     // exposed as immutable through response_interface
     core::protobuf::SamoaResponse _samoa_response;
     std::vector<core::buffer_regions_t> _response_data_blocks;
 
-    bool _ready_for_write = true; // xthread
+    bool _ready_for_write /*= true*/; // xthread
 
     std::list<request_callback_t> _queued_request_callbacks; // xthread
     pending_responses_t _pending_responses; // xthread

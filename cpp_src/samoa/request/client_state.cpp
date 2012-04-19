@@ -5,7 +5,7 @@
 #include "samoa/server/client.hpp"
 #include "samoa/core/uuid.hpp"
 #include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace request {
@@ -16,21 +16,6 @@ client_state::client_state()
 
 client_state::~client_state()
 { }
-
-void client_state::add_response_data_block(
-    const core::const_buffer_regions_t & bs)
-{
-    SAMOA_ASSERT(!_flush_response_called);
-
-    size_t length = 0;
-
-    std::for_each(bs.begin(), bs.end(),
-        [&length](const core::const_buffer_region & b)
-        { length += b.size(); });
-
-    _samoa_response.add_data_block_length(length);
-    _response_data.insert(_response_data.end(), bs.begin(), bs.end());
-}
 
 void client_state::add_response_data_block(const core::buffer_regions_t & bs)
 { 
@@ -48,13 +33,13 @@ void client_state::add_response_data_block(const core::buffer_regions_t & bs)
 
 void client_state::flush_response(const state::ptr_t & guard)
 {
-    SAMOA_ASSERT(!_flush_response_called);
+    SAMOA_ASSERT(_client && !_flush_response_called);
     _flush_response_called = true;
 
     _client->schedule_response(
         // pass 'this' as argument to binder, but also pass 'guard'
         //  by-value, to protect the lifetime of the request state
-        boost::bind(&client_state::on_response, this, _1, guard));
+        std::bind(&client_state::on_response, this, std::placeholders::_1, guard));
 }
 
 void client_state::send_error(const state::ptr_t & guard,

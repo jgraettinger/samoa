@@ -6,8 +6,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
-#include <boost/bind/protect.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace samoa {
 namespace client {
@@ -81,8 +80,10 @@ void server_request_interface::flush_request(
     }
 
     // begin write operation, tracked with request id
-    _srv->write(_srv, boost::bind(&server::on_request_finish,
-        _1, _2));
+    _srv->write(
+            std::bind(&server::on_request_finish,
+                std::placeholders::_1, std::placeholders::_2),
+            _srv);
 
     // ownership of server::request_interface is released
     _srv.reset();
@@ -126,7 +127,7 @@ const std::vector<core::buffer_regions_t> &
 void server_response_interface::finish_response()
 {
     // post next response read
-    _srv->get_io_service().post(boost::bind(
+    _srv->get_io_service().post(std::bind(
         &server::on_next_response, _srv));
 
     // ownership of server::response_interface is released
@@ -137,7 +138,9 @@ void server_response_interface::finish_response()
 //  server interface
 
 server::server(std::unique_ptr<ip::tcp::socket> sock)
- :  core::stream_protocol(std::move(sock))
+ :  core::stream_protocol(std::move(sock)),
+    _next_request_id(1),
+    _ready_for_write(1)
 {
     LOG_DBG("created " << this);    
 }
@@ -149,7 +152,10 @@ core::connection_factory::ptr_t server::connect_to(
     unsigned short port)
 {
     return core::connection_factory::connect_to(
-        boost::bind(&server::on_connect, _1, _3, std::move(callback)),
+        std::bind(&server::on_connect,
+            std::placeholders::_1,
+            std::placeholders::_3,
+            std::move(callback)),
         std::move(host), port);
 }
 
@@ -182,7 +188,10 @@ server::~server()
 void server::on_next_response()
 {
     // begin read of response message length
-    read(boost::bind(&server::on_response_length, _1, _2, _3),
+    read(std::bind(&server::on_response_length,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3),
         shared_from_this(), 2);
 }
 
@@ -208,7 +217,10 @@ void server::on_response_length(
     std::copy(buffers_begin(read_body), buffers_end(read_body),
         (char*) &len);
 
-    read(boost::bind(&server::on_response_body, _1, _2, _3),
+    self->read(std::bind(&server::on_response_body,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3),
         self, ntohs(len));
 }
 
@@ -285,7 +297,11 @@ void server::on_response_data_block(
         // still more data blocks to read
         unsigned next_length = self->_samoa_response.data_block_length(ind);
 
-        read(boost::bind(&server::on_response_data_block, _1, _2, _3, ind),
+        self->read(std::bind(&server::on_response_data_block,
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::placeholders::_3,
+                ind),
             self, next_length);
         return;
     }
@@ -303,7 +319,7 @@ void server::on_response_data_block(
 
         // move out of pending responses, & erase
         callback = std::move(it->second);
-        _pending_responses.erase(it);
+        self->_pending_responses.erase(it);
     }
 
     // post response interface to associated callback
@@ -321,9 +337,13 @@ void server::on_connection_error(boost::system::error_code ec)
         for(auto it = _pending_responses.begin();
             it != _pending_responses.end(); ++it)
         {
-            // post error to callback
-            get_io_service()->post(boost::bind(it->second,
-                ec, response_interface()));
+            response_callback_t callback = std::move(it->second);
+
+            // post deferred error callback
+            get_io_service().post([callback, ec]()
+                {
+                    callback(ec, response_interface());
+                });
         }
         _pending_responses.clear();
     }
@@ -369,8 +389,8 @@ void server::on_next_request(bool is_write_complete,
         _ready_for_write = false;
 
         // post call to next queued request callback
-        get_io_service()->post(
-            boost::bind(std::move(_queued_request_callbacks.front()),
+        get_io_service().post(
+            std::bind(std::move(_queued_request_callbacks.front()),
                 boost::system::error_code(),
                 request_interface(shared_from_this())));
 
@@ -381,7 +401,7 @@ void server::on_next_request(bool is_write_complete,
         _ready_for_write = false;
 
         // post call directly to new_callback
-        get_io_service()->post(boost::bind(std::move(*new_callback),
+        get_io_service().post(std::bind(std::move(*new_callback),
             boost::system::error_code(),
             request_interface(shared_from_this())));
     }
@@ -390,14 +410,14 @@ void server::on_next_request(bool is_write_complete,
 
 void server::on_request_finish(
     write_interface_t::ptr_t b_self,
-    const boost::system::error_code & ec)
+    boost::system::error_code ec)
 {
     ptr_t self = boost::dynamic_pointer_cast<server>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)
     {
-        on_connection_error(ec);
+        self->on_connection_error(ec);
         // break write loop
         return;
     }

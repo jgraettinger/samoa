@@ -2,6 +2,7 @@
 #define SAMOA_CORE_STREAM_PROTOCOL_IMPL_HPP
 
 #include "samoa/core/stream_protocol.hpp"
+#include "samoa/error.hpp"
 
 namespace samoa {
 namespace core {
