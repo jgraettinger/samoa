@@ -108,7 +108,7 @@ private:
     listeners_t _listeners;
 
     spinlock _client_lock;
-    typedef std::unordered_map<size_t, client_weak_ptr_t> clients_t;
+    typedef std::unordered_map<size_t, client_ptr_t> clients_t;
     clients_t _clients;
 };
 

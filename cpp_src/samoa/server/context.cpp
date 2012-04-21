@@ -63,15 +63,7 @@ void context::shutdown()
     }
     {
         spinlock::guard guard(_client_lock);
-        for(const clients_t::value_type & entry : _clients)
-        {
-            client::ptr_t client(entry.second.lock());
-
-            if(client)
-            {
-            	//client->shutdown();
-            }
-        }
+        _clients.clear();
     }
 }
 

@@ -10,106 +10,129 @@ namespace core {
 
 using namespace boost::asio;
 
-connection_factory::connect_timeout_ms = 60000;
+unsigned connection_factory::connect_timeout_ms = 60000;
 
 connection_factory::connection_factory()
- :  _sock(new ip::tcp::socket(proactor::get_proactor()->serial_io_service())),
+ :  _sock(new ip::tcp::socket(*proactor::get_proactor()->serial_io_service())),
     _resolver(_sock->get_io_service()),
     _timer(_sock->get_io_service())
 { }
 
 /* static */
 connection_factory::ptr_t connection_factory::connect_to(
-    connection_factory::callback_t callback,
+    callback_t callback,
     const std::string & host,
     unsigned short port)
 {
-    core::io_service_ptr_t io_srv = \
-        proactor::get_proactor()->serial_io_service();
-
-    ptr_t p(boost::make_shared<connection_factory>());
+    ptr_t self = boost::make_shared<connection_factory>();
+    weak_ptr_t w_self = self;
 
     ip::tcp::resolver::query query(host,
         boost::lexical_cast<std::string>(port));
 
     // start an async resolution of the host & port
-    p->_resolver.async_resolve(query, std::bind(
-        &connection_factory::on_resolve, p,
-        boost::asio::placeholders::error,
-        boost::asio::placeholders::iterator,
-        std::move(callback)));
+    self->_resolver.async_resolve(query,
+        [w_self, callback = std::move(callback)](
+            boost::system::error_code ec,
+            ip::tcp::resolver::iterator endpoint_iter)
+        {
+            ptr_t self = w_self.lock();
+            if(!self)
+            {
+                // destroyed during resolution operation
+                LOG_INFO("post-dtor callback");
+                return;
+            }
+
+            if(ec)
+            {
+                // resolution failed or timed out
+                self->_timer.cancel();
+                self->_sock->close();
+                callback(ec, std::move(self->_sock));
+            }
+            else
+            {
+                // resolution succeeded
+                self->_endpoint_iter = endpoint_iter;
+
+                on_connect(std::move(w_self),
+                    boost::asio::error::operation_aborted,
+                    std::move(callback));
+            }
+        });
 
     // start a new timeout period
-    p->_timer.expires_from_now(
+    self->_timer.expires_from_now(
         boost::posix_time::milliseconds(connect_timeout_ms));
-    p->_timer.async_wait(std::bind(
-        &connection_factory::on_timeout, p,
-        boost::asio::placeholders::error));
-    return p;
+    self->_timer.async_wait(std::bind(
+        &connection_factory::on_timeout, w_self, std::placeholders::_1));
+    return self;
 }
 
-void connection_factory::on_resolve(
-    const boost::system::error_code & ec,
-    const ip::tcp::resolver::iterator & endpoint_iter,
-    const connection_factory::callback_t & callback)
-{
-    if(ec)
-    {
-        // resolution failed or timed out
-        _timer.cancel();
-        _sock->close();
-        callback(ec, io_service_ptr_t(), _sock);
-    }
-
-    // resolution succeeded
-    _endpoint_iter = endpoint_iter;
-
-    on_connect(boost::asio::error::operation_aborted, callback);
-}
-
+/* static */
 void connection_factory::on_connect(
-    const boost::system::error_code & ec,
-    const connection_factory::callback_t & callback)
+    weak_ptr_t w_self,
+    boost::system::error_code ec,
+    connection_factory::callback_t callback)
 {
-    if(ec && _endpoint_iter != ip::tcp::resolver::iterator())
+    ptr_t self = w_self.lock();
+    if(!self)
     {
-        _sock->close();
+        LOG_INFO("post-dtor callback");
+        return;
+    }
+    if(ec && self->_endpoint_iter != ip::tcp::resolver::iterator())
+    {
+        self->_sock->close();
 
         // attempt to connect to the next endpoint
-        ip::tcp::endpoint endpoint = *(_endpoint_iter++);
-        _sock->async_connect(endpoint, std::bind(
-            &connection_factory::on_connect, shared_from_this(),
-            boost::asio::placeholders::error, callback));
+        ip::tcp::endpoint endpoint = *(self->_endpoint_iter++);
+        self->_sock->async_connect(endpoint,
+            [w_self, callback = std::move(callback)](
+                boost::system::error_code ec)
+            {
+                on_connect(std::move(w_self), ec, std::move(callback));
+            });
 
         // start a new timeout period
-        _timer.expires_from_now(boost::posix_time::milliseconds(_timeout_ms));
-        _timer.async_wait(std::bind(
-            &connection_factory::on_timeout, shared_from_this(),
-            boost::asio::placeholders::error));
+        self->_timer.expires_from_now(
+            boost::posix_time::milliseconds(connect_timeout_ms));
+        self->_timer.async_wait(std::bind(
+            &connection_factory::on_timeout, w_self, std::placeholders::_1));
     }
     else if(ec)
     {
         // attempt failed, no more endpoints
-        _timer.cancel();
-        _sock->close();
-        callback(ec, io_service_ptr_t(), _sock);
+        self->_timer.cancel();
+        self->_sock->close();
+        callback(ec, std::move(self->_sock));
     }
     else
     {
         // successfully connected
-        _timer.cancel();
+        self->_timer.cancel();
 
         // we internally buffer requests already when building them,
         //   and don't want additional Nagle delay
-        _sock->set_option(ip::tcp::no_delay(true));
+        self->_sock->set_option(ip::tcp::no_delay(true));
 
-        callback(ec, _io_srv, _sock);
+        callback(ec, std::move(self->_sock));
     }
 }
 
+/* static */
 void connection_factory::on_timeout(
-    const boost::system::error_code & ec)
+    weak_ptr_t w_self,
+    boost::system::error_code ec)
 {
+    ptr_t self = w_self.lock();
+    if(!self)
+    {
+        LOG_INFO("post-dtor callback");
+        return;
+    }
+
     // was the timer canceled?
     if(ec == boost::asio::error::operation_aborted)
         return;
@@ -117,8 +140,8 @@ void connection_factory::on_timeout(
     // timeout: cancel any pending async operations
     //  this results in completion handlers being called
     //  with an error, so no need to issue a callback here
-    _resolver.cancel();
-    _sock->cancel();
+    self->_resolver.cancel();
+    self->_sock->cancel();
 }
 
 }

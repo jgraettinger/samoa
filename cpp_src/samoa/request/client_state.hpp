@@ -85,7 +85,7 @@ public:
      *
      * @param guard Smart-ptr to maintain request::state reference
      */
-    void flush_response(const state_ptr_t & guard);
+    void flush_response(state_ptr_t guard);
 
     /*!
      * \brief Helper for sending an error response to the client
@@ -99,7 +99,7 @@ public:
      * @param err_code Code to set on response error
      * @param err_msg Accompanying message
      */
-    void send_error(const state_ptr_t & guard, unsigned err_code,
+    void send_error(state_ptr_t guard, unsigned err_code,
         const std::string & err_msg);
 
     /*!
@@ -114,10 +114,10 @@ public:
      * @param err_code Code to set on response error
      * @param err_msg boost error code, which will be converted to a message
      */
-    void send_error(const state_ptr_t & guard, unsigned err_code,
-        const boost::system::error_code & err_msg);
+    void send_error(state_ptr_t guard, unsigned err_code,
+        boost::system::error_code err_msg);
 
-    void load_client_state(const server::client_ptr_t & client);
+    void load_client_state(server::client_ptr_t client);
 
     void reset_client_state();
 
@@ -125,7 +125,9 @@ private:
 
     friend class samoa::server::client;
 
-    void on_response(server::client::response_interface,
+    void on_response(
+        boost::system::error_code,
+        server::client::response_interface,
         const state_ptr_t & guard);
 
     server::client_ptr_t _client;

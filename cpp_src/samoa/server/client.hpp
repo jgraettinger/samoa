@@ -15,7 +15,7 @@ namespace samoa {
 namespace server {
 
 typedef std::function<
-    void(client_response_interface)
+    void(boost::system::error_code, client_response_interface)
 > client_response_callback_t;
 
 /*!
@@ -137,10 +137,11 @@ private:
      * When the last data-block is read, dispatches the request::state
      *  to the appropriate handler, and posts to on_next_request()
      */
-    void on_request_data_block(const boost::system::error_code &,
-        unsigned, const core::buffer_regions_t &,
-        const request::state_ptr_t &,
-        std::vector<core::buffer_regions_t> &);
+    static void on_request_data_block(
+        read_interface_t::ptr_t self,
+        boost::system::error_code,
+        core::buffer_regions_t,
+        unsigned);
 
     /*
      * Response scheduling workhorse.
@@ -157,12 +158,16 @@ private:
      * @param new_callback A new response callback to invoke or queue.
      */
     void on_next_response(bool is_write_complete,
-        const response_callback_t * new_callback);
+        response_callback_t * new_callback);
 
     /*
      * Logs errors, and begins the next queued response.
      */
-    void on_response_finish(const boost::system::error_code &);
+    static void on_response_finish(
+        write_interface_t::ptr_t self,
+        boost::system::error_code);
+
+    void on_connection_error(boost::system::error_code);
 
     const context_ptr_t _context;
     const protocol_ptr_t _protocol;

@@ -23,9 +23,8 @@ public:
     connection_factory();
 
     typedef std::function<
-        void(const boost::system::error_code & ec,
-            const io_service_ptr_t &,
-            std::unique_ptr<boost::asio::ip::tcp::socket> &)
+        void(boost::system::error_code ec,
+            std::unique_ptr<boost::asio::ip::tcp::socket>)
     > callback_t;
 
     static ptr_t connect_to(
@@ -35,14 +34,9 @@ public:
 
 private:
 
-    void on_resolve(const boost::system::error_code &,
-        const boost::asio::ip::tcp::resolver::iterator &,
-        const callback_t &);
+    static void on_connect(weak_ptr_t, boost::system::error_code, callback_t);
 
-    void on_connect(const boost::system::error_code &,
-        const callback_t &);
-
-    void on_timeout(const boost::system::error_code &);
+    static void on_timeout(weak_ptr_t, boost::system::error_code);
 
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
 

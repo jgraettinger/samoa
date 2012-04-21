@@ -128,7 +128,7 @@ void server_response_interface::finish_response()
 {
     // post next response read
     _srv->get_io_service().post(std::bind(
-        &server::on_next_response, _srv));
+        &server::on_next_response, std::move(_srv)));
 
     // ownership of server::response_interface is released
     _srv.reset();
@@ -148,15 +148,15 @@ server::server(std::unique_ptr<ip::tcp::socket> sock)
 /* static */
 core::connection_factory::ptr_t server::connect_to(
     server_connect_to_callback_t callback,
-    std::string host,
+    const std::string & host,
     unsigned short port)
 {
     return core::connection_factory::connect_to(
         std::bind(&server::on_connect,
             std::placeholders::_1,
-            std::placeholders::_3,
+            std::placeholders::_2,
             std::move(callback)),
-        std::move(host), port);
+        host, port);
 }
 
 /* static */
@@ -171,12 +171,12 @@ void server::on_connect(
     }
     else
     { 
-        ptr_t p(boost::make_shared<server>(std::move(sock)));
+        ptr_t self(boost::make_shared<server>(std::move(sock)));
 
         // start initial response read
-        p->on_next_response();
+        self->on_next_response();
 
-        callback(ec, std::move(p));
+        callback(ec, std::move(self));
     }
 }
 
@@ -334,13 +334,10 @@ void server::on_connection_error(boost::system::error_code ec)
     {
         spinlock::guard guard(_lock);
 
-        for(auto it = _pending_responses.begin();
-            it != _pending_responses.end(); ++it)
+        for(auto & entry : _pending_responses)
         {
-            response_callback_t callback = std::move(it->second);
-
             // post deferred error callback
-            get_io_service().post([callback, ec]()
+            get_io_service().post([ec, callback = std::move(entry.second)]()
                 {
                     callback(ec, response_interface());
                 });
@@ -389,10 +386,14 @@ void server::on_next_request(bool is_write_complete,
         _ready_for_write = false;
 
         // post call to next queued request callback
-        get_io_service().post(
-            std::bind(std::move(_queued_request_callbacks.front()),
-                boost::system::error_code(),
-                request_interface(shared_from_this())));
+        get_io_service().post([
+                self = shared_from_this(),
+                callback = std::move(_queued_request_callbacks.front())
+            ]()
+            {
+                callback(boost::system::error_code(),
+                    request_interface(std::move(self)));
+            });
 
         _queued_request_callbacks.pop_front();
     }
@@ -401,9 +402,13 @@ void server::on_next_request(bool is_write_complete,
         _ready_for_write = false;
 
         // post call directly to new_callback
-        get_io_service().post(std::bind(std::move(*new_callback),
-            boost::system::error_code(),
-            request_interface(shared_from_this())));
+        get_io_service().post([
+                self = shared_from_this(),
+                callback = std::move(*new_callback)
+            ]()
+            {   callback(boost::system::error_code(),
+                    request_interface(std::move(self)));
+            });
     }
     // else, no request to begin at this point
 }

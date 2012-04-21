@@ -52,7 +52,7 @@ public:
     /// Submits the request via server::schedule_request to a
     ///  connected server instance. If none is available, a
     ///  connection is first established.
-    void schedule_request(const server::request_callback_t &,
+    void schedule_request(server::request_callback_t,
         const core::uuid & server_uuid);
 
     // Closes all currently-connected server instances
@@ -76,8 +76,13 @@ private:
     server_map_t _servers;
 
     typedef std::list<server::request_callback_t> callback_list_t;
-    typedef boost::unordered_map<core::uuid, callback_list_t> connecting_map_t;
-    connecting_map_t _connecting;
+
+    typedef std::pair<core::connection_factory_ptr_t, callback_list_t
+        > pending_connection_t;
+    typedef boost::unordered_map<core::uuid, pending_connection_t
+        > pending_connection_map_t;
+
+    pending_connection_map_t _connecting;
 
     // proactor lifetime management
     core::proactor_ptr_t _proactor;

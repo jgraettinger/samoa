@@ -67,8 +67,8 @@ void persister::get(
         std::bind(&persister::on_get,
             shared_from_this(),
             std::move(callback),
-            boost::cref(key),
-            boost::ref(record)));
+            std::cref(key),
+            std::ref(record)));
 }
 
 void persister::drop(
@@ -80,8 +80,8 @@ void persister::drop(
         std::bind(&persister::on_drop,
             shared_from_this(),
             std::move(callback),
-            boost::cref(key),
-            boost::ref(record)));
+            std::cref(key),
+            std::ref(record)));
 }
 
 size_t persister::iteration_begin()
@@ -140,9 +140,9 @@ void persister::put(
             shared_from_this(),
             std::move(callback),
             std::move(merge_func),
-            boost::cref(key),
-            boost::cref(remote_record),
-            boost::ref(local_record)));
+            std::cref(key),
+            std::cref(remote_record),
+            std::ref(local_record)));
 }
 
 void persister::set_prune_callback(

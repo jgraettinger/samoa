@@ -31,7 +31,7 @@ void client_state::add_response_data_block(const core::buffer_regions_t & bs)
     _response_data.insert(_response_data.end(), bs.begin(), bs.end());
 }
 
-void client_state::flush_response(const state::ptr_t & guard)
+void client_state::flush_response(state::ptr_t guard)
 {
     SAMOA_ASSERT(_client && !_flush_response_called);
     _flush_response_called = true;
@@ -39,10 +39,13 @@ void client_state::flush_response(const state::ptr_t & guard)
     _client->schedule_response(
         // pass 'this' as argument to binder, but also pass 'guard'
         //  by-value, to protect the lifetime of the request state
-        std::bind(&client_state::on_response, this, std::placeholders::_1, guard));
+        std::bind(&client_state::on_response, this,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::move(guard)));
 }
 
-void client_state::send_error(const state::ptr_t & guard,
+void client_state::send_error(state::ptr_t guard,
     unsigned err_code, const std::string & err_msg)
 {
     _samoa_response.Clear();
@@ -52,22 +55,22 @@ void client_state::send_error(const state::ptr_t & guard,
     _samoa_response.mutable_error()->set_code(err_code);
     _samoa_response.mutable_error()->set_message(err_msg);
 
-    flush_response(guard);
+    flush_response(std::move(guard));
 }
 
-void client_state::send_error(const state::ptr_t & guard,
-    unsigned err_code, const boost::system::error_code & ec)
+void client_state::send_error(state::ptr_t guard,
+    unsigned err_code, boost::system::error_code ec)
 {
     std::stringstream tmp;
     tmp << ec << " (" << ec.message() << ")";
 
-    send_error(guard, err_code, tmp.str());
+    send_error(std::move(guard), err_code, tmp.str());
 }
 
-void client_state::load_client_state(const server::client::ptr_t & client)
+void client_state::load_client_state(server::client::ptr_t client)
 {
     SAMOA_ASSERT(!_client);
-    _client = client;
+    _client = std::move(client);
 }
 
 void client_state::reset_client_state()
@@ -80,9 +83,17 @@ void client_state::reset_client_state()
     _flush_response_called = false;
 }
 
-void client_state::on_response(server::client::response_interface iface,
+void client_state::on_response(
+    boost::system::error_code ec,
+    server::client::response_interface iface,
     const state::ptr_t & /* guard */)
 {
+    if(ec)
+    {
+        LOG_WARN("response write failed" << ec);
+        return;
+    }
+
     // set the response request_id to that of the request
     _samoa_response.set_request_id(_samoa_request.request_id());
 

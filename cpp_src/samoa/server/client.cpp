@@ -31,13 +31,15 @@ client_response_interface::client_response_interface(client::ptr_t p)
 core::stream_protocol::write_interface_t &
 client_response_interface::write_interface()
 {
-    return _client->write_interface();
+    return *_client;
 }
 
 void client_response_interface::finish_response()
 {
-    write_interface().write(_client,
-        std::bind(&client::on_response_finish, _1, _2));
+    _client->write(
+        std::bind(&client::on_response_finish,
+            std::placeholders::_1, std::placeholders::_2),
+        _client);
 
     // release ownership of client::response_interface
     _client.reset();
@@ -77,7 +79,10 @@ void client::on_next_request()
         ++_cur_requests_outstanding;
         _ready_for_read = false;
 
-        read(std::bind(&client::on_request_length, _1, _2, _3),
+        read(std::bind(&client::on_request_length,
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::placeholders::_3),
             shared_from_this(), 2);
     }
     else
@@ -99,7 +104,6 @@ void client::on_request_length(
     {
         LOG_WARN(ec);
         self->on_connection_error(ec);
-        // break read loop
         return;
     }
 
@@ -108,7 +112,10 @@ void client::on_request_length(
     std::copy(buffers_begin(read_body), buffers_end(read_body),
         (char*) &len);
 
-    read_data(std::bind(&client::on_request_body, _1, _2, _3),
+    self->read(std::bind(&client::on_request_body,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3),
         self, ntohs(len));
 }
 
@@ -125,7 +132,6 @@ void client::on_request_body(
     {
         LOG_WARN(ec);
         self->on_connection_error(ec);
-        // break read loop
         return;
     }
 
@@ -168,7 +174,6 @@ void client::on_request_data_block(
     {
         LOG_WARN(ec.message());
         self->on_connection_error(ec);
-        // break read loop
         return;
     }
 
@@ -177,7 +182,7 @@ void client::on_request_data_block(
 
     std::vector<core::buffer_regions_t> & data_blocks = \
         self->_next_rstate->mutable_client_state(
-                )->mutable_request_data_blocks();
+                ).mutable_request_data_blocks();
 
     if(ind < data_blocks.size())
     {
@@ -196,23 +201,27 @@ void client::on_request_data_block(
         // still more data blocks to read
         unsigned next_length = samoa_request.data_block_length(ind);
 
-        read(std::bind(&client::on_request_data_block, _1, _2, _3, ind),
+        self->read(std::bind(&client::on_request_data_block,
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::placeholders::_3,
+                ind),
             self, next_length);
         return;
     }
 
     // we're done reading data blocks, and have recieved a complete request
-    _ready_for_read = true;
+    self->_ready_for_read = true;
 
     // post to continue request read-loop
-    get_io_service().post(std::bind(
-        &client::on_next_request, shared_from_this()));
+    self->get_io_service().post(std::bind(
+        &client::on_next_request, self));
 
     command_handler::ptr_t handler = self->_protocol->get_command_handler(
         samoa_request.type());
 
     // release _next_state & self references
-    state::request_state::ptr_t rstate = std::move(self->_next_rstate);
+    request::state::ptr_t rstate = std::move(self->_next_rstate);
     rstate->initialize_from_client(std::move(self));
 
     if(handler)
@@ -265,9 +274,13 @@ void client::on_next_response(bool is_write_complete,
         _ready_for_write = false;
 
         // post call to next queued response callback
-        get_io_service().post(std::bind(
-            std::move(_queued_response_callbacks.front()),
-            response_interface(shared_from_this())));
+        get_io_service().post([
+                self = shared_from_this(),
+                callback = std::move(_queued_response_callbacks.front())]()
+            {
+                callback(boost::system::error_code(),
+                    response_interface(std::move(self)));
+            });
 
         _queued_response_callbacks.pop_front();
     }
@@ -276,33 +289,68 @@ void client::on_next_response(bool is_write_complete,
         _ready_for_write = false;
 
         // post call directly to new_callback
-        get_io_service().post(std::bind(
-            std::move(*new_callback),
-            response_interface(shared_from_this())));
+        get_io_service().post([
+                self = shared_from_this(),
+                callback = std::move(*new_callback)]()
+            {
+                callback(boost::system::error_code(),
+                    response_interface(std::move(self)));
+            });
     }
     // else, no response to begin at this point
 }
 
-void client::on_response_finish(const boost::system::error_code & ec)
+/* static */
+void client::on_response_finish(
+    write_interface_t::ptr_t b_self,
+    boost::system::error_code ec)
 {
+    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    SAMOA_ASSERT(self);
+
     if(ec)
     {
         LOG_WARN(ec.message());
+        self->on_connection_error(ec);
+        return;
     }
 
-    if(_ready_for_read &&
-       _cur_requests_outstanding == client::max_request_concurrency)
+    if(self->_ready_for_read &&
+       self->_cur_requests_outstanding == client::max_request_concurrency)
     {
         // this response caused us to drop back below maximum
         //  request concurrency; restart the request read-loop via post
-        get_io_service().post(std::bind(&client::on_next_request,
-            shared_from_this()));
+        self->get_io_service().post(std::bind(&client::on_next_request, self));
 
         LOG_INFO("request concurrency dropped; restarting read-loop");
     }
-    --_cur_requests_outstanding;
+    --self->_cur_requests_outstanding;
 
-    on_next_response(true, 0);
+    self->on_next_response(true, nullptr);
+}
+
+void client::on_connection_error(boost::system::error_code ec)
+{
+    if(is_open())
+    {
+        _context->drop_client(reinterpret_cast<size_t>(this));
+        close();
+    }
+
+    // notify pending response callbacks of the error
+    {
+        spinlock::guard guard(_lock);
+
+        for(auto & callback : _queued_response_callbacks)
+        {
+            // post deferred error callback
+            get_io_service().post([ec, callback = std::move(callback)]()
+                {
+                    callback(ec, response_interface());
+                });
+        }
+        _queued_response_callbacks.clear();
+    }
 }
 
 }

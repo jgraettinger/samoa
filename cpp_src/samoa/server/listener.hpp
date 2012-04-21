@@ -6,6 +6,7 @@
 #include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
+#include <unordered_map>
 #include <string>
 
 namespace samoa {
@@ -40,18 +41,13 @@ private:
 
     void on_accept(const boost::system::error_code & ec);
 
-    // proactor & io-service lifetime management
-    const core::proactor_ptr_t _proactor;
-    const core::io_service_ptr_t _io_service;
-
     const context_ptr_t  _context;
     const protocol_ptr_t _protocol;
 
     boost::asio::ip::tcp::acceptor _accept_sock;
 
-    // Next connection to accept, and it's io_service
+    // Next connection to accept
     std::unique_ptr<boost::asio::ip::tcp::socket> _next_sock;
-    core::io_service_ptr_t _next_io_srv;
 };
 
 }

@@ -95,18 +95,17 @@ void server_pool::connect()
             continue;   
         }
 
-        server::connect_to(
+        core::connection_factory::ptr_t factory = server::connect_to(
             std::bind(&server_pool::on_connect, shared_from_this(),
-                _1, _2, uuid),
+                std::placeholders::_1, std::placeholders::_2, uuid),
             entry.second.first, entry.second.second);
 
-        // implicit insert
-        _connecting[uuid];
+        _connecting[uuid] = std::make_pair(factory, callback_list_t());
     }
 }
 
 void server_pool::schedule_request(
-    const server::request_callback_t & callback,
+    server::request_callback_t callback,
     const core::uuid & uuid)
 {
     spinlock::guard guard(_lock);
@@ -117,7 +116,7 @@ void server_pool::schedule_request(
 
         if(it != _servers.end() && it->second && it->second->is_open())
         {
-            it->second->schedule_request(callback);
+            it->second->schedule_request(std::move(callback));
             return;
         }
     }
@@ -127,21 +126,24 @@ void server_pool::schedule_request(
     SAMOA_ASSERT(addr_it != _addresses.end());
 
     // lookup queue of requests pending on this server's connection
-    connecting_map_t::iterator conn_it = _connecting.find(uuid);
+    pending_connection_map_t::iterator conn_it = _connecting.find(uuid);
 
     // no connection attempt is in progress; start one
     if(conn_it == _connecting.end())
     {
-        server::connect_to(
+        core::connection_factory::ptr_t factory = server::connect_to(
             std::bind(&server_pool::on_connect, shared_from_this(),
-                _1, _2, uuid),
+                std::placeholders::_1, std::placeholders::_2, uuid),
             addr_it->second.first,
             addr_it->second.second);
 
-        _connecting[uuid].push_back(callback);
+        // insert into connection map, & push callback
+        _connecting.insert(std::make_pair(uuid,
+            std::make_pair(factory, callback_list_t()))
+        ).first->second.second.push_back(std::move(callback));
     }
     else
-        conn_it->second.push_back(callback);
+        conn_it->second.second.push_back(std::move(callback));
 }
 
 void server_pool::close()
@@ -163,13 +165,12 @@ void server_pool::on_connect(const boost::system::error_code & ec,
     {
         spinlock::guard guard(_lock);
 
-        // move list of callbacks into local variable,
-        //   clearing the original
+        // move list of callbacks into local variable; erase the entry
         {
-            connecting_map_t::iterator it = _connecting.find(uuid);
+            pending_connection_map_t::iterator it = _connecting.find(uuid);
             assert(it != _connecting.end());
 
-            callbacks.swap(it->second);
+            callbacks = std::move(it->second.second);
             _connecting.erase(it);
         }
 
@@ -181,29 +182,26 @@ void server_pool::on_connect(const boost::system::error_code & ec,
                 << addr.first << ":" << addr.second);
 
             _servers[uuid] = server;
-
-            // pass request callbacks to server instance
-            for(callback_list_t::iterator it = callbacks.begin();
-                it != callbacks.end(); ++it)
-            {
-                server->schedule_request(*it);
-            }
         }
     }
+    // handle callbacks outside of lock context
 
     if(ec)
     {
         LOG_INFO("connection to peer " << uuid << "@"
             << addr.first << ":" << addr.second << "failed: " << ec.message());
 
-        // errorback *outside* of lock context,
-        //   (the callback may make new requests) 
-
-        for(callback_list_t::iterator it = callbacks.begin();
-            it != callbacks.end(); ++it)
+        for(auto & callback : callbacks)
         {
-            server_request_interface null;
-            (*it)(ec, null);
+            callback(ec, server_request_interface());
+        }
+    }
+    else
+    {
+        // pass request callbacks to server instance
+        for(auto & callback : callbacks)
+        {
+            server->schedule_request(std::move(callback));
         }
     }
 }

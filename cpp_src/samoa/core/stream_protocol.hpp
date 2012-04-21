@@ -24,6 +24,9 @@ public:
      :  _in_read(false)
     { }
 
+    virtual ~stream_protocol_read_interface()
+    { }
+
     typedef std::function<
         void(ptr_t, boost::system::error_code, buffer_regions_t)
     > read_callback_t;
@@ -53,6 +56,9 @@ public:
 
     stream_protocol_write_interface()
      :  _in_write(false)
+    { }
+
+    virtual ~stream_protocol_write_interface()
     { }
 
     bool has_queued_writes() const;

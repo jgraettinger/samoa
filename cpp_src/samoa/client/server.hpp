@@ -151,7 +151,7 @@ public:
 
     static core::connection_factory::ptr_t connect_to(
         server_connect_to_callback_t,
-        std::string host,
+        const std::string & host,
         unsigned short port);
 
     server(std::unique_ptr<boost::asio::ip::tcp::socket>);

@@ -109,8 +109,10 @@ void local_partition::initialize(
                 context, table->get_uuid(), self->get_uuid());
 
         self->_persister->set_upkeep_callback(
-            std::bind(&eventual_consistency::upkeep,
-                tmp, _1, _2, _3));
+            std::bind(&eventual_consistency::upkeep, tmp,
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::placeholders::_3));
     };
     _persister_strand->dispatch(isolate);
 }
@@ -122,8 +124,11 @@ void local_partition::write(
     bool is_novel)
 {
     _persister->put(
-        std::bind(&local_partition::on_local_write,
-            shared_from_this(), _1, _2, _3, write_callback, rstate, is_novel),
+        std::bind(&local_partition::on_local_write, shared_from_this(),
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3,
+            write_callback, rstate, is_novel),
         datamodel::merge_func_t(merge_callback),
         rstate->get_key(),
         rstate->get_remote_record(),
@@ -271,7 +276,8 @@ void local_partition::read(
         {
             // no populated remote record; fall back on simple persister read
             self->get_persister()->get(
-                std::bind(client_callback, boost::system::error_code(), _1),
+                std::bind(client_callback,
+                    boost::system::error_code(), std::placeholders::_1),
                 rstate->get_key(),
                 rstate->get_local_record());
         }
