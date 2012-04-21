@@ -29,7 +29,7 @@ void cluster_state_handler::handle(const request::state::ptr_t & rstate)
     {
         rstate->get_context()->cluster_state_transaction(
             std::bind(&cluster_state_handler::on_state_transaction,
-                shared_from_this(), _1, rstate));
+                shared_from_this(), std::placeholders::_1, rstate));
     }
 }
 

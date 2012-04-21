@@ -108,7 +108,10 @@ void eventual_consistency::upkeep(
         // replicate value to peers
         rstate->get_peer_set()->schedule_request(
             std::bind(&eventual_consistency::on_move_request,
-                shared_from_this(), _1, _2, rstate),
+                shared_from_this(),
+                std::placeholders::_1,
+                std::placeholders::_2,
+                rstate),
             rstate->get_peer_set()->select_best_peer(rstate));
     }
     return;
@@ -146,7 +149,10 @@ void eventual_consistency::on_move_request(
 
     iface.flush_request(
         std::bind(&eventual_consistency::on_move_response,
-            shared_from_this(), _1, _2, rstate));
+            shared_from_this(),
+            std::placeholders::_1,
+            std::placeholders::_2,
+            rstate));
 }
 
 void eventual_consistency::on_move_response(
@@ -184,7 +190,7 @@ void eventual_consistency::on_move_response(
 
     partition->get_persister()->drop(
         std::bind(&eventual_consistency::on_move_drop,
-            shared_from_this(), _1, rstate),
+            shared_from_this(), std::placeholders::_1, rstate),
         rstate->get_key(), rstate->get_local_record());
 }
 

@@ -17,18 +17,22 @@ namespace samoa {
 namespace server {
 
 void replication::replicate(
-    const replication::peer_request_callback_t & request_callback,
-    const replication::peer_response_callback_t & response_callback,
-    const request::state_ptr_t & rstate)
+    replication::peer_request_callback_t request_callback,
+    replication::peer_response_callback_t response_callback,
+    request::state_ptr_t rstate)
 {
-
     for(const partition::ptr_t & partition : rstate->get_peer_partitions())
     {
         rstate->get_peer_set()->schedule_request(
             // wrap with request's io-service to synchronize callbacks
             rstate->get_io_service().wrap(
-                std::bind(&replication::on_request, _1, _2,
-                    request_callback, response_callback, rstate, partition)),
+                std::bind(&replication::on_request,
+                    std::placeholders::_1,
+                    std::placeholders::_2,
+                    request_callback,
+                    response_callback,
+                    rstate,
+                    partition)),
                 partition->get_server_uuid());
     }
 }
@@ -63,7 +67,11 @@ void replication::on_request(
         rstate->get_io_service().wrap(
             // wrap with request's io-service to synchronize callbacks
             std::bind(&replication::on_response,
-                _1, _2, response_callback, rstate, partition)));
+                std::placeholders::_1,
+                std::placeholders::_2,
+                response_callback,
+                rstate,
+                partition)));
 }
 
 void replication::on_response(

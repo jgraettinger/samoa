@@ -157,16 +157,22 @@ table::table(const spb::ClusterState::Table & ptable,
     if(_data_type == datamodel::BLOB_TYPE)
     {
         _consistent_merge = std::bind(&datamodel::blob::merge,
-            _1, _2, _consistency_horizon);
+            std::placeholders::_1,
+            std::placeholders::_2,
+            _consistency_horizon);
         _consistent_prune = std::bind(&datamodel::blob::prune,
-            _1, _consistency_horizon);
+            std::placeholders::_1,
+            _consistency_horizon);
     }
     else if(_data_type == datamodel::COUNTER_TYPE)
     {
         _consistent_merge = std::bind(&datamodel::counter::merge,
-            _1, _2, _consistency_horizon);
+            std::placeholders::_1,
+            std::placeholders::_2,
+            _consistency_horizon);
         _consistent_prune = std::bind(&datamodel::counter::prune,
-            _1, _consistency_horizon);
+            std::placeholders::_1,
+            _consistency_horizon);
     }
 }
 
