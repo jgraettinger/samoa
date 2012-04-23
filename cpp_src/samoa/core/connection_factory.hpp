@@ -17,32 +17,36 @@ public:
 
     static unsigned connect_timeout_ms /* = 60000 */;
 
-    typedef boost::shared_ptr<connection_factory> ptr_t;
-    typedef boost::weak_ptr<connection_factory> weak_ptr_t;
-
-    connection_factory();
+    typedef std::unique_ptr<boost::asio::ip::tcp::socket> socket_ptr_t;
 
     typedef std::function<
-        void(boost::system::error_code ec,
-            std::unique_ptr<boost::asio::ip::tcp::socket>)
+        void(boost::system::error_code, socket_ptr_t, io_service_ptr_t)
     > callback_t;
 
-    static ptr_t connect_to(
+    connection_factory(callback_t);
+    ~connection_factory();
+
+    static void connect_to(
         callback_t callback,
         const std::string & host,
         unsigned short port);
 
 private:
 
-    static void on_connect(weak_ptr_t, boost::system::error_code, callback_t);
+    typedef boost::shared_ptr<connection_factory> ptr_t;
 
-    static void on_timeout(weak_ptr_t, boost::system::error_code);
+    void on_connect(boost::system::error_code);
 
-    std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
+    void on_timeout(boost::system::error_code);
+
+    io_service_ptr_t _io_srv;
+    socket_ptr_t _sock;
 
     boost::asio::ip::tcp::resolver _resolver;
     boost::asio::ip::tcp::resolver::iterator _endpoint_iter;
     boost::asio::deadline_timer _timer;
+
+    callback_t _callback;
 };
 
 };

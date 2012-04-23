@@ -36,41 +36,38 @@ public:
     /// Constructs an unusable (null) instance
     server_request_interface() = default;
 
-    // Moveable, but not copyable
+    // Where possible prefer move-construction
+    //  (Note: looked into deleting copy-constructors, but asio
+    //    enforces that handlers be copy-constructable, though
+    //    it tries to use only move semantics)
     server_request_interface(server_request_interface &&) = default;
-    server_request_interface(server_request_interface &) = delete;
-    server_request_interface(const server_request_interface &) = delete;
+    server_request_interface(const server_request_interface &) = default;
 
     /*!
      * \brief Request to be written to the server.
      * This object is mutable and exclusive to the current holder
      *  of the server::request_interface.
      */
-    core::protobuf::SamoaRequest & get_message();
-
-    /*! \brief Cancels the current request
-     * Ownership of the request interface is released.
-     */
-    void abort_request();
+    core::protobuf::SamoaRequest & get_message() const;
 
     /*!
      * \brief Adds the single buffer_region as a request datablock
      * SamoaRequest::data_block_length is appropriately updated.
      */
-    void add_data_block(const core::buffer_region &);
+    void add_data_block(const core::buffer_region &) const;
 
     /*!
      * \brief Adds the buffer-regions as a request datablock
      * SamoaRequest::data_block_length is appropriately updated.
      */
-    void add_data_block(const core::buffer_regions_t &);
+    void add_data_block(const core::buffer_regions_t &) const;
 
     /*!
      * \brief Adds the (byte) iteration-range as a request datablock
      * SamoaRequest::data_block_length is appropriately updated.
      */
     template<typename Iterator>
-    void add_data_block(const Iterator & beg, const Iterator & end);
+    void add_data_block(const Iterator & beg, const Iterator & end) const;
 
     /*!
      * \brief Writes the complete request to server.
@@ -80,6 +77,11 @@ public:
      *  response is recieved from the server
      */
     void flush_request(server_response_callback_t);
+
+    /*! \brief Cancels the current request
+     * Ownership of the request interface is released.
+     */
+    void abort_request();
 
 private:
 
@@ -97,10 +99,9 @@ public:
     /// Constructs an unusable (null) instance
     server_response_interface() = default;
 
-    // Moveable, but not copyable
+    // Where possible prefer move construction
     server_response_interface(server_response_interface &&) = default;
-    server_response_interface(server_response_interface &) = delete;
-    server_response_interface(const server_response_interface &) = delete;
+    server_response_interface(const server_response_interface &) = default;
 
     /*!
      * \brief Response received from server
@@ -110,7 +111,7 @@ public:
     /*!
      * \brief Returns response error code (or 0 if none is set)
      */
-    unsigned get_error_code();
+    unsigned get_error_code() const;
 
     /*!
      * \brief Response data blocks returned by the server
@@ -149,12 +150,13 @@ public:
     typedef server_request_callback_t request_callback_t;
     typedef server_response_callback_t response_callback_t;
 
-    static core::connection_factory::ptr_t connect_to(
+    static void connect_to(
         server_connect_to_callback_t,
         const std::string & host,
         unsigned short port);
 
-    server(std::unique_ptr<boost::asio::ip::tcp::socket>);
+    server(std::unique_ptr<boost::asio::ip::tcp::socket>,
+        core::io_service_ptr_t);
 
     virtual ~server();
 
@@ -175,25 +177,33 @@ private:
     friend class server_request_interface;
     friend class server_response_interface;
 
-    typedef std::unordered_map<unsigned, response_callback_t
+    typedef std::function<void(boost::system::error_code)> wrapped_callback_t;
+
+    typedef std::list<wrapped_callback_t
+        > pending_requests_t;
+    typedef std::unordered_map<unsigned, wrapped_callback_t
         > pending_responses_t;
 
     static void on_connect(boost::system::error_code,
         std::unique_ptr<boost::asio::ip::tcp::socket>,
+        core::io_service_ptr_t,
         server_connect_to_callback_t);
 
-    /* 
-     * Begins a new response read (starting with length preamble).
-     */ 
+    static void on_schedule_request(ptr_t, request_callback_t);
+
+    static void on_flush_request(ptr_t, response_callback_t);
+
+    static void on_request_finish(
+        write_interface_t::ptr_t,
+        boost::system::error_code);
+
     void on_next_response();
 
-    // Begins read of SamoaResponse
     static void on_response_length(
         read_interface_t::ptr_t self,
         boost::system::error_code,
         core::buffer_regions_t);
 
-    // Parses SamoaResponse, and begins read of response data-blocks
     static void on_response_body(
         read_interface_t::ptr_t self,
         boost::system::error_code,
@@ -212,38 +222,11 @@ private:
         unsigned);
 
     /*
-     * Manages common cleanup-work for a recieved error
+     * Manages common cleanup-work for a recieved error,
+     * including notifying pending requests & responses
+     * of the socket's error
      */
     void on_connection_error(boost::system::error_code);
-
-    /*
-     * Request scheduling workhorse.
-     *
-     * If we're ready to write a new request (_ready_for_write),
-     *  and have a queued callback, that callback is posted.
-     *
-     * If a new callback is given, that callback is either
-     *  posted (if we're ready to write, and there's no queued
-     *  callback) or itself queued.
-     *
-     * @param is_write_complete Whether this call marks that a
-     *  current request operation has completed.
-     * @param new_callback A new request callback to invoke or queue
-     */
-    void on_next_request(bool is_write_complete,
-        request_callback_t * new_callback);
-
-    /*
-     * Callback when a request has been written (or aborted)
-     *
-     * If the request-write failed, notifies the corresponding
-     *  response callback.
-     *
-     * Begins the next queued request.
-     */
-    static void on_request_finish(
-        write_interface_t::ptr_t self,
-        boost::system::error_code);
 
     // modified exclusively through request_interface
     core::protobuf::SamoaRequest _samoa_request;
@@ -254,14 +237,10 @@ private:
     core::protobuf::SamoaResponse _samoa_response;
     std::vector<core::buffer_regions_t> _response_data_blocks;
 
-    bool _ready_for_write /*= true*/; // xthread
+    bool _ready_for_write /*= true*/;
 
-    std::list<request_callback_t> _queued_request_callbacks; // xthread
-    pending_responses_t _pending_responses; // xthread
-
-    spinlock _lock;
-
-    friend class server_private_ctor;
+    pending_requests_t _pending_requests;
+    pending_responses_t _pending_responses;
 };
 
 }

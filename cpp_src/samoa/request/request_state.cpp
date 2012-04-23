@@ -36,12 +36,6 @@ client_state & state::mutable_client_state()
     return *this;
 }
 
-boost::asio::io_service & state::get_io_service()
-{
-    SAMOA_ASSERT(get_client());
-    return get_client()->get_io_service();
-}
-
 void state::load_table_state()
 {
     table_state::load_table_state(get_table_set());
@@ -65,6 +59,7 @@ void state::load_replication_state()
 
 void state::initialize_from_client(server::client_ptr_t client)
 {
+    load_io_service_state(client->get_io_service());
     load_context_state(client->get_context());
     load_client_state(std::move(client));
 }

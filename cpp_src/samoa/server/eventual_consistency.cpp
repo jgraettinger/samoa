@@ -56,7 +56,7 @@ void eventual_consistency::upkeep(
         rstate->get_primary_partition()->get_digest()->add(new_checksum);
 
         auto on_peer_request = [rstate, old_checksum, new_checksum](
-            samoa::client::server_request_interface & iface,
+            const samoa::client::server_request_interface & iface,
             const partition::ptr_t & partition) -> bool
         {
             if( partition->get_digest()->test(old_checksum) ||
@@ -81,7 +81,7 @@ void eventual_consistency::upkeep(
 
         auto on_peer_response = [new_checksum](
             const boost::system::error_code & ec,
-            samoa::client::server_response_interface & iface,
+            const samoa::client::server_response_interface & iface,
             const partition::ptr_t & partition)
         {
             if(ec || iface.get_error_code())
@@ -92,7 +92,8 @@ void eventual_consistency::upkeep(
             partition->get_digest()->add(new_checksum);
         };
 
-        replication::replicate(on_peer_request, on_peer_response, rstate);
+        replication::replicate(std::move(on_peer_request),
+            std::move(on_peer_response), rstate);
     }
     catch(const request::state_exception & e)
     {

@@ -48,6 +48,7 @@ private:
 
     // Next connection to accept
     std::unique_ptr<boost::asio::ip::tcp::socket> _next_sock;
+    core::io_service_ptr_t _next_io_srv;
 };
 
 }

@@ -251,7 +251,7 @@ core::uuid peer_set::select_best_peer(const request::state::ptr_t & rstate)
     return best_peer_uuid;
 }
 
-void peer_set::forward_request(const request::state::ptr_t & rstate)
+void peer_set::forward_request(request::state::ptr_t rstate)
 {
     SAMOA_ASSERT(!rstate->get_primary_partition());
 
@@ -265,8 +265,10 @@ void peer_set::forward_request(const request::state::ptr_t & rstate)
 
     schedule_request(
         std::bind(&peer_set::on_forwarded_request,
-            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-            std::placeholders::_1, std::placeholders::_2, rstate, best_peer_uuid),
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::move(rstate),
+            best_peer_uuid),
         best_peer_uuid);
 }
 
@@ -294,11 +296,12 @@ void peer_set::begin_peer_discovery(const core::uuid & peer_uuid)
     (*it->second)();
 }
 
+/* static */
 void peer_set::on_forwarded_request(
-    const boost::system::error_code & ec,
-    samoa::client::server_request_interface & iface,
+    boost::system::error_code ec,
+    samoa::client::server_request_interface iface,
     const request::state::ptr_t & rstate,
-    const core::uuid & peer_uuid)
+    core::uuid peer_uuid)
 {
     if(ec)
     {
@@ -309,23 +312,24 @@ void peer_set::on_forwarded_request(
     iface.get_message().CopyFrom(rstate->get_samoa_request());
     iface.get_message().clear_data_block_length();
 
-    for(auto it = rstate->get_request_data_blocks().begin();
-        it != rstate->get_request_data_blocks().end(); ++it)
+    for(const auto & block : rstate->get_request_data_blocks())
     {
-        iface.add_data_block(*it);
+        iface.add_data_block(block);
     }
 
     iface.flush_request(
         std::bind(&peer_set::on_forwarded_response,
-            boost::dynamic_pointer_cast<peer_set>(shared_from_this()),
-            std::placeholders::_1, std::placeholders::_2, rstate, peer_uuid));
+            std::placeholders::_1,
+            std::placeholders::_2,
+            rstate, peer_uuid));
 }
 
+/* static */
 void peer_set::on_forwarded_response(
-    const boost::system::error_code & ec,
-    samoa::client::server_response_interface & iface,
+    boost::system::error_code ec,
+    samoa::client::server_response_interface iface,
     const request::state::ptr_t & rstate,
-    const core::uuid & peer_uuid)
+    core::uuid peer_uuid)
 {
     if(ec)
     {
@@ -336,18 +340,17 @@ void peer_set::on_forwarded_response(
     rstate->get_samoa_response().CopyFrom(iface.get_message());
     rstate->get_samoa_response().clear_data_block_length();
 
-    for(auto it = iface.get_response_data_blocks().begin();
-        it != iface.get_response_data_blocks().end(); ++it)
+    for(const auto & block : iface.get_response_data_blocks())
     {
-        rstate->add_response_data_block(*it);
+        rstate->add_response_data_block(block);
     }
-
     rstate->flush_response();
 
     if(iface.get_error_code() == 404)
     {
         // cluster-state may be inconsistent
-        begin_peer_discovery(peer_uuid);    
+        rstate->get_context()->get_cluster_state()->get_peer_set(
+            )->begin_peer_discovery(peer_uuid);
     }
     iface.finish_response();
 }

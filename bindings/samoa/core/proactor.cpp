@@ -6,7 +6,6 @@
 #include "pysamoa/future.hpp"
 #include "pysamoa/iterutil.hpp"
 #include <boost/python/operators.hpp>
-#include <boost/bind.hpp>
 #include <memory>
 
 namespace samoa {

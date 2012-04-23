@@ -74,8 +74,8 @@ future::ptr_t py_cluster_state_transaction(
     future::ptr_t f(boost::make_shared<future>());
 
     c.cluster_state_transaction(
-        boost::bind(&py_on_cluster_state_transaction,
-            f, callable, _1));
+        std::bind(&py_on_cluster_state_transaction,
+            f, callable, std::placeholders::_1));
 
     return f;
 }

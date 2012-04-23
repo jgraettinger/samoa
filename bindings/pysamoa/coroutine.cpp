@@ -3,6 +3,7 @@
 #include "future.hpp"
 #include "scoped_python.hpp"
 #include "samoa/log.hpp"
+#include <functional>
 
 #include <iostream>
 
@@ -37,10 +38,10 @@ void coroutine::next(bool post)
 void coroutine::send(const bpl::object & arg, bool post)
 {
     if(post)
-        _io_srv->post(boost::bind(&coroutine::on_reenter,
+        _io_srv->post(std::bind(&coroutine::on_reenter,
             shared_from_this(), arg));
     else
-        _io_srv->dispatch(boost::bind(&coroutine::on_reenter,
+        _io_srv->dispatch(std::bind(&coroutine::on_reenter,
             shared_from_this(), arg)); 
 }
 
@@ -56,10 +57,10 @@ void coroutine::error(
     _exception_set = true;
 
     if(post)
-        _io_srv->post(boost::bind(&coroutine::on_reenter,
+        _io_srv->post(std::bind(&coroutine::on_reenter,
             shared_from_this(), bpl::object()));
     else
-        _io_srv->dispatch(boost::bind(&coroutine::on_reenter,
+        _io_srv->dispatch(std::bind(&coroutine::on_reenter,
             shared_from_this(), bpl::object())); 
 }
 

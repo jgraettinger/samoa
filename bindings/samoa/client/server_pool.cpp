@@ -4,6 +4,7 @@
 #include "pysamoa/future.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include <boost/smart_ptr/make_shared.hpp>
+#include <functional>
 
 namespace samoa {
 namespace client {
@@ -19,7 +20,8 @@ void py_on_schedule_request(
 future::ptr_t py_schedule_request(server_pool & s, const core::uuid & uuid)
 {
     future::ptr_t f(boost::make_shared<future>());
-    s.schedule_request(boost::bind(py_on_schedule_request, f, _1, _2), uuid);
+    s.schedule_request(std::bind(py_on_schedule_request, f,
+        std::placeholders::_1, std::placeholders::_2), uuid);
     return f;
 }
 
@@ -34,7 +36,7 @@ void make_server_pool_bindings()
         .def("get_server", &server_pool::get_server)
         .def("get_server_hostname", &server_pool::get_server_hostname)
         .def("get_server_port", &server_pool::get_server_port)
-        .def("close", &server_pool::close);
+        ;
 }
 
 }

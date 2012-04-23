@@ -7,6 +7,8 @@
 namespace samoa {
 namespace core {
 
+using namespace boost::asio;
+
 ////////////////////////////////////////////////////////////////////////
 //  stream_protocol_read_interface
 
@@ -67,7 +69,7 @@ void stream_protocol_read_interface::on_read(
     buffer_regions_t regions;
     self->_ring.get_write_regions(regions);
 
-    boost::asio::ip::tcp::socket & sock(
+    ip::tcp::socket & sock(
         static_cast<stream_protocol&>(*self).get_socket());
 
     // schedule read of available data, bound by _w_regions capacity
@@ -99,14 +101,14 @@ void stream_protocol_write_interface::write(
     SAMOA_ASSERT(!_in_write);
     _in_write = true;
 
-    boost::asio::ip::tcp::socket & sock(
+    ip::tcp::socket & sock(
         static_cast<stream_protocol&>(*this).get_socket());
 
     // Schedule write-till-completion
-    boost::asio::async_write(sock, std::move(_regions),
-        [w_self = std::move(w_self),
-            callback = std::move(callback)](
-                boost::system::error_code ec, size_t)
+    async_write(sock, std::move(_regions), [
+            w_self = std::move(w_self),
+            callback = std::move(callback)
+        ](boost::system::error_code ec, size_t)
         {
             ptr_t self = w_self.lock();
             if(!self)
@@ -117,6 +119,7 @@ void stream_protocol_write_interface::write(
             }
 
             self->_in_write = false;
+            self->_regions.clear();
             callback(std::move(self), ec);
         });
 }
@@ -125,18 +128,43 @@ void stream_protocol_write_interface::write(
 //  stream_protocol
 
 stream_protocol::stream_protocol(
-    std::unique_ptr<boost::asio::ip::tcp::socket> sock)
- :  _sock(std::move(sock))
+    std::unique_ptr<ip::tcp::socket> sock,
+    io_service_ptr_t io_srv)
+ :  _sock(std::move(sock)),
+    _io_srv(std::move(io_srv))
 {
     SAMOA_ASSERT(_sock);
+    SAMOA_ASSERT(&_sock->get_io_service() == _io_srv.get());
+}
+
+void dtor_helper(ip::tcp::socket * sock)
+{
+    boost::system::error_code ec;
+
+    sock->shutdown(ip::tcp::socket::shutdown_both, ec);
+    if(ec)
+    {
+        LOG_WARN("error shutting down connection: " << ec);
+    }
+
+    sock->close(ec);
+    if(ec)
+    {
+        LOG_WARN("error closing connection");
+    }
+
+    delete sock;
 }
 
 /* virtual */
 stream_protocol::~stream_protocol()
 {
     // destroy socket from it's own io_service
-    _sock->get_io_service().dispatch(
-        [sock = _sock.release()]{ delete sock; });
+    _io_srv->dispatch(
+        [sock = _sock.release()]
+        {
+            dtor_helper(sock);
+        });
 }
 
 std::string stream_protocol::get_local_address() const
@@ -153,13 +181,11 @@ unsigned stream_protocol::get_remote_port() const
 
 bool stream_protocol::is_open() const
 {
+    // note this could be called from multiple threads, but _sock
+    //  isn't mutated during instance lifetime and is_open is const
     return _sock->is_open();
 }
 
-void stream_protocol::close()
-{
-    _sock->close();
-}
 
 };
 };

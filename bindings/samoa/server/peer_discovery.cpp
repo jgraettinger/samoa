@@ -4,6 +4,7 @@
 #include "samoa/server/context.hpp"
 #include "pysamoa/future.hpp"
 #include "pysamoa/scoped_python.hpp"
+#include <functional>
 
 namespace samoa {
 namespace server {
@@ -31,7 +32,7 @@ future::ptr_t py_call(peer_discovery & p)
     future::ptr_t f(boost::make_shared<future>());
     f->set_reenter_via_post();
 
-    p(boost::bind(&py_on_callback, f, _1));
+    p(std::bind(&py_on_callback, f, std::placeholders::_1));
     return f;
 }
 

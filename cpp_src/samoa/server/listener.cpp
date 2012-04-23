@@ -70,6 +70,7 @@ void listener::shutdown()
         {
             self->_accept_sock.close();
             self->_next_sock.reset();
+            self->_next_io_srv.reset();
         });
 }
 
@@ -95,8 +96,8 @@ void listener::on_accept(const boost::system::error_code & ec)
         _next_sock->set_option(ip::tcp::no_delay(true));
 
         // Create a client to service the socket
-        client::ptr_t cl = boost::make_shared<client>(
-            _context, _protocol, std::move(_next_sock));
+        client::ptr_t cl = boost::make_shared<client>(_context,
+            _protocol, std::move(_next_sock), std::move(_next_io_srv));
         cl->initialize();
 
         // track strong-ptr to guard client lifetime
@@ -104,8 +105,8 @@ void listener::on_accept(const boost::system::error_code & ec)
     }
 
     // Next connection to accept
-    _next_sock.reset(new ip::tcp::socket(
-        *core::proactor::get_proactor()->serial_io_service()));
+    _next_io_srv = core::proactor::get_proactor()->serial_io_service();
+    _next_sock.reset(new ip::tcp::socket(*_next_io_srv));
 
     // Schedule call on accept
     _accept_sock.async_accept(*_next_sock,

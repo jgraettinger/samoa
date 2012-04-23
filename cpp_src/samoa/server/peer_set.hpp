@@ -36,7 +36,7 @@ public:
 
     /*! \brief Forwards client request to the peer of select_best_peer()
     */
-    void forward_request(const request::state_ptr_t &);
+    void forward_request(request::state_ptr_t);
 
     /*! \brief Begins a peer discovery operation against all peers
      *  Called on startup, periodically (?), or when a local 
@@ -58,17 +58,17 @@ private:
 
     static bool _discovery_enabled;
 
-    void on_forwarded_request(
-        const boost::system::error_code &,
-        samoa::client::server_request_interface &,
+    static void on_forwarded_request(
+        boost::system::error_code,
+        samoa::client::server_request_interface,
         const request::state_ptr_t &,
-        const core::uuid &);
+        core::uuid);
 
-    void on_forwarded_response(
-        const boost::system::error_code &,
-        samoa::client::server_response_interface &,
+    static void on_forwarded_response(
+        boost::system::error_code,
+        samoa::client::server_response_interface,
         const request::state_ptr_t &,
-        const core::uuid &);
+        core::uuid);
 
     typedef std::map<core::uuid, peer_discovery_ptr_t> discovery_functors_t;
     discovery_functors_t _discovery_functors;

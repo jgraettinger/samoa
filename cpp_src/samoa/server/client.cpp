@@ -31,19 +31,28 @@ client_response_interface::client_response_interface(client::ptr_t p)
 core::stream_protocol::write_interface_t &
 client_response_interface::write_interface()
 {
+    SAMOA_ASSERT(_client);
     return *_client;
 }
 
 void client_response_interface::finish_response()
 {
-    _client->write(
-        std::bind(&client::on_response_finish,
-            std::placeholders::_1, std::placeholders::_2),
-        _client);
+    SAMOA_ASSERT(_client);
 
-    // release ownership of client::response_interface
-    _client.reset();
-    return;
+    client * raw_client = _client.get();
+
+    // dispatch write in io_service's thread;
+    raw_client->get_io_service()->dispatch(
+        [self = std::move(_client)]()
+        {
+            self->write(
+                std::bind(&client::on_response_finish,
+                    std::placeholders::_1, std::placeholders::_2),
+                self);
+        });
+
+    // move of client released ownership of client::response_interface
+    SAMOA_ASSERT(!_client);
 }
 
 
@@ -51,8 +60,9 @@ void client_response_interface::finish_response()
 //  client
 
 client::client(context::ptr_t context, protocol::ptr_t protocol,
-    std::unique_ptr<ip::tcp::socket> sock)
- :  core::stream_protocol(std::move(sock)),
+    std::unique_ptr<ip::tcp::socket> sock,
+    core::io_service_ptr_t io_srv)
+ :  core::stream_protocol(std::move(sock), std::move(io_srv)),
     _context(context),
     _protocol(protocol),
     _ready_for_read(true),
@@ -69,7 +79,9 @@ client::~client()
 
 void client::initialize()
 {
-    on_next_request();
+    // begin client read loop
+    get_io_service()->dispatch(
+        std::bind(&client::on_next_request, shared_from_this()));
 }
 
 void client::on_next_request()
@@ -214,7 +226,7 @@ void client::on_request_data_block(
     self->_ready_for_read = true;
 
     // post to continue request read-loop
-    self->get_io_service().post(std::bind(
+    self->get_io_service()->post(std::bind(
         &client::on_next_request, self));
 
     command_handler::ptr_t handler = self->_protocol->get_command_handler(
@@ -236,68 +248,33 @@ void client::on_request_data_block(
 
 void client::schedule_response(response_callback_t callback)
 {
-    on_next_response(false, &callback);
+    get_io_service()->dispatch(
+        [&, self = shared_from_this(), callback = std::move(callback)]()
+        {
+            // '&' capture is a work-around for a bug in gcc 4.6; remove me
+            client::on_schedule_response(std::move(self), std::move(callback));
+        });
 }
 
-void client::on_next_response(bool is_write_complete,
-    response_callback_t * new_callback)
+/* static */
+void client::on_schedule_response(ptr_t self, response_callback_t callback)
 {
-    SAMOA_ASSERT(is_write_complete ^ (new_callback != 0));
+    // we should never be write-ready if there are queued responses
+    SAMOA_ASSERT(!self->_ready_for_write || self->_pending_responses.empty());
 
-    spinlock::guard guard(_lock);
-
-    if(is_write_complete)
+    if(self->_ready_for_write)
     {
-        _ready_for_write = true;
-    }
+        // dispatch immediately
+        self->_ready_for_write = false;
 
-    if(!_ready_for_write)
-    {
-        if(new_callback)
-        {
-            _queued_response_callbacks.push_back(std::move(*new_callback));
-        }
+        callback(boost::system::error_code(),
+            response_interface(std::move(self)));
         return;
     }
-
-    // we're ready to start a new response
-
-    if(!_queued_response_callbacks.empty())
+    else
     {
-        // it should never be possible for us to be ready-to-write,
-        //  and have both a new_callback & queued callbacks.
-        //
-        // only on_response_finish can clear the ready_for_write bit,
-        //  and that call never issues a new_callback
-        SAMOA_ASSERT(!new_callback);
-
-        _ready_for_write = false;
-
-        // post call to next queued response callback
-        get_io_service().post([
-                self = shared_from_this(),
-                callback = std::move(_queued_response_callbacks.front())]()
-            {
-                callback(boost::system::error_code(),
-                    response_interface(std::move(self)));
-            });
-
-        _queued_response_callbacks.pop_front();
+        self->_pending_responses.push_back(std::move(callback));
     }
-    else if(new_callback)
-    {
-        _ready_for_write = false;
-
-        // post call directly to new_callback
-        get_io_service().post([
-                self = shared_from_this(),
-                callback = std::move(*new_callback)]()
-            {
-                callback(boost::system::error_code(),
-                    response_interface(std::move(self)));
-            });
-    }
-    // else, no response to begin at this point
 }
 
 /* static */
@@ -307,6 +284,11 @@ void client::on_response_finish(
 {
     ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
     SAMOA_ASSERT(self);
+
+    // this needs to be true, even if the socket's closed:
+    //  we want responses which are currently getting scheduled to attempt
+    //  a write and fail, rather than get stuck in _pending_responses
+    self->_ready_for_write = true;
 
     if(ec)
     {
@@ -320,37 +302,48 @@ void client::on_response_finish(
     {
         // this response caused us to drop back below maximum
         //  request concurrency; restart the request read-loop via post
-        self->get_io_service().post(std::bind(&client::on_next_request, self));
+        self->get_io_service()->post(
+            std::bind(&client::on_next_request, self));
 
         LOG_INFO("request concurrency dropped; restarting read-loop");
     }
     --self->_cur_requests_outstanding;
 
-    self->on_next_response(true, nullptr);
+    if(!self->_pending_responses.empty())
+    {
+        // begin another response
+        self->_ready_for_write = false;
+
+        response_callback_t callback = std::move(
+            self->_pending_responses.front());
+        self->_pending_responses.pop_front();
+
+        callback(boost::system::error_code(),
+            response_interface(std::move(self)));
+        return;
+    }
 }
 
 void client::on_connection_error(boost::system::error_code ec)
 {
+    SAMOA_ASSERT(ec);
+
     if(is_open())
     {
+        get_socket().close();
         _context->drop_client(reinterpret_cast<size_t>(this));
-        close();
     }
 
     // notify pending response callbacks of the error
+    for(auto & callback : _pending_responses)
     {
-        spinlock::guard guard(_lock);
-
-        for(auto & callback : _queued_response_callbacks)
-        {
-            // post deferred error callback
-            get_io_service().post([ec, callback = std::move(callback)]()
-                {
-                    callback(ec, response_interface());
-                });
-        }
-        _queued_response_callbacks.clear();
+        // post deferred error callback
+        get_io_service()->post([ec, callback = std::move(callback)]()
+            {
+                callback(ec, response_interface());
+            });
     }
+    _pending_responses.clear();
 }
 
 }

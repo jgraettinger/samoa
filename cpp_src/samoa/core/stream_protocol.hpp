@@ -100,7 +100,8 @@ public:
     typedef stream_protocol_read_interface read_interface_t;
     typedef stream_protocol_write_interface write_interface_t;
 
-    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> sock);
+    stream_protocol(std::unique_ptr<boost::asio::ip::tcp::socket> sock,
+        io_service_ptr_t io_srv);
 
     virtual ~stream_protocol();
 
@@ -112,10 +113,8 @@ public:
 
     bool is_open() const;
 
-    void close();
-
-    boost::asio::io_service & get_io_service()
-    { return _sock->get_io_service(); }
+    const io_service_ptr_t & get_io_service()
+    { return _io_srv; }
 
 protected:
 
@@ -132,6 +131,7 @@ private:
     friend class stream_protocol_write_interface;
 
     std::unique_ptr<boost::asio::ip::tcp::socket> _sock;
+    io_service_ptr_t _io_srv;
 };
 
 }

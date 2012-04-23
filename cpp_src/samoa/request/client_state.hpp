@@ -125,7 +125,7 @@ private:
 
     friend class samoa::server::client;
 
-    void on_response(
+    void on_schedule_response(
         boost::system::error_code,
         server::client::response_interface,
         const state_ptr_t & guard);

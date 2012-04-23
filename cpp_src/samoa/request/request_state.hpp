@@ -2,6 +2,7 @@
 #define SAMOA_REQUEST_STATE_HPP
 
 #include "samoa/request/fwd.hpp"
+#include "samoa/request/io_service_state.hpp"
 #include "samoa/request/context_state.hpp"
 #include "samoa/request/client_state.hpp"
 #include "samoa/request/table_state.hpp"
@@ -15,6 +16,7 @@ namespace samoa {
 namespace request {
 
 class state :
+    private io_service_state,
     private context_state,
     private client_state,
     private table_state,
@@ -29,6 +31,9 @@ public:
 
     state();
     virtual ~state();
+
+    using io_service_state::get_io_service;
+    using io_service_state::load_io_service_state;
 
     using context_state::get_context;
     using context_state::get_cluster_state;
@@ -47,7 +52,6 @@ public:
         const boost::system::error_code & err_msg);
     client_state & mutable_client_state();
 
-    boost::asio::io_service & get_io_service();
 
     void load_table_state();
 

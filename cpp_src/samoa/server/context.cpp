@@ -107,6 +107,8 @@ void context::add_client(size_t client_id, const client::ptr_t & client)
 {
     spinlock::guard guard(_client_lock);
 
+    LOG_INFO("add client " << client_id);
+
     SAMOA_ASSERT(_clients.insert(
         std::make_pair(client_id, client)).second);
 }
@@ -114,6 +116,8 @@ void context::add_client(size_t client_id, const client::ptr_t & client)
 void context::drop_client(size_t client_id)
 {
     spinlock::guard guard(_client_lock);
+
+    LOG_INFO("drop client " << client_id);
 
     clients_t::iterator it = _clients.find(client_id);
     SAMOA_ASSERT(it != _clients.end());

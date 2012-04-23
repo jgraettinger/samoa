@@ -39,7 +39,7 @@ void client_state::flush_response(state::ptr_t guard)
     _client->schedule_response(
         // pass 'this' as argument to binder, but also pass 'guard'
         //  by-value, to protect the lifetime of the request state
-        std::bind(&client_state::on_response, this,
+        std::bind(&client_state::on_schedule_response, this,
             std::placeholders::_1,
             std::placeholders::_2,
             std::move(guard)));
@@ -83,14 +83,14 @@ void client_state::reset_client_state()
     _flush_response_called = false;
 }
 
-void client_state::on_response(
+void client_state::on_schedule_response(
     boost::system::error_code ec,
     server::client::response_interface iface,
     const state::ptr_t & /* guard */)
 {
     if(ec)
     {
-        LOG_WARN("response write failed" << ec);
+        LOG_WARN("failed to schedule response " << ec.message());
         return;
     }
 

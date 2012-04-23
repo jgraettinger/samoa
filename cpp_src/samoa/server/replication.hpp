@@ -4,55 +4,70 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/client/fwd.hpp"
 #include "samoa/client/server.hpp"
-#include "samoa/request/request_state.hpp"
+#include "samoa/request/fwd.hpp"
 #include "samoa/core/fwd.hpp"
+#include "samoa/core/uuid.hpp"
 #include <boost/system/error_code.hpp>
+#include <boost/smart_ptr/enable_shared_from_this.hpp>
+#include <boost/smart_ptr/make_shared.hpp>
+#include <boost/shared_ptr.hpp>
 #include <functional>
 
 namespace samoa {
 namespace server {
 
 class replication
+    : public boost::enable_shared_from_this<replication>
 {
 public:
 
+    // interface may be used but not moved during callback
     typedef std::function<bool(
-        samoa::client::server_request_interface &,
+        const samoa::client::server_request_interface &,
         const partition_ptr_t &)
     > peer_request_callback_t;
 
+    // interface may be used but not moved during callback
     typedef std::function<void(
-        const boost::system::error_code &,
-        samoa::client::server_response_interface &,
+        boost::system::error_code,
+        const samoa::client::server_response_interface &,
         const partition_ptr_t &)
     > peer_response_callback_t;
 
     static void replicate(
-        const peer_request_callback_t &,
-        const peer_response_callback_t &,
-        const request::state_ptr_t &);
+        peer_request_callback_t,
+        peer_response_callback_t,
+        request::state_ptr_t);
+
+    // exposed for benefit of make_shared; don't call directly
+    replication(
+        peer_request_callback_t,
+        peer_response_callback_t,
+        request::state_ptr_t);
 
 private:
 
+    typedef boost::shared_ptr<replication> ptr_t;
+
     static void on_request(
-        const boost::system::error_code &,
+        ptr_t self,
+        boost::system::error_code,
         samoa::client::server_request_interface,
-        const peer_request_callback_t &,
-        const peer_response_callback_t &,
-        const request::state_ptr_t &,
-        const partition_ptr_t &);
+        partition_ptr_t);
 
     static void on_response(
-        const boost::system::error_code & ec,
+        ptr_t self,
+        boost::system::error_code,
         samoa::client::server_response_interface,
-        const peer_response_callback_t &,
-        const request::state_ptr_t &,
-        const partition_ptr_t &);
+        partition_ptr_t);
 
-    static void build_peer_request(
-        samoa::client::server_request_interface &,
-        const request::state_ptr_t &,
-        const core::uuid & peer_uuid);
+    void build_peer_request(
+        const samoa::client::server_request_interface &,
+        const core::uuid &);
+
+    peer_request_callback_t _request_callback;
+    peer_response_callback_t _response_callback;
+    request::state_ptr_t _rstate;
 };
 
 }

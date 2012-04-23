@@ -6,10 +6,9 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/stream_protocol.hpp"
-#include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
-#include <list>
 #include <functional>
+#include <list>
 
 namespace samoa {
 namespace server {
@@ -77,7 +76,8 @@ public:
     static const unsigned max_request_concurrency;
 
     client(context_ptr_t, protocol_ptr_t,
-        std::unique_ptr<boost::asio::ip::tcp::socket>);
+        std::unique_ptr<boost::asio::ip::tcp::socket>,
+        core::io_service_ptr_t);
 
     virtual ~client();
 
@@ -143,22 +143,7 @@ private:
         core::buffer_regions_t,
         unsigned);
 
-    /*
-     * Response scheduling workhorse.
-     *
-     * If we're ready to write a new response (_ready_for_write),
-     *  and have a queued callback, that callback is posted.
-     *
-     * If a new callback is given, that callback is either
-     *  posted (if we're ready to write, and there's no queued
-     *  callback) or itself queued.
-     *
-     * @param is_write_complete Whether this call marks that a
-     *  current response operation has completed.
-     * @param new_callback A new response callback to invoke or queue.
-     */
-    void on_next_response(bool is_write_complete,
-        response_callback_t * new_callback);
+    static void on_schedule_response(ptr_t, response_callback_t);
 
     /*
      * Logs errors, and begins the next queued response.
@@ -175,13 +160,11 @@ private:
     request::state_ptr_t _next_rstate;
 
     bool _ready_for_read /*= true*/;
-    bool _ready_for_write /*= true*/; // xthread
+    bool _ready_for_write /*= true*/;
 
-    std::list<response_callback_t> _queued_response_callbacks; // xthread
+    std::list<response_callback_t> _pending_responses;
 
     unsigned _cur_requests_outstanding /*= 0*/;
-
-    spinlock _lock;
 };
 
 }

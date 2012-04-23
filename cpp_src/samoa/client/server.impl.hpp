@@ -6,7 +6,7 @@ namespace client {
 
 template<typename Iterator>
 void server_request_interface::add_data_block(
-    const Iterator & begin, const Iterator & end)
+    const Iterator & begin, const Iterator & end) const
 {
     core::buffer_ring ring;
     ring.produce_range(begin, end);

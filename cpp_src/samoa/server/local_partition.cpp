@@ -188,7 +188,7 @@ void local_partition::on_local_write(
     }
 
     auto on_peer_request = [rstate](
-        samoa::client::server_request_interface & iface,
+        const samoa::client::server_request_interface & iface,
         const partition::ptr_t &) -> bool
     {
         // serialize local record to the peer
@@ -202,8 +202,8 @@ void local_partition::on_local_write(
     };
 
     auto on_peer_response = [callback, rstate, checksum](
-        const boost::system::error_code & ec,
-        samoa::client::server_response_interface &,
+        boost::system::error_code ec,
+        const samoa::client::server_response_interface &,
         const partition::ptr_t & partition)
     {
         if(ec)
@@ -291,7 +291,7 @@ void local_partition::read(
     }
 
     auto on_peer_request = [rstate](
-        samoa::client::server_request_interface &,
+        const samoa::client::server_request_interface &,
         const partition::ptr_t &) -> bool
     {
         // if quorum is already met, abort the request
@@ -299,8 +299,8 @@ void local_partition::read(
     };
 
     auto on_peer_response = [callback, rstate](
-        const boost::system::error_code & ec,
-        samoa::client::server_response_interface & iface,
+        boost::system::error_code ec,
+        const samoa::client::server_response_interface & iface,
         const partition::ptr_t & partition)
     {
         if(ec)

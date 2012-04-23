@@ -95,12 +95,13 @@ void server_pool::connect()
             continue;   
         }
 
-        core::connection_factory::ptr_t factory = server::connect_to(
+        server::connect_to(
             std::bind(&server_pool::on_connect, shared_from_this(),
                 std::placeholders::_1, std::placeholders::_2, uuid),
             entry.second.first, entry.second.second);
 
-        _connecting[uuid] = std::make_pair(factory, callback_list_t());
+        // implicit insert
+        _connecting[uuid];
     }
 }
 
@@ -126,35 +127,21 @@ void server_pool::schedule_request(
     SAMOA_ASSERT(addr_it != _addresses.end());
 
     // lookup queue of requests pending on this server's connection
-    pending_connection_map_t::iterator conn_it = _connecting.find(uuid);
+    connecting_map_t::iterator conn_it = _connecting.find(uuid);
 
     // no connection attempt is in progress; start one
     if(conn_it == _connecting.end())
     {
-        core::connection_factory::ptr_t factory = server::connect_to(
+        server::connect_to(
             std::bind(&server_pool::on_connect, shared_from_this(),
                 std::placeholders::_1, std::placeholders::_2, uuid),
             addr_it->second.first,
             addr_it->second.second);
 
-        // insert into connection map, & push callback
-        _connecting.insert(std::make_pair(uuid,
-            std::make_pair(factory, callback_list_t()))
-        ).first->second.second.push_back(std::move(callback));
+        _connecting[uuid].push_back(std::move(callback));
     }
     else
-        conn_it->second.second.push_back(std::move(callback));
-}
-
-void server_pool::close()
-{
-    spinlock::guard guard(_lock);
-
-    for(server_map_t::const_iterator it = _servers.begin();
-        it != _servers.end(); ++it)
-    {
-        it->second->close();
-    }
+        conn_it->second.push_back(std::move(callback));
 }
 
 void server_pool::on_connect(const boost::system::error_code & ec,
@@ -167,10 +154,10 @@ void server_pool::on_connect(const boost::system::error_code & ec,
 
         // move list of callbacks into local variable; erase the entry
         {
-            pending_connection_map_t::iterator it = _connecting.find(uuid);
+            connecting_map_t::iterator it = _connecting.find(uuid);
             assert(it != _connecting.end());
 
-            callbacks = std::move(it->second.second);
+            callbacks = std::move(it->second);
             _connecting.erase(it);
         }
 

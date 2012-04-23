@@ -1,3 +1,4 @@
+import sys
 
 from samoa.server.command_handler import CommandHandler
 
