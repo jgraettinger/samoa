@@ -10,7 +10,7 @@ project root
         <cxxflags>-Wextra
         <cxxflags>-Werror
         #<cxxflags>-Weffc++
-        <define>BOOST_ASIO_ENABLE_HANDLER_TRACKING
+        #<define>BOOST_ASIO_ENABLE_HANDLER_TRACKING
     : default-build debug 
     : build-dir $(BUILD) 
 ;

@@ -69,12 +69,12 @@ client::client(context::ptr_t context, protocol::ptr_t protocol,
     _ready_for_write(true),
     _cur_requests_outstanding(0)
 {
-    LOG_DBG("");
+    LOG_DBG("created " << this << " owning " << &get_socket());
 }
 
 client::~client()
 {
-    LOG_DBG("");
+    LOG_DBG("destroyed " << this << " owning " << &get_socket());
 }
 
 void client::initialize()

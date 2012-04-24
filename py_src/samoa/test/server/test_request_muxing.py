@@ -92,12 +92,12 @@ class TestRequestMuxing(unittest.TestCase):
             yield self._make_request(3, [3, 1])
             yield self._validate_responses([3, 1])
 
-            yield self._make_request(4, [2])
-            yield self._validate_responses([2])
+            yield self._make_request(4, [4])
+            yield self._validate_responses([4])
 
             yield self._make_request(5, [])
-            yield self._make_request(6, [6, 4, 5])
-            yield self._validate_responses([6, 4, 5])
+            yield self._make_request(6, [6, 2, 5])
+            yield self._validate_responses([6, 2, 5])
 
             self.context.shutdown()
             yield
@@ -107,7 +107,7 @@ class TestRequestMuxing(unittest.TestCase):
     def test_concurrency_limit(self):
 
         # Client.max_request_concurrency requests, increasing id 
-        request_order = range(Client.max_request_concurrency)
+        request_order = range(Client.max_request_concurrency + 1)
 
         # release in opposite order, except for 0
         release_order = list(reversed(request_order[1:]))
@@ -117,7 +117,7 @@ class TestRequestMuxing(unittest.TestCase):
             yield self._build_connection()
 
             # Client.max_request_concurrency initial requests
-            for r_id in request_order:
+            for r_id in request_order[:-1]:
                 yield self._make_request(r_id, [])
 
             # A request to release all previous requests, except 0

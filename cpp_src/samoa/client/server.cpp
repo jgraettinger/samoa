@@ -129,7 +129,7 @@ server::server(std::unique_ptr<ip::tcp::socket> sock,
     _next_request_id(1),
     _ready_for_write(1)
 {
-    LOG_DBG("created " << this);    
+    LOG_DBG("created " << this << " owning " << &get_socket());
 }
 
 /* static */
@@ -172,7 +172,7 @@ void server::on_connect(
 
 server::~server()
 {
-    LOG_DBG("destroyed " << this);    
+    LOG_DBG("destroyed " << this << " owning " << &get_socket());
 }
 
 void server::schedule_request(request_callback_t callback)
