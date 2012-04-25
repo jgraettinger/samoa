@@ -33,6 +33,21 @@ bpl::dict py_get_uuid_index(const table & t)
     return d;
 }
 
+bool py_is_neighbor(bpl::object py_indices,
+    unsigned ring_size, unsigned ring_index,
+    unsigned replication_factor)
+{
+    std::vector<unsigned> indices;
+    for(bpl::object it = pysamoa::iter(py_indices), item;
+        pysamoa::next(it, item);)
+    {
+        indices.push_back(bpl::extract<unsigned>(item));
+    }
+
+    return table::is_neighbor(indices,
+        ring_size, ring_index, replication_factor);
+}
+
 void make_table_bindings()
 {
     bpl::class_<table, table::ptr_t, boost::noncopyable>(
@@ -50,7 +65,9 @@ void make_table_bindings()
         .def("get_partition", &table::get_partition)
         .def("get_uuid_index", &py_get_uuid_index)
         .def("ring_position", &table::ring_position)
-        .def("merge_table", &table::merge_table);
+        .def("merge_table", &table::merge_table)
+        .def("is_neighbor", &py_is_neighbor)
+        .staticmethod("is_neighbor");
 }
 
 }

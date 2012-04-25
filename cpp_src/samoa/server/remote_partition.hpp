@@ -20,11 +20,11 @@ public:
 
     remote_partition(
         const spb::ClusterState::Table::Partition &,
-        uint64_t range_begin, uint64_t range_end);
+        uint64_t range_begin, uint64_t range_end, bool is_tracked);
 
     remote_partition(
         const spb::ClusterState::Table::Partition &,
-        uint64_t range_begin, uint64_t range_end,
+        uint64_t range_begin, uint64_t range_end, bool is_tracked,
         const remote_partition & current);
 
     bool merge_partition(

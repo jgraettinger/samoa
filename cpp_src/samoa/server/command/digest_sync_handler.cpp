@@ -78,6 +78,11 @@ void digest_sync_handler::handle(const request::state::ptr_t & rstate)
         	rstate->send_error(404, "no such partition");
         	return;
         }
+        if(!partition->is_tracked())
+        {
+            rstate->send_error(404, "sent digest for an untracked partition");
+            return;
+        }
 
         dynamic_cast<remote_digest &>(*partition->get_digest()
             ).mark_filter_for_deletion();

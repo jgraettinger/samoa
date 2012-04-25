@@ -71,7 +71,12 @@ class TestDigestGossip(unittest.TestCase):
                     ).get_table(self.table_uuid
                     ).get_partition(self.partition_uuid)
 
-                self.assertEquals(expect, partition.get_digest().test(test_entry))
+                if expect:
+                    self.assertTrue(partition.get_digest().test(test_entry))
+                else:
+                    # partition won't have a digest if it's untracked
+                    self.assertFalse(partition.get_digest() \
+                        and partition.get_digest().test(test_entry))
 
         def test():
 

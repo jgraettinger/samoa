@@ -4,7 +4,6 @@
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
 #include "pysamoa/future.hpp"
-#include "pysamoa/iterutil.hpp"
 #include <boost/python/operators.hpp>
 #include <memory>
 

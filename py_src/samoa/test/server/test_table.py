@@ -248,3 +248,31 @@ class TestTable(unittest.TestCase):
         self.assertEquals(ring[4].get_range_begin(), 3000)
         self.assertEquals(ring[4].get_range_end(), 999)
 
+    def test_is_neighbor(self):
+
+        # arguments here are:
+        #  local_partition_indicies, ring_size, ring_index, replication_factor
+
+        # best way to follow along with these, is to print out the list of
+        #  ordered partition indicies, and underline the local ones
+
+        # 0 replicates forward to 1
+        self.assertTrue(Table.is_neighbor([1, 4], 9, 0, 3))
+        # 2 replicates back to 1, forward to 4
+        self.assertTrue(Table.is_neighbor([1, 4], 9, 2, 3))
+        # 3 replicates back to 1, forward to 4
+        self.assertTrue(Table.is_neighbor([1, 4], 9, 3, 3))
+        # 5 replicates back to 4
+        self.assertTrue(Table.is_neighbor([1, 4], 9, 5, 3))
+        # 6 replicates back to 4
+        self.assertTrue(Table.is_neighbor([1, 4], 9, 6, 3))
+        # 7 is too far from 4
+        self.assertFalse(Table.is_neighbor([1, 4], 9, 7, 3))
+        # 8 replicates forward to 1
+        self.assertTrue(Table.is_neighbor([1, 4], 9, 8, 3))
+
+        # factor 3 => 1 doesn't replicate back to 7
+        self.assertFalse(Table.is_neighbor([5, 7], 9, 1, 3))
+        # factor 4, it does
+        self.assertTrue(Table.is_neighbor([5, 7], 9, 1, 4))
+

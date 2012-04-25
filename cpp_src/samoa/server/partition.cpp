@@ -9,15 +9,16 @@ namespace server {
 
 partition::partition(
     const spb::ClusterState::Table::Partition & part,
-    uint64_t range_begin, uint64_t range_end)
- : _uuid(core::parse_uuid(part.uuid())),
-   _server_uuid(core::parse_uuid(part.server_uuid())),
-   _ring_position(part.ring_position()),
-   _range_begin(range_begin),
-   _range_end(range_end),
-   _consistent_range_begin(part.consistent_range_begin()),
-   _consistent_range_end(part.consistent_range_end()),
-   _lamport_ts(part.lamport_ts())
+    uint64_t range_begin, uint64_t range_end, bool is_tracked)
+ :  _uuid(core::parse_uuid(part.uuid())),
+    _server_uuid(core::parse_uuid(part.server_uuid())),
+    _ring_position(part.ring_position()),
+    _range_begin(range_begin),
+    _range_end(range_end),
+    _consistent_range_begin(part.consistent_range_begin()),
+    _consistent_range_end(part.consistent_range_end()),
+    _lamport_ts(part.lamport_ts()),
+    _is_tracked(is_tracked)
 {}
 
 partition::~partition()

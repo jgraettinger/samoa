@@ -47,6 +47,9 @@ public:
     uint64_t get_lamport_ts() const
     { return _lamport_ts; }
 
+    bool is_tracked() const
+    { return _is_tracked; }
+
     digest_ptr_t get_digest() const;
 
     bool position_in_responsible_range(uint64_t ring_position) const;
@@ -64,7 +67,7 @@ public:
 protected:
 
     partition(const spb::ClusterState::Table::Partition &,
-        uint64_t range_begin, uint64_t range_end);
+        uint64_t range_begin, uint64_t range_end, bool is_tracked);
 
     void set_digest(const digest_ptr_t &);
 
@@ -76,6 +79,7 @@ protected:
     const uint64_t   _consistent_range_begin;
     const uint64_t   _consistent_range_end;
     const uint64_t   _lamport_ts;
+    const bool       _is_tracked;
 
 private:
 

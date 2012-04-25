@@ -14,10 +14,10 @@ void make_remote_partition_bindings()
         bpl::bases<partition>, boost::noncopyable>(
             "RemotePartition", bpl::init<
                 const spb::ClusterState::Table::Partition &,
-                uint64_t, uint64_t,
+                uint64_t, uint64_t, bool,
                 const remote_partition &>())
         .def(bpl::init<const spb::ClusterState::Table::Partition &,
-            uint64_t, uint64_t>());
+            uint64_t, uint64_t, bool>());
 
     bpl::implicitly_convertible<remote_partition::ptr_t, partition::ptr_t>();
 }

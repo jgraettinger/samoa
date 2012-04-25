@@ -26,10 +26,14 @@ class TestDigestSync(unittest.TestCase):
         self.injector = TestModule().configure(getty.Injector())
         self.fixture = self.injector.get_instance(ClusterStateFixture)
 
-        self.table_uuid = UUID(self.fixture.add_table().uuid)
+        self.table_uuid = UUID(self.fixture.add_table(
+            replication_factor = 2).uuid)
 
         self.partition_uuid = UUID(
             self.fixture.add_remote_partition(self.table_uuid).uuid)
+
+        # without an overlapping local partition, remote won't track digests
+        self.fixture.add_local_partition(self.table_uuid)
 
         self.listener = self.injector.get_instance(Listener)
         self.context = self.listener.get_context()

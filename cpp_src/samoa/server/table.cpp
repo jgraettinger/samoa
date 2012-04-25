@@ -40,6 +40,7 @@ table::table(const spb::ClusterState::Table & ptable,
    _consistency_horizon(ptable.consistency_horizon())
 {
     std::vector<uint64_t> ring_positions;
+    std::vector<unsigned> local_indices;
 
     // gather partition positions for ring participants
     auto it = std::begin(ptable.partition());
@@ -50,7 +51,12 @@ table::table(const spb::ClusterState::Table & ptable,
 
         if(!it->dropped())
         {
-        	ring_positions.push_back(it->ring_position());
+            // is a local partition?
+            if(core::parse_uuid(it->server_uuid()) == _server_uuid)
+            {
+                local_indices.push_back(ring_positions.size());
+            }
+            ring_positions.push_back(it->ring_position());
         }
     }
     _ring.reserve(ring_positions.size());
@@ -62,8 +68,10 @@ table::table(const spb::ClusterState::Table & ptable,
     typedef spb::ClusterState::Table::Partition proto_part_t;
 
     // walk partitions, building runtime instances
-    for(const proto_part_t & p_part : ptable.partition())
+    for(unsigned ind = 0; ind != (unsigned)ptable.partition_size(); ++ind)
     {
+        const proto_part_t & p_part = ptable.partition(ind);
+
         core::uuid p_uuid = core::parse_uuid(p_part.uuid());
         core::uuid p_server_uuid = core::parse_uuid(p_part.server_uuid());
 
@@ -82,25 +90,28 @@ table::table(const spb::ClusterState::Table & ptable,
             }
             else
             {
-            	return boost::make_shared<local_partition>(p_part,
-            	    range_begin, range_end);
+                return boost::make_shared<local_partition>(p_part,
+                range_begin, range_end);
             }
         };
 
         // remote_partition factory functor
         auto make_remote = [&]() -> partition::ptr_t
         {
-        	if(previous_partition)
+            bool is_tracked = is_neighbor(local_indices,
+                ring_positions.size(), ind, _replication_factor);
+
+            if(previous_partition)
             {
-            	return boost::make_shared<remote_partition>(p_part,
-            	    range_begin, range_end,
-            	        dynamic_cast<const remote_partition &>(
-            	            *previous_partition));
+                return boost::make_shared<remote_partition>(p_part,
+                    range_begin, range_end, is_tracked,
+                    dynamic_cast<const remote_partition &>(
+                        *previous_partition));
             }
             else
             {
-            	return boost::make_shared<remote_partition>(p_part,
-            	    range_begin, range_end);
+                return boost::make_shared<remote_partition>(p_part,
+                    range_begin, range_end, is_tracked);
             }
         };
 
@@ -108,9 +119,9 @@ table::table(const spb::ClusterState::Table & ptable,
         {
             // look for a previous runtime instance of the partition
             uuid_index_t::const_iterator p_it = \
-                current->_index.find(p_uuid);
+                current->_uuid_index.find(p_uuid);
 
-            if(p_it != current->_index.end())
+            if(p_it != current->_uuid_index.end())
                 previous_partition = p_it->second;
         }
 
@@ -130,7 +141,7 @@ table::table(const spb::ClusterState::Table & ptable,
             }
 
             // include nullptr in uuid index, to enforce uniqueness
-            SAMOA_ASSERT(_index.insert(
+            SAMOA_ASSERT(_uuid_index.insert(
                 std::make_pair(p_uuid, partition)).second);
             continue;
         }
@@ -147,7 +158,7 @@ table::table(const spb::ClusterState::Table & ptable,
             make_local() : make_remote();
 
         // index partition on uuid, checking for duplicates
-        SAMOA_ASSERT(_index.insert(
+        SAMOA_ASSERT(_uuid_index.insert(
             std::make_pair(p_uuid, partition)).second);
 
         _ring.push_back(partition);
@@ -201,8 +212,8 @@ partition::ptr_t table::get_partition(const core::uuid & uuid) const
 {
     partition::ptr_t result;
 
-    uuid_index_t::const_iterator it = _index.find(uuid);
-    if(it != _index.end() && it->second)
+    uuid_index_t::const_iterator it = _uuid_index.find(uuid);
+    if(it != _uuid_index.end() && it->second)
     {
         // nullptr is used to mark dropped partitions
         result = it->second;
@@ -223,14 +234,14 @@ uint64_t table::ring_position(const std::string & key) const
 
 void table::initialize(const context::ptr_t & context)
 {
-    for(auto it = _index.begin(); it != _index.end(); ++it)
+    for(auto & entry : _uuid_index)
     {
-    	if(!it->second)
+        if(!entry.second)
         {
             // dropped partitions are nullptr to enforce uniqueness
-        	continue;
+            continue;
         }
-        it->second->initialize(context, shared_from_this());
+        entry.second->initialize(context, shared_from_this());
     }
 }
 
@@ -303,7 +314,7 @@ bool table::merge_table(
 
                 // build a temporary remote_partition instance to build
                 //  our local view of the partition
-                remote_partition(*new_part, 0, 0
+                remote_partition(*new_part, 0, 0, false
                     ).merge_partition(*p_it, *new_part);
             }
 
@@ -346,9 +357,9 @@ bool table::merge_table(
                 // local & peer partitions are both live; pass down to
                 //   partition instance to continue merging
                 uuid_index_t::const_iterator uuid_it = \
-                    _index.find(core::parse_uuid(l_it->uuid()));
+                    _uuid_index.find(core::parse_uuid(l_it->uuid()));
 
-                SAMOA_ASSERT(uuid_it != _index.end());
+                SAMOA_ASSERT(uuid_it != _uuid_index.end());
 
                 dirty = uuid_it->second->merge_partition(*p_it, *l_it) || dirty;
             }
@@ -356,6 +367,49 @@ bool table::merge_table(
         }
     }
     return dirty;
+}
+
+bool table::is_neighbor(
+    const std::vector<unsigned> & local_indices,
+    unsigned ring_size, unsigned index,
+    unsigned replication_factor)
+{
+    if(local_indices.empty())
+    {
+        return false;
+    }
+
+    // find partition's position amound indicies of local_partitions
+    auto local_it = std::lower_bound(std::begin(local_indices),
+            std::end(local_indices), index);
+
+    // compute number of partitions between this remote,
+    //   and the next local_partition on the ring
+    unsigned forward;
+    if(local_it != std::end(local_indices))
+    {
+        forward = *local_it - index;
+    }
+    else
+    {
+        // computed as distance-to-end plus distance-from-start
+        forward = (ring_size - index) + local_indices.front();
+    }
+
+    // compute number of partitions between this remote,
+    //   and the previous local_partition on the ring
+    unsigned backward;
+    if(local_it != std::begin(local_indices))
+    {
+        backward = index - *(local_it - 1);
+    }
+    else
+    {
+        // compute as distance-to-start plus distance-from-end
+        backward = index + (ring_size - local_indices.back());
+    }
+
+    return forward < replication_factor || backward < replication_factor;
 }
 
 }

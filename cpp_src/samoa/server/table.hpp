@@ -56,7 +56,7 @@ public:
     partition_ptr_t get_partition(const core::uuid &) const;
 
     const uuid_index_t & get_uuid_index() const
-    { return _index; }
+    { return _uuid_index; }
 
     const datamodel::merge_func_t & get_consistent_merge() const;
 
@@ -74,6 +74,19 @@ public:
     bool merge_table(const spb::ClusterState::Table & peer_table,
         spb::ClusterState::Table & local_table) const;
 
+    /*!
+     *  Given a sorted list of local_parition indicies within
+     *  a table ring and a table replication factor, determines
+     *  whether the remote_partition at the given index within the
+     *  table ring is a 'neighbor' of a local_partition. Eg, the
+     *  remote_partition shares a partially overlapping range of
+     *  responsiblity with at least one local_partition.
+     */
+    static bool is_neighbor(
+        const std::vector<unsigned> & local_partition_indices,
+        unsigned ring_size, unsigned ring_index,
+        unsigned replication_factor);
+
 private:
 
     core::uuid _uuid;
@@ -84,7 +97,7 @@ private:
     unsigned _consistency_horizon;
 
     ring_t        _ring;
-    uuid_index_t  _index;
+    uuid_index_t  _uuid_index;
 
     datamodel::merge_func_t _consistent_merge;
     datamodel::prune_func_t _consistent_prune;

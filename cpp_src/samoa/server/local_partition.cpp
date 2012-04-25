@@ -27,7 +27,7 @@ local_partition::local_partition(
     const spb::ClusterState::Table::Partition & part,
     uint64_t range_begin, uint64_t range_end)
  :
-    partition(part, range_begin, range_end),
+    partition(part, range_begin, range_end, true),
     _persister(boost::make_shared<persistence::persister>()),
     _persister_strand(
         boost::make_shared<boost::asio::strand>(
@@ -62,7 +62,7 @@ local_partition::local_partition(
     uint64_t range_begin, uint64_t range_end,
     const local_partition & current)
  :
-    partition(part, range_begin, range_end),
+    partition(part, range_begin, range_end, true),
     _persister(current._persister),
     _persister_strand(current._persister_strand),
     _author_id(

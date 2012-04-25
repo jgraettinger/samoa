@@ -8,17 +8,21 @@ namespace server {
 
 remote_partition::remote_partition(
     const spb::ClusterState::Table::Partition & part,
-    uint64_t range_begin, uint64_t range_end)
- :  partition(part, range_begin, range_end)
-{ }
+    uint64_t range_begin, uint64_t range_end, bool is_tracked)
+ :  partition(part, range_begin, range_end, is_tracked)
+{
+}
 
 remote_partition::remote_partition(
     const spb::ClusterState::Table::Partition & part,
-    uint64_t range_begin, uint64_t range_end,
+    uint64_t range_begin, uint64_t range_end, bool is_tracked,
     const remote_partition & current)
- :  partition(part, range_begin, range_end)
+ :  partition(part, range_begin, range_end, is_tracked)
 {
-    set_digest(current.get_digest());
+    if(this->is_tracked())
+    {
+        set_digest(current.get_digest());
+    }
 }
 
 bool remote_partition::merge_partition(
@@ -37,8 +41,11 @@ bool remote_partition::merge_partition(
 void remote_partition::initialize(
     const context_ptr_t & context, const table_ptr_t &)
 { 
-    set_digest(boost::make_shared<remote_digest>(
-        context->get_server_uuid(), get_uuid()));
+    if(is_tracked())
+    {
+        set_digest(boost::make_shared<remote_digest>(
+            context->get_server_uuid(), get_uuid()));
+    }
 }
 
 }
