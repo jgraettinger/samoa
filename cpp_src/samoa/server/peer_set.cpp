@@ -145,7 +145,8 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
             if(required_peers.find(core::parse_uuid(
                 p_it->uuid())) != required_peers.end())
             {
-                LOG_INFO("discovered indirect peer " << p_it->uuid());
+                LOG_INFO("discovered indirect peer " << \
+                    log::ascii_escape(p_it->uuid()));
 
                 spb::ClusterState::Peer * new_peer = add_record();
 
@@ -163,7 +164,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
             if(required_peers.find(core::parse_uuid(
                 l_it->uuid())) == required_peers.end())
             {
-                LOG_INFO("dropped peer " << l_it->uuid());
+                LOG_INFO("dropped peer " << log::ascii_escape(l_it->uuid()));
                 remove_record();
             }
             else
@@ -176,7 +177,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
                 required_peers.find(core::parse_uuid(
                     l_it->uuid())) == required_peers.end())
             {
-                LOG_INFO("dropped peer " << l_it->uuid());
+                LOG_INFO("dropped peer " << log::ascii_escape(l_it->uuid()));
                 remove_record();
             }
             else
@@ -190,7 +191,7 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
         if(required_peers.find(core::parse_uuid(
             l_it->uuid())) == required_peers.end())
         {
-            LOG_INFO("dropped peer " << l_it->uuid());
+            LOG_INFO("dropped peer " << log::ascii_escape(l_it->uuid()));
             remove_record();
         }
         else
@@ -219,7 +220,8 @@ void peer_set::merge_peer_set(const spb::ClusterState & peer,
             new_peer->set_hostname(peer.local_hostname());
             new_peer->set_port(peer.local_port());
 
-            LOG_INFO("discovered direct peer " << peer.local_uuid());
+            LOG_INFO("discovered direct peer " << \
+                log::ascii_escape(peer.local_uuid()));
         }
     }
 }

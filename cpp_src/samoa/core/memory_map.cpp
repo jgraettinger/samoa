@@ -62,11 +62,6 @@ void memory_map::close()
 
 void memory_map::init()
 {
-    // obtain a (co-operative) lock on the file
-    _lock.reset(new bip::file_lock(_path.c_str()));
-    if(!_lock->try_lock())
-        throw std::runtime_error(_path.string() + " is locked");
-
     // open the file in read/write mode, for mapping
     _mapping.reset(new bip::file_mapping(_path.c_str(), bip::read_write));
 

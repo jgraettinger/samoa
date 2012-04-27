@@ -31,7 +31,7 @@ class CreateTableHandler(CommandHandler):
         table.set_consistency_horizon(tbl_req.consistency_horizon)
         table.set_lamport_ts(1)
 
-        self.log.info('created table %s' % table.uuid)
+        self.log.info('created table %s' % UUID(table.uuid))
 
         # update response with new UUID, & return
         rstate.get_samoa_response().set_table_uuid(table.uuid)

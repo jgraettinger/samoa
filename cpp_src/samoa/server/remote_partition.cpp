@@ -41,7 +41,7 @@ bool remote_partition::merge_partition(
 void remote_partition::initialize(
     const context_ptr_t & context, const table_ptr_t &)
 { 
-    if(is_tracked())
+    if(!get_digest() && is_tracked())
     {
         set_digest(boost::make_shared<remote_digest>(
             context->get_server_uuid(), get_uuid()));

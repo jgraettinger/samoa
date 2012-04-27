@@ -20,7 +20,7 @@ remote_digest::remote_digest(
     {
         if(bfs::exists(_properties_path))
         {
-        	// read existing properties
+            // read existing properties
             std::ifstream fs(_properties_path.string());
             SAMOA_ASSERT(_properties.ParseFromIstream(&fs));
 
@@ -31,7 +31,7 @@ remote_digest::remote_digest(
             _properties.set_filter_path(
                 generate_filter_path(partition_uuid).string());
 
-        	// write new, generated properties
+            // write new, generated properties
             std::ofstream fs(_properties_path.string());
             SAMOA_ASSERT(_properties.SerializeToOstream(&fs));
 
@@ -61,7 +61,7 @@ remote_digest::remote_digest(
     uint64_t total_size = 0;
     for(const core::buffer_region & region : buffers)
     {
-    	total_size += region.size();
+        total_size += region.size();
     }
 
     _memory_map.reset(new core::memory_map(
@@ -72,7 +72,7 @@ remote_digest::remote_digest(
 
     for(const core::buffer_region & region : buffers)
     {
-    	it_out = std::copy(region.begin(), region.end(), it_out);
+        it_out = std::copy(region.begin(), region.end(), it_out);
     }
 
     // write new properties to disk
@@ -82,15 +82,15 @@ remote_digest::remote_digest(
 
 remote_digest::~remote_digest()
 {
-	if(_marked_for_deletion)
+    if(_marked_for_deletion)
     {
-    	// delete filter backing this digest
+        // delete filter backing this digest
         _memory_map->close();
         SAMOA_ASSERT(boost::filesystem::remove(_properties.filter_path()));
     }
     else
     {
-    	// sync current properties to disk
+        // sync current properties to disk
         std::ofstream fs(_properties_path.string());
         SAMOA_ABORT_UNLESS(_properties.SerializeToOstream(&fs));
     }

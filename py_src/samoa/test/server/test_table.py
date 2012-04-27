@@ -216,7 +216,7 @@ class TestTable(unittest.TestCase):
         #  'ring' order of (ring_position, uuid) ascending
         for pb_part, part in zip(self.state.partition, table.get_ring()):
             self.assertEquals(pb_part.ring_position, part.get_ring_position())
-            self.assertEquals(pb_part.uuid, part.get_uuid().to_hex())
+            self.assertEquals(UUID(pb_part.uuid), part.get_uuid())
 
             key = (pb_part.ring_position, pb_part.uuid)
             self.assertTrue(last_key is None or last_key < key)

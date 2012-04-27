@@ -125,13 +125,15 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
 
             if(p_it->dropped())
             {
-                LOG_INFO("discovered (dropped) table " << p_it->uuid());
+                LOG_INFO("discovered (dropped) table " << \
+                    log::ascii_escape(p_it->uuid()));
                 new_ptable->set_dropped(true);
                 new_ptable->set_dropped_timestamp(time(0));
             }
             else
             {
-                LOG_INFO("discovered table " << p_it->uuid());
+                LOG_INFO("discovered table " << \
+                    log::ascii_escape(p_it->uuid()));
 
                 // set ctor-required fields of the new table
                 new_ptable->set_data_type(p_it->data_type());
@@ -172,7 +174,9 @@ bool table_set::merge_table_set(const spb::ClusterState & peer,
             else if(p_it->dropped())
             {
                 // locally-live table is remotely dropped
-                LOG_INFO("discovered table " + p_it->uuid() + " was dropped");
+                LOG_INFO("discovered table " + \
+                    log::ascii_escape(p_it->uuid()) + " was dropped");
+
                 l_it->Clear();
                 l_it->set_uuid(p_it->uuid());
                 l_it->set_dropped(true);

@@ -1,7 +1,6 @@
 
 
 #include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/filesystem/path.hpp>
 #include <memory>
@@ -17,7 +16,6 @@ class memory_map
 public:
 
     typedef std::unique_ptr<bip::file_mapping> file_mapping_ptr_t;
-    typedef std::unique_ptr<bip::file_lock> file_lock_ptr_t;
     typedef std::unique_ptr<bip::mapped_region> mapped_region_ptr_t;
 
     memory_map(const boost::filesystem::path & path, uint64_t region_size);
@@ -50,7 +48,6 @@ private:
     boost::filesystem::path _path;
     uint64_t _region_size;
 
-    file_lock_ptr_t _lock;
     file_mapping_ptr_t _mapping;
     mapped_region_ptr_t _region;
 };

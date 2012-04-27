@@ -39,11 +39,10 @@ class CreatePartitionHandler(CommandHandler):
             ring_layer.CopyFrom(req_rlayer)
 
         self.log.info('created partition %s (table %s)' % (
-            part.uuid, table_uuid))
+            UUID(part.uuid), UUID(table_uuid)))
 
         # update repsonse with new UUID, & return
-        part_resp = rstate.get_samoa_response().set_partition_uuid(
-            UUID(part.uuid).to_hex())
+        part_resp = rstate.get_samoa_response().set_partition_uuid(part.uuid)
         return True
 
     def handle(self, rstate):

@@ -31,10 +31,10 @@ public:
     size_t size() const
     { return _size; }
     
-    static ptr_t aquire_ref_buffer(size_t size)
+    static ptr_t aquire_ref_buffer()
     {
-        void * buf = new char[sizeof(ref_buffer) + size];
-        return ptr_t(new (buf) ref_buffer(size));
+        void * buf = new char[sizeof(ref_buffer) + allocation_size];
+        return ptr_t(new (buf) ref_buffer(allocation_size));
     }
     
 private:

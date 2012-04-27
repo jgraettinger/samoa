@@ -304,13 +304,15 @@ bool table::merge_table(
 
             if(p_it->dropped())
             {
-                LOG_INFO("discovered (dropped) partition " << p_it->uuid());
+                LOG_INFO("discovered (dropped) partition " << \
+                    log::ascii_escape(p_it->uuid()));
                 new_part->set_dropped(true);
                 new_part->set_dropped_timestamp(time(0));
             }
             else
             {
-                LOG_INFO("discovered partition " << p_it->uuid());
+                LOG_INFO("discovered partition " << 
+                    log::ascii_escape(p_it->uuid()));
 
                 // build a temporary remote_partition instance to build
                 //  our local view of the partition
@@ -347,7 +349,9 @@ bool table::merge_table(
             else if(p_it->dropped())
             {
                 // locally-live partition is remotely dropped
-                LOG_INFO("partition " << p_it->uuid() << " was dropped");
+                LOG_INFO("partition " << log::ascii_escape(p_it->uuid()) \
+                    << " was dropped");
+
                 l_it->set_dropped(true);
                 l_it->set_dropped_timestamp(time(0));
                 dirty = true;

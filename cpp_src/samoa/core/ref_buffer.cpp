@@ -3,7 +3,7 @@
 namespace samoa {
 namespace core {
 
-const unsigned ref_buffer::allocation_size = 2;
+const unsigned ref_buffer::allocation_size = 4096;
 
 }
 }

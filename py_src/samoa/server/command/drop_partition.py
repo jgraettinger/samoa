@@ -46,7 +46,7 @@ class DropPartitionHandler(CommandHandler):
         pb_part.set_dropped_timestamp(int(time.time()))
 
         self.log.info('dropped partition %s (table %s)' % (
-            part_uuid, table_uuid))
+            UUID(part_uuid), UUID(table_uuid)))
         return True
 
     def handle(self, rstate):

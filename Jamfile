@@ -5,10 +5,12 @@ path-constant BUILD : build ;
 project root
     : requirements 
         <threading>multi
-        <cxxflags>-std=c++0x
+        <warnings-as-errors>on
         <cxxflags>-Wall
         <cxxflags>-Wextra
-        <cxxflags>-Werror
+        <cxxflags>-std=c++0x
+        <debug-symbols>on
+        #<runtime-debugging>on
         #<cxxflags>-Weffc++
         #<define>BOOST_ASIO_ENABLE_HANDLER_TRACKING
     : default-build debug 

@@ -13,8 +13,8 @@ from samoa.test.peered_cluster import PeeredCluster
 
 class TestBasicLoad(unittest.TestCase):
 
-    server_count = 1
-    partition_count = 1
+    server_count = 10
+    partition_count = 10
     replication_factor = 3 
 
     value_average_size = 1024
@@ -107,21 +107,14 @@ class TestBasicLoad(unittest.TestCase):
 
             yield proactor.wait_until_idle()
 
-            for server_name in self.server_names:
-                print self.cluster.contexts[server_name].get_cluster_state(
-                    ).get_protobuf_description()
+            conns = []
+            for srv_name in self.server_names:
+                conns.append((yield self.cluster.get_connection(srv_name)))
 
-            for i in xrange(1000):
-                connection = yield self.cluster.get_connection(
-                    self.rnd.choice(self.server_names))
-                del connection
-
-            """
             # run load
-            for i in xrange(1000):
+            for i in xrange(100000):
 
-                request = yield self.cluster.schedule_request(
-                    self.rnd.choice(self.server_names))
+                request = yield self.rnd.choice(conns).schedule_request()
 
                 msg = request.get_message()
                 msg.set_type(CommandType.SET_BLOB)
@@ -134,10 +127,7 @@ class TestBasicLoad(unittest.TestCase):
                 self.assertFalse(response.get_error_code())
                 response.finish_response()
 
-                del response
-                del request
-                print i
-
+            """
             # validate
             for i in xrange(1000):
 

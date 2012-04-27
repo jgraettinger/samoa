@@ -71,8 +71,7 @@ public:
     {
         while(_w_avail < write_size)
         {
-            _buffers.push_back( ref_buffer::aquire_ref_buffer(2));
-            //_buffers.push_back( ref_buffer::aquire_ref_buffer(4064));
+            _buffers.push_back(ref_buffer::aquire_ref_buffer());
             _w_avail += _buffers.back()->size();
         }
         return;

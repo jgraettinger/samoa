@@ -10,7 +10,7 @@ def add_peer(state, uuid):
     assert isinstance(state, ClusterState)
 
     peer = state.add_peer()
-    peer.set_uuid(uuid.to_hex())
+    peer.set_uuid(uuid.to_bytes())
 
     # re-establish sorted invariant by bubbling into place
     keys = [t.uuid for t in state.peer]
@@ -25,7 +25,7 @@ def add_table(state, uuid):
     assert isinstance(state, ClusterState)
 
     tbl = state.add_table()
-    tbl.set_uuid(uuid.to_hex())
+    tbl.set_uuid(uuid.to_bytes())
 
     # re-establish sorted invariant by bubbling into place
     keys = [t.uuid for t in state.table]
@@ -40,7 +40,7 @@ def add_partition(state, uuid, ring_position):
     assert isinstance(state, ClusterState_Table)
 
     part = state.add_partition()
-    part.set_uuid(uuid.to_hex())
+    part.set_uuid(uuid.to_bytes())
     part.set_ring_position(ring_position)
     
     # re-establish sorted invariant by bubbling into place

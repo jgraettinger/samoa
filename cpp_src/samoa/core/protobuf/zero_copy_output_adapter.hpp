@@ -9,9 +9,6 @@ namespace samoa {
 namespace core {
 namespace protobuf {
 
-// TODO find a common location for this
-#define ALLOC_BUF_SIZE 10
-
 class zero_copy_output_adapter :
     public google::protobuf::io::ZeroCopyOutputStream
 {
@@ -29,7 +26,7 @@ public:
             _buf_regions.push_back(buffer_region(
                 _active_buf, 0, _active_buf->size()));
         }
-        _active_buf = ref_buffer::aquire_ref_buffer(ALLOC_BUF_SIZE);
+        _active_buf = ref_buffer::aquire_ref_buffer();
         _count += _active_buf->size();
 
         // return to protobuf
