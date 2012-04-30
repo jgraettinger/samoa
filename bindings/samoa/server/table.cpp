@@ -65,6 +65,7 @@ void make_table_bindings()
         .def("get_partition", &table::get_partition)
         .def("get_uuid_index", &py_get_uuid_index)
         .def("ring_position", &table::ring_position)
+        .staticmethod("ring_position")
         .def("merge_table", &table::merge_table)
         .def("is_neighbor", &py_is_neighbor)
         .staticmethod("is_neighbor");

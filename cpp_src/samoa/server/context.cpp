@@ -3,6 +3,7 @@
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/server/listener.hpp"
 #include "samoa/server/client.hpp"
+#include "samoa/server/cron.hpp"
 #include "samoa/core/proactor.hpp"
 #include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
@@ -13,11 +14,12 @@ namespace samoa {
 namespace server {
 
 context::context(const spb::ClusterState & state)
- : _uuid(core::parse_uuid(state.local_uuid())),
-   _hostname(state.local_hostname()),
-   _port(state.local_port()),
-   _proactor(core::proactor::get_proactor()),
-   _cluster_transaction_srv(_proactor->serial_io_service())
+ :  _uuid(core::parse_uuid(state.local_uuid())),
+    _hostname(state.local_hostname()),
+    _port(state.local_port()),
+    _proactor(core::proactor::get_proactor()),
+    _cluster_transaction_srv(_proactor->serial_io_service()),
+    _cron(boost::make_shared<cron>())
 {
     SAMOA_ASSERT(state.IsInitialized());
 
@@ -45,6 +47,7 @@ cluster_state_ptr_t context::get_cluster_state() const
 void context::initialize()
 {
     _cluster_state->initialize(shared_from_this());
+    _cron->initialize();
 }
 
 void context::shutdown()
@@ -65,6 +68,7 @@ void context::shutdown()
         spinlock::guard guard(_client_lock);
         _clients.clear();
     }
+    _cron->shutdown();
 }
 
 void context::cluster_state_transaction(

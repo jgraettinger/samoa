@@ -227,7 +227,8 @@ const datamodel::merge_func_t & table::get_consistent_merge() const
 const datamodel::prune_func_t & table::get_consistent_prune() const
 { return _consistent_prune; }
 
-uint64_t table::ring_position(const std::string & key) const
+/* static */
+uint64_t table::ring_position(const std::string & key)
 {
     return boost::hash<std::string>()(key);
 }

@@ -635,6 +635,9 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
         rolling_hash::hash_ring::locator locator = \
             layer.locate_key(rstate->get_key());
 
+        core::murmur_checksum_t old_content_checksum = \
+            old_element.content_checksum();
+
         // drop and reclaim the old element
         uint32_t hash_chain_next = head->hash_chain_next();
         layer.drop_from_hash_chain(locator);
@@ -680,7 +683,7 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
                 spinlock::guard guard(_upkeep_lock);
                 if(_upkeep)
                 {
-                    _upkeep(rstate, old_element.content_checksum(),
+                    _upkeep(rstate, old_content_checksum,
                         new_element.content_checksum());
                 }
             }

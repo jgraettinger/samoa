@@ -356,6 +356,38 @@ class TestPersister(unittest.TestCase):
 
         Proactor.get_proactor().run(test())
 
+    def test_compaction_under_load(self):
+        # excercises compaction boundary conditions, such as writing
+        #  compacted elements on top of their previous location
+        def test():
+
+            seed = random.randint(0, 1<<32)
+            print "Using seed ", seed
+            fixture = ClusterStateFixture(seed)
+            rnd = fixture.rnd
+
+            persister = Persister()
+            persister.add_heap_hash_ring(1<<12, 10)
+            persister.add_heap_hash_ring(1<<12, 10)
+
+            def upkeep(rstate): pass
+            persister.set_upkeep_callback(upkeep)
+
+            for i in xrange(500):
+                record = PersistedRecord()
+                record.add_blob_value(fixture.generate_bytes())
+                try:
+                    yield persister.put(None, fixture.generate_bytes(), record)
+                except RuntimeError, e:
+                    continue
+
+            for i in xrange(500):
+                yield persister.bottom_up_compaction()
+
+            yield
+
+        Proactor.get_proactor().run(test())
+
     def test_synthetic_load(self):
 
         seed = random.randint(0, 1<<32)

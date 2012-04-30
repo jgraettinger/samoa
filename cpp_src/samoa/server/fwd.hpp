@@ -55,6 +55,9 @@ typedef boost::shared_ptr<peer_discovery> peer_discovery_ptr_t;
 class digest;
 typedef boost::shared_ptr<digest> digest_ptr_t;
 
+class cron;
+typedef boost::shared_ptr<cron> cron_ptr_t;
+
 }
 }
 

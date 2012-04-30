@@ -10,10 +10,10 @@ namespace request {
 
 struct partition_order_cmp
 {
-    bool operator()(const server::partition::ptr_t & lhs, unsigned rhs) const
+    bool operator()(const server::partition::ptr_t & lhs, uint64_t rhs) const
     { return lhs->get_ring_position() < rhs; }
 
-    bool operator()(unsigned lhs, const server::partition::ptr_t & rhs) const
+    bool operator()(uint64_t lhs, const server::partition::ptr_t & rhs) const
     { return lhs < rhs->get_ring_position(); }
 };
 
@@ -73,8 +73,7 @@ void route_state::load_route_state(const server::table::ptr_t & table)
         table->get_ring().begin(), table->get_ring().end(),
         _ring_position, partition_order_cmp());
 
-    // copy out current state, as we'll be augmenting
-    //  these if nothing's currently set 
+    // track whether uuid's are already set (else we'll overwrite below)
     bool has_primary_uuid = has_primary_partition_uuid();
     bool has_peer_uuids = has_peer_partition_uuids();
 

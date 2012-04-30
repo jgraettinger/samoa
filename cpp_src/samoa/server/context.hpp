@@ -37,6 +37,8 @@ public:
 
     cluster_state_ptr_t get_cluster_state() const;
 
+    cron_ptr_t get_cron() const;
+
 	void initialize();
 
     void shutdown();
@@ -110,6 +112,8 @@ private:
     spinlock _client_lock;
     typedef std::unordered_map<size_t, client_ptr_t> clients_t;
     clients_t _clients;
+
+    cron_ptr_t _cron;
 };
 
 }

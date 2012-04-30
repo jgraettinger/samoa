@@ -1,4 +1,5 @@
 
+import sys
 import unittest
 
 from samoa.core.uuid import UUID
@@ -7,6 +8,8 @@ from samoa.core.proactor import Proactor
 
 from samoa.datamodel.data_type import DataType
 from samoa.datamodel.clock_util import ClockUtil
+
+import samoa.persistence.rolling_hash.hash_ring
 
 from samoa.test.cluster_state_fixture import ClusterStateFixture
 from samoa.test.peered_cluster import PeeredCluster
@@ -31,7 +34,7 @@ class TestBasicLoad(unittest.TestCase):
 
     def setUp(self):
 
-        ClockUtil.clock_jitter_bound = 10 # seconds
+        ClockUtil.clock_jitter_bound = 5 # seconds
 
         cluster_state_fixture = ClusterStateFixture()
         self.rnd = cluster_state_fixture.rnd
@@ -55,7 +58,7 @@ class TestBasicLoad(unittest.TestCase):
         ct.set_name('test_table')
         ct.set_data_type(DataType.BLOB_TYPE.name)
         ct.set_replication_factor(self.replication_factor)
-        ct.set_consistency_horizon(10) # seconds
+        ct.set_consistency_horizon(5) # seconds
 
         response = yield request.flush_request()
         self.assertFalse(response.get_error_code())
@@ -101,7 +104,7 @@ class TestBasicLoad(unittest.TestCase):
                 for server_ind, server_name in enumerate(self.server_names):
                     ind = partition_ind * len(self.server_names) + server_ind
                     ring_position = ((1<<64) - 1) * ind / \
-                        (self.server_count * self.partition_count)
+                        (self.server_count * self.partition_count + 1)
 
                     yield self._create_partition(server_name, ring_position)
 
@@ -112,7 +115,7 @@ class TestBasicLoad(unittest.TestCase):
                 conns.append((yield self.cluster.get_connection(srv_name)))
 
             # run load
-            for i in xrange(100000):
+            for i in xrange(3000000):
 
                 request = yield self.rnd.choice(conns).schedule_request()
 
@@ -124,8 +127,37 @@ class TestBasicLoad(unittest.TestCase):
                 request.add_data_block(UUID.from_name(str(i+1)).to_hex())
 
                 response = yield request.flush_request()
-                self.assertFalse(response.get_error_code())
+                code = response.get_error_code()
+                #self.assertFalse(response.get_error_code())
                 response.finish_response()
+                if code:
+                    print "MADE IT TO ITERATION", i
+                    break
+
+            """
+            for srv_name in self.server_names:
+
+                print >> sys.stderr, srv_name
+
+                state = self.cluster.contexts[srv_name].get_cluster_state()
+                pb_state = state.get_protobuf_description()
+
+                for pb_table in pb_state.table:
+                    for pb_part in pb_table.partition:
+                        if pb_part.server_uuid != pb_state.local_uuid:
+                            continue
+
+                        persister = state.get_table_set(
+                            ).get_table(UUID(pb_table.uuid)
+                            ).get_partition(UUID(pb_part.uuid)
+                            ).get_persister()
+
+                        print >> sys.stderr, pb_part
+
+                        for layer in range(persister.layer_count()):
+                            print >> sys.stderr, persister.layer(layer)
+                            print >> sys.stderr
+            """
 
             """
             # validate
