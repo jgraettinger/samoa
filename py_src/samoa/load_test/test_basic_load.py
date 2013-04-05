@@ -88,7 +88,7 @@ class TestBasicLoad(unittest.TestCase):
         response.finish_response()
         yield
 
-    def test_basic_load(self):
+    def _test_basic_load(self):
 
         proactor = Proactor.get_proactor()
 

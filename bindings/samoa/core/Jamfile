@@ -7,7 +7,6 @@ python-extension _core :
     /pysamoa//libpysamoa
     /root//boost_system
     /root//boost_python
-    /root//boost_regex
 ;
 
 install dist : _core : <location>$(INSTALL)/samoa/core ;

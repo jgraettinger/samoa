@@ -37,9 +37,7 @@ using python ;
 # external libraries we'll need
 lib boost_system ;
 lib boost_python ;
-lib boost_regex ;
 lib boost_thread ;
-lib boost_random ;
 lib boost_filesystem ;
 lib protobuf ;
 

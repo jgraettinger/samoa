@@ -4,7 +4,6 @@ python-extension _server :
     /samoa//libsamoa
     /pysamoa//libpysamoa
     /root//boost_system
-    /root//boost_regex
     /root//boost_python
 ;
 
