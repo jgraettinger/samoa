@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/local_digest.hpp"
 #include "samoa/core/memory_map.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"

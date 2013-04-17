@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/persistence/rolling_hash/packet.hpp"
 #include "samoa/core/murmur_hash.hpp"
 

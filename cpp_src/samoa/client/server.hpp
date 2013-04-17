@@ -138,7 +138,7 @@ private:
 
 class server :
     public core::stream_protocol,
-    public boost::enable_shared_from_this<server>
+    public std::enable_shared_from_this<server>
 {
 public:
 

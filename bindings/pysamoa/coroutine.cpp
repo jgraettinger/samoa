@@ -1,4 +1,4 @@
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "coroutine.hpp"
 #include "future.hpp"
 #include "scoped_python.hpp"

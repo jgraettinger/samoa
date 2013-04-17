@@ -1,4 +1,4 @@
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "pysamoa/future.hpp"
 
 namespace samoa {

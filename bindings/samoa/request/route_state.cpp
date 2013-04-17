@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/request/route_state.hpp"
 #include "samoa/server/local_partition.hpp"
 #include "samoa/server/partition.hpp"

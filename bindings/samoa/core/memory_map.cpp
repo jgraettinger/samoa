@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/core/memory_map.hpp"
 
 namespace samoa {
@@ -9,7 +8,7 @@ namespace bpl = boost::python;
 
 std::string py_get_path(const memory_map & m)
 {
-	return m.get_path().string();
+    return m.get_path().string();
 }
 
 bpl::str py_raw_region_str(const memory_map & m)

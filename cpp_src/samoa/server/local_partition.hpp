@@ -9,8 +9,8 @@
 #include "samoa/datamodel/merge_func.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/fwd.hpp"
-#include <boost/shared_ptr.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -19,7 +19,7 @@ namespace spb = samoa::core::protobuf;
 
 class local_partition :
     public partition,
-    public boost::enable_shared_from_this<local_partition>
+    public std::enable_shared_from_this<local_partition>
 {
 public:
 

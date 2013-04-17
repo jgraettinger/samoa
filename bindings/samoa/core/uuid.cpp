@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
 #include <boost/uuid/uuid_io.hpp>

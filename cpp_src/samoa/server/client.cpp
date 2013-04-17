@@ -11,6 +11,7 @@
 #include "samoa/log.hpp"
 #include <boost/asio.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -109,7 +110,7 @@ void client::on_request_length(
     boost::system::error_code ec,
     core::buffer_regions_t read_body)
 {
-    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<client>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)
@@ -137,7 +138,7 @@ void client::on_request_body(
     boost::system::error_code ec,
     core::buffer_regions_t read_body)
 {
-    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<client>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)
@@ -147,7 +148,7 @@ void client::on_request_body(
         return;
     }
 
-    self->_next_rstate = boost::make_shared<request::state>();
+    self->_next_rstate = std::make_shared<request::state>();
     request::client_state & client_state = \
         self->_next_rstate->mutable_client_state();
 
@@ -179,7 +180,7 @@ void client::on_request_data_block(
     core::buffer_regions_t data,
     unsigned ind)
 {
-    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<client>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)
@@ -282,7 +283,7 @@ void client::on_response_finish(
     write_interface_t::ptr_t b_self,
     boost::system::error_code ec)
 {
-    ptr_t self = boost::dynamic_pointer_cast<client>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<client>(b_self);
     SAMOA_ASSERT(self);
 
     // this needs to be true, even if the socket's closed:

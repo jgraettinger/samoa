@@ -2,7 +2,7 @@
 #define SAMOA_REQUEST_RECORD_STATE_HPP
 
 #include "samoa/core/protobuf/samoa.pb.h"
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace samoa {
 namespace request {
@@ -13,7 +13,7 @@ class record_state
 {
 public:
 
-    typedef boost::shared_ptr<record_state> ptr_t;
+    typedef std::shared_ptr<record_state> ptr_t;
 
     record_state();
     virtual ~record_state();

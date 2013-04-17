@@ -14,7 +14,7 @@ namespace samoa {
 namespace client {
 
 class server_pool :
-    public boost::enable_shared_from_this<server_pool>
+    public std::enable_shared_from_this<server_pool>
 {
 public:
 

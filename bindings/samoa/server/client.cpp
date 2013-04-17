@@ -1,11 +1,11 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/client.hpp"
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/context.hpp"
 #include "pysamoa/future.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -33,7 +33,7 @@ void py_on_schedule_response(
 
 future::ptr_t py_schedule_response(client & c)
 {
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     c.schedule_response(
         std::bind(py_on_schedule_response, f,
             std::placeholders::_1, std::placeholders::_2));

@@ -18,6 +18,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <functional>
+#include <memory>
 #include <set>
 
 namespace samoa {
@@ -28,9 +29,9 @@ local_partition::local_partition(
     uint64_t range_begin, uint64_t range_end)
  :
     partition(part, range_begin, range_end, true),
-    _persister(boost::make_shared<persistence::persister>()),
+    _persister(std::make_shared<persistence::persister>()),
     _persister_strand(
-        boost::make_shared<boost::asio::strand>(
+        std::make_shared<boost::asio::strand>(
             *core::proactor::get_proactor()->concurrent_io_service())),
     _author_id(core::random::generate_uint64())
 {
@@ -53,7 +54,7 @@ local_partition::local_partition(
     }
 
     // begin a new digest; threshold is size of leaf persister layer
-    set_digest(boost::make_shared<local_digest>(get_uuid()));
+    set_digest(std::make_shared<local_digest>(get_uuid()));
     _digest_gossip_threshold = _persister->used_storage();
 }
 
@@ -105,7 +106,7 @@ void local_partition::initialize(
             table->get_consistent_prune());
 
         eventual_consistency::ptr_t tmp = 
-            boost::make_shared<eventual_consistency>(
+            std::make_shared<eventual_consistency>(
                 context, table->get_uuid(), self->get_uuid());
 
         self->_persister->set_upkeep_callback(
@@ -386,7 +387,7 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
         }
 
         local_partition::ptr_t self = \
-            boost::dynamic_pointer_cast<local_partition>(
+            std::dynamic_pointer_cast<local_partition>(
                 table->get_partition(partition_uuid));
 
         if(!self)
@@ -405,7 +406,7 @@ void local_partition::poll_digest_gossip(const context::ptr_t & context,
 
         // swap out the current digest for an empty one
         digest::ptr_t digest = self->get_digest();
-        self->set_digest(boost::make_shared<local_digest>(self->get_uuid()));
+        self->set_digest(std::make_shared<local_digest>(self->get_uuid()));
 
         // new threshold for the new digest; we'll want to gossip again when
         //  we've performed leaf compactions over all current records

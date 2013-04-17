@@ -3,15 +3,15 @@
 
 #include "samoa/core/fwd.hpp"
 #include "samoa/spinlock.hpp"
-#include <boost/shared_ptr.hpp>
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace samoa {
 namespace server {
 
 class cron :
-    public boost::enable_shared_from_this<cron>
+    public std::enable_shared_from_this<cron>
 {
 public:
 

@@ -621,7 +621,7 @@ uint32_t persister::leaf_compaction(const PreRotateLambda & pre_rotate_lambda)
     	rolling_hash::element old_element(&layer, head);
         pre_rotate_lambda(_layers.size() - 1);
 
-        request::state::ptr_t rstate = boost::make_shared<request::state>();
+        request::state::ptr_t rstate = std::make_shared<request::state>();
 
         // extract key & parse protobuf record
         rstate->set_key(std::string(

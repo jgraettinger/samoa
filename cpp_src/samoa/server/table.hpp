@@ -10,9 +10,9 @@
 #include "samoa/core/protobuf/samoa.pb.h"
 #include "samoa/core/uuid.hpp"
 #include <boost/unordered_map.hpp>
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <vector>
 #include <list>
+#include <memory>
+#include <vector>
 
 namespace samoa {
 namespace server {
@@ -20,7 +20,7 @@ namespace server {
 namespace spb = samoa::core::protobuf;
 
 class table :
-    public boost::enable_shared_from_this<table>
+    public std::enable_shared_from_this<table>
 {
 public:
 

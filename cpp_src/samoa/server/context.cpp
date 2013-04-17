@@ -8,7 +8,7 @@
 #include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -19,14 +19,14 @@ context::context(const spb::ClusterState & state)
     _port(state.local_port()),
     _proactor(core::proactor::get_proactor()),
     _cluster_transaction_srv(_proactor->serial_io_service()),
-    _cron(boost::make_shared<cron>())
+    _cron(std::make_shared<cron>())
 {
     SAMOA_ASSERT(state.IsInitialized());
 
     std::unique_ptr<spb::ClusterState> state_copy(
         new spb::ClusterState(state));
 
-    _cluster_state = boost::make_shared<cluster_state>(
+    _cluster_state = std::make_shared<cluster_state>(
         std::move(state_copy), cluster_state::ptr_t());
 
     LOG_DBG("context created");
@@ -91,7 +91,7 @@ void context::cluster_state_transaction(
 
         // build runtime instance; cluster_state (and descendant) ctors are
         //   responsible for checking invariants of the new description
-        cluster_state::ptr_t next_state = boost::make_shared<cluster_state>(
+        cluster_state::ptr_t next_state = std::make_shared<cluster_state>(
             std::move(next_pb_state), self->get_cluster_state());
 
         // TODO(johng) commit next_cluster_state to disk

@@ -8,6 +8,7 @@
 #include <boost/asio.hpp>
 #include <boost/lexical_cast.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -96,7 +97,7 @@ void listener::on_accept(const boost::system::error_code & ec)
         _next_sock->set_option(ip::tcp::no_delay(true));
 
         // Create a client to service the socket
-        client::ptr_t cl = boost::make_shared<client>(_context,
+        client::ptr_t cl = std::make_shared<client>(_context,
             _protocol, std::move(_next_sock), std::move(_next_io_srv));
         cl->initialize();
 

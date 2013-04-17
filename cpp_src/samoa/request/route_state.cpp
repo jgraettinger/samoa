@@ -87,7 +87,7 @@ void route_state::load_route_state(const server::table::ptr_t & table)
            (*it)->get_uuid() == get_primary_partition_uuid())
         {
             _primary_partition = \
-                boost::dynamic_pointer_cast<server::local_partition>(*it);
+                std::dynamic_pointer_cast<server::local_partition>(*it);
 
             if(!_primary_partition)
             {
@@ -102,7 +102,7 @@ void route_state::load_route_state(const server::table::ptr_t & table)
         {
             // pick the first local partition as primary
             _primary_partition = \
-                boost::dynamic_pointer_cast<server::local_partition>(*it);
+                std::dynamic_pointer_cast<server::local_partition>(*it);
 
             if(_primary_partition)
             {

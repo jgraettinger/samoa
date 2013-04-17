@@ -1,7 +1,7 @@
 #ifndef PYSAMOA_FUTURE_HPP
 #define PYSAMOA_FUTURE_HPP
 
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "pysamoa/fwd.hpp"
 #include <boost/system/error_code.hpp>
 
@@ -31,7 +31,7 @@ public:
     { return _called; }
 
     bool is_yielded() const
-    { return _coroutine; }
+    { return _coroutine.get() != nullptr; }
 
     // precondition: Python GIL is held
     void on_error(const boost::system::error_code &);

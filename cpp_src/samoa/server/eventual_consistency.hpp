@@ -7,19 +7,18 @@
 #include "samoa/core/uuid.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/datamodel/merge_func.hpp"
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
 #include <boost/system/error_code.hpp>
+#include <memory>
 
 namespace samoa {
 namespace server {
 
 class eventual_consistency :
-    public boost::enable_shared_from_this<eventual_consistency>
+    public std::enable_shared_from_this<eventual_consistency>
 {
 public:
 
-    typedef boost::shared_ptr<eventual_consistency> ptr_t;
+    typedef std::shared_ptr<eventual_consistency> ptr_t;
 
     eventual_consistency(
         const context_ptr_t &,

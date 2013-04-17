@@ -6,9 +6,7 @@
 #include "samoa/datamodel/merge_func.hpp"
 #include "samoa/request/fwd.hpp"
 #include "samoa/core/fwd.hpp"
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/system/error_code.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -18,11 +16,11 @@ namespace spb = samoa::core::protobuf;
 
 class replicate_handler :
     public command_handler,
-    public boost::enable_shared_from_this<replicate_handler>
+    public std::enable_shared_from_this<replicate_handler>
 {
 public:
 
-    typedef boost::shared_ptr<replicate_handler> ptr_t;
+    typedef std::shared_ptr<replicate_handler> ptr_t;
 
     replicate_handler()
     { }

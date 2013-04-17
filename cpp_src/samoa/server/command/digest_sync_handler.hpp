@@ -4,8 +4,7 @@
 #include "samoa/server/fwd.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/request/fwd.hpp"
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -13,11 +12,11 @@ namespace command {
 
 class digest_sync_handler :
     public command_handler,
-    public boost::enable_shared_from_this<digest_sync_handler>
+    public std::enable_shared_from_this<digest_sync_handler>
 {
 public:
 
-    typedef boost::shared_ptr<digest_sync_handler> ptr_t;
+    typedef std::shared_ptr<digest_sync_handler> ptr_t;
 
     void handle(const request::state_ptr_t &);
 };

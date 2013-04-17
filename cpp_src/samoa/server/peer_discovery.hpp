@@ -8,12 +8,13 @@
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
 
 class peer_discovery :
-    public boost::enable_shared_from_this<peer_discovery>
+    public std::enable_shared_from_this<peer_discovery>
 {
 public:
 

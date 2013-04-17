@@ -45,9 +45,9 @@ public:
         const uint8_t * data = reinterpret_cast<const uint8_t *>(data_in);
 
         _total_length += length;
-        while(length >= (16 - _block_pos))
+        while(length >= (16u - _block_pos))
         {
-            std::copy(data, data + (16 - _block_pos),
+            std::copy(data, data + (16u - _block_pos),
                 reinterpret_cast<uint8_t*>(&_block) + _block_pos);
 
             // See: MurmurHash3_x64_128
@@ -67,7 +67,7 @@ public:
             _block[0] = _block[1] = 0;
 
             data += (16 - _block_pos);
-            length -= (16 - _block_pos);
+            length -= (16u - _block_pos);
             _block_pos = 0;
         }
 

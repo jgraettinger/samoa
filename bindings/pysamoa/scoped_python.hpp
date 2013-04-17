@@ -3,8 +3,8 @@
 
 #include <Python.h>
 #include "samoa/error.hpp"
-#include <boost/python.hpp>
-#include <boost/thread.hpp>
+#include "pysamoa/boost_python.hpp"
+#include <boost/thread/tss.hpp>
 
 namespace pysamoa {
 

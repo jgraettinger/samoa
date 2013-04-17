@@ -2,16 +2,15 @@
 #define SAMOA_CORE_CONNECTION_FACTORY_HPP
 
 #include "samoa/core/proactor.hpp"
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace core {
 
 class connection_factory :
-    public boost::enable_shared_from_this<connection_factory>
+    public std::enable_shared_from_this<connection_factory>
 {
 public:
 
@@ -33,10 +32,9 @@ public:
 
 private:
 
-    typedef boost::shared_ptr<connection_factory> ptr_t;
+    typedef std::shared_ptr<connection_factory> ptr_t;
 
     void on_connect(boost::system::error_code);
-
     void on_timeout(boost::system::error_code);
 
     io_service_ptr_t _io_srv;

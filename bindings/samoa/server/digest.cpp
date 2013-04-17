@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/digest.hpp"
 #include "samoa/core/memory_map.hpp"
 
@@ -33,12 +32,12 @@ bool py_test(digest & d, const bpl::tuple & t)
 
 const core::memory_map * py_get_memory_map(digest & d)
 {
-	return d.get_memory_map().get();
+    return d.get_memory_map().get();
 }
 
 std::string py_get_directory()
 {
-	return digest::get_directory().string();
+    return digest::get_directory().string();
 }
 
 void py_set_directory(const std::string & directory)

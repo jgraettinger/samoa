@@ -9,6 +9,7 @@
 #include <boost/asio.hpp>
 #include <functional>
 #include <list>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -64,7 +65,7 @@ private:
 
 class client :
     public core::stream_protocol,
-    public boost::enable_shared_from_this<client>
+    public std::enable_shared_from_this<client>
 {
 public:
 

@@ -8,16 +8,14 @@
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/uuid.hpp"
 #include <boost/system/error_code.hpp>
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/smart_ptr/make_shared.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <functional>
 
 namespace samoa {
 namespace server {
 
 class replication
-    : public boost::enable_shared_from_this<replication>
+    : public std::enable_shared_from_this<replication>
 {
 public:
 
@@ -47,7 +45,7 @@ public:
 
 private:
 
-    typedef boost::shared_ptr<replication> ptr_t;
+    typedef std::shared_ptr<replication> ptr_t;
 
     static void on_request(
         ptr_t self,

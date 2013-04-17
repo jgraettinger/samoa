@@ -12,6 +12,7 @@
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -30,7 +31,7 @@ void replication::replicate(
     replication::peer_response_callback_t response_callback,
     request::state::ptr_t rstate)
 {
-    ptr_t self = boost::make_shared<replication>(
+    ptr_t self = std::make_shared<replication>(
         std::move(request_callback),
         std::move(response_callback),
         std::move(rstate));

@@ -1,10 +1,11 @@
 
+#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
+#include "samoa/core/uuid.hpp"
+#include "samoa/log.hpp"
 #include "samoa/request/client_state.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/request/state_exception.hpp"
 #include "samoa/server/client.hpp"
-#include "samoa/core/uuid.hpp"
-#include "samoa/core/protobuf/zero_copy_output_adapter.hpp"
 #include <functional>
 
 namespace samoa {

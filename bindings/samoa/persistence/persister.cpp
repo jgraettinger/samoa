@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/persistence/persister.hpp"
 #include "samoa/persistence/rolling_hash/element.hpp"
 #include "samoa/datamodel/merge_func.hpp"
@@ -7,6 +6,7 @@
 #include "samoa/core/protobuf/fwd.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/future.hpp"
+#include <memory>
 #include <stdexcept>
 
 namespace samoa {
@@ -15,21 +15,21 @@ namespace persistence {
 namespace bpl = boost::python;
 using namespace pysamoa;
 
-typedef boost::shared_ptr<std::string> str_ptr_t;
-typedef boost::shared_ptr<spb::PersistedRecord> prec_ptr_t;
+typedef std::shared_ptr<std::string> str_ptr_t;
+typedef std::shared_ptr<spb::PersistedRecord> prec_ptr_t;
 
 /////////// get support
 
 future::ptr_t py_get(persister & p, const bpl::str & py_key)
 {
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     f->set_reenter_via_post();
 
     const char * buf = PyString_AS_STRING(py_key.ptr());
-    str_ptr_t key = boost::make_shared<std::string>(
+    str_ptr_t key = std::make_shared<std::string>(
         buf, buf + PyString_GET_SIZE(py_key.ptr()));
 
-    prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
+    prec_ptr_t local_record = std::make_shared<spb::PersistedRecord>();
 
     auto on_get = [f, key, local_record](bool found)
     {
@@ -62,14 +62,14 @@ future::ptr_t py_drop(persister & p,
             "argument 'drop_callback' isn't a callable");
     }
 
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     f->set_reenter_via_post();
 
     const char * buf = PyString_AS_STRING(py_key.ptr());
-    str_ptr_t key = boost::make_shared<std::string>(
+    str_ptr_t key = std::make_shared<std::string>(
         buf, buf + PyString_GET_SIZE(py_key.ptr()));
 
-    prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
+    prec_ptr_t local_record = std::make_shared<spb::PersistedRecord>();
 
     auto on_drop = [f, key, local_record, drop_callback](bool found)
     {
@@ -104,7 +104,7 @@ future::ptr_t py_iteration_next(persister & p,
             "argument 'iteration_callback' isn't a callable");
     }
 
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     f->set_reenter_via_post();
 
     auto on_next = [f, iteration_callback](rolling_hash::element element)
@@ -142,14 +142,14 @@ future::ptr_t py_put(
             "argument 'merge_callback' must be None or a callable");
     }
 
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     f->set_reenter_via_post();
 
     const char * buf = PyString_AS_STRING(py_key.ptr());
-    str_ptr_t key = boost::make_shared<std::string>(
+    str_ptr_t key = std::make_shared<std::string>(
         buf, buf + PyString_GET_SIZE(py_key.ptr()));
 
-    prec_ptr_t local_record = boost::make_shared<spb::PersistedRecord>();
+    prec_ptr_t local_record = std::make_shared<spb::PersistedRecord>();
 
     auto on_put = [f, key, local_record, remote_record](
         const boost::system::error_code & ec,
@@ -201,7 +201,7 @@ future::ptr_t py_put(
 
 future::ptr_t py_bottom_up_compaction(persister & p)
 {
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     f->set_reenter_via_post();
 
     auto on_compaction = [f]()

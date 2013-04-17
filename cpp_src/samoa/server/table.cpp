@@ -1,18 +1,18 @@
 
-#include "samoa/server/table.hpp"
-#include "samoa/server/local_partition.hpp"
-#include "samoa/server/remote_partition.hpp"
-#include "samoa/server/partition.hpp"
-#include "samoa/server/context.hpp"
-#include "samoa/server/peer_set.hpp"
+#include "samoa/core/uuid.hpp"
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/datamodel/counter.hpp"
-#include "samoa/core/uuid.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
-#include <functional>
+#include "samoa/server/context.hpp"
+#include "samoa/server/local_partition.hpp"
+#include "samoa/server/partition.hpp"
+#include "samoa/server/peer_set.hpp"
+#include "samoa/server/remote_partition.hpp"
+#include "samoa/server/table.hpp"
 #include <ctime>
+#include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -83,14 +83,14 @@ table::table(const spb::ClusterState::Table & ptable,
         {
             if(previous_partition)
             {
-                return boost::make_shared<local_partition>(p_part,
+                return std::make_shared<local_partition>(p_part,
                     range_begin, range_end,
                         dynamic_cast<const local_partition &>(
                             *previous_partition));
             }
             else
             {
-                return boost::make_shared<local_partition>(p_part,
+                return std::make_shared<local_partition>(p_part,
                 range_begin, range_end);
             }
         };
@@ -103,14 +103,14 @@ table::table(const spb::ClusterState::Table & ptable,
 
             if(previous_partition)
             {
-                return boost::make_shared<remote_partition>(p_part,
+                return std::make_shared<remote_partition>(p_part,
                     range_begin, range_end, is_tracked,
                     dynamic_cast<const remote_partition &>(
                         *previous_partition));
             }
             else
             {
-                return boost::make_shared<remote_partition>(p_part,
+                return std::make_shared<remote_partition>(p_part,
                     range_begin, range_end, is_tracked);
             }
         };

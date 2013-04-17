@@ -9,6 +9,7 @@
 #include "samoa/server/remote_partition.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -45,7 +46,7 @@ void digest_sync_handler::handle(const request::state::ptr_t & rstate)
             "expected digest_properties");
     }
 
-    remote_digest::ptr_t digest = boost::make_shared<remote_digest>(
+    remote_digest::ptr_t digest = std::make_shared<remote_digest>(
         rstate->get_context()->get_server_uuid(),
         rstate->get_primary_partition_uuid(),
         rstate->get_samoa_request().digest_properties(),
@@ -70,7 +71,7 @@ void digest_sync_handler::handle(const request::state::ptr_t & rstate)
         }
 
         remote_partition::ptr_t partition = \
-            boost::dynamic_pointer_cast<remote_partition>(
+            std::dynamic_pointer_cast<remote_partition>(
                 table->get_partition(rstate->get_primary_partition_uuid()));
 
         if(!partition)

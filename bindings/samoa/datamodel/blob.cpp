@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/datamodel/blob.hpp"
 #include "samoa/error.hpp"
 

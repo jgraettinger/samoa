@@ -1,7 +1,7 @@
 #ifndef PYSAMOA_COROUTINE_HPP
 #define PYSAMOA_COROUTINE_HPP
 
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "pysamoa/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include <boost/noncopyable.hpp>
@@ -13,7 +13,7 @@ namespace pysamoa {
 namespace bpl = boost::python;
 
 class coroutine :
-    public boost::enable_shared_from_this<coroutine>,
+    public std::enable_shared_from_this<coroutine>,
     private boost::noncopyable
 {
 public:

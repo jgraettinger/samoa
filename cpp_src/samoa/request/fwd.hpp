@@ -1,7 +1,7 @@
 #ifndef SAMOA_REQUEST_FWD_HPP
 #define SAMOA_REQUEST_FWD_HPP
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace samoa {
 namespace request {
@@ -15,7 +15,7 @@ class record_state;
 class replication_state;
 
 class state;
-typedef boost::shared_ptr<state> state_ptr_t;
+typedef std::shared_ptr<state> state_ptr_t;
 
 }
 }

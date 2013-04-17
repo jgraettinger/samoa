@@ -11,6 +11,7 @@
 #include "samoa/spinlock.hpp"
 #include <boost/asio.hpp>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,7 @@ namespace persistence {
 namespace spb = samoa::core::protobuf;
 
 class persister :
-    public boost::enable_shared_from_this<persister>
+    public std::enable_shared_from_this<persister>
 {
 public:
 

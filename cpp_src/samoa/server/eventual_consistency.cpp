@@ -185,7 +185,7 @@ void eventual_consistency::on_move_response(
     }
 
     local_partition::ptr_t partition = \
-        boost::dynamic_pointer_cast<local_partition>(
+        std::dynamic_pointer_cast<local_partition>(
             rstate->get_table()->get_partition(_partition_uuid));
     SAMOA_ASSERT(partition);
 

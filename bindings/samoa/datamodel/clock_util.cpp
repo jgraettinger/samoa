@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/datamodel/clock_util.hpp"
 #include <boost/uuid/uuid_io.hpp>
 #include <sstream>

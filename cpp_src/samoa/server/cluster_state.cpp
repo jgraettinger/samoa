@@ -3,6 +3,7 @@
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/table_set.hpp"
 #include "samoa/server/context.hpp"
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -12,9 +13,9 @@ cluster_state::cluster_state(
     const ptr_t & current)
  :  _desc(std::move(desc))
 {
-    _peer_set = boost::make_shared<peer_set>(
+    _peer_set = std::make_shared<peer_set>(
         *_desc, current ? current->_peer_set : peer_set::ptr_t());
-    _table_set = boost::make_shared<table_set>(
+    _table_set = std::make_shared<table_set>(
         *_desc, current ? current->_table_set : table_set::ptr_t());
 }
 

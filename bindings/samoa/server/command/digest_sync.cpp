@@ -1,4 +1,4 @@
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/command/digest_sync_handler.hpp"
 
 namespace samoa {

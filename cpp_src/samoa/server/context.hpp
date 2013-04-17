@@ -7,8 +7,9 @@
 #include "samoa/core/uuid.hpp"
 #include "samoa/spinlock.hpp"
 #include <functional>
-#include <unordered_map>
+#include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace samoa {
 namespace server {
@@ -16,7 +17,7 @@ namespace server {
 namespace spb = samoa::core::protobuf;
 
 class context :
-    public boost::enable_shared_from_this<context>
+    public std::enable_shared_from_this<context>
 {
 public:
 

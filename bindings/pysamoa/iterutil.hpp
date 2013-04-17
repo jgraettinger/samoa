@@ -1,7 +1,7 @@
 #ifndef PYSAMOA_ITERUTIL_HPP
 #define PYSAMOA_ITERUTIL_HPP
 
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 
 namespace pysamoa {
 

@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/protocol.hpp"
 #include "samoa/server/command_handler.hpp"
 

@@ -43,7 +43,7 @@ void remote_partition::initialize(
 { 
     if(!get_digest() && is_tracked())
     {
-        set_digest(boost::make_shared<remote_digest>(
+        set_digest(std::make_shared<remote_digest>(
             context->get_server_uuid(), get_uuid()));
     }
 }

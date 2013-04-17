@@ -11,9 +11,7 @@
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/uuid.hpp"
-#include <boost/system/error_code.hpp>
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <vector>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -23,11 +21,11 @@ namespace spb = samoa::core::protobuf;
 
 class update_counter_handler :
     public command_handler,
-    public boost::enable_shared_from_this<update_counter_handler>
+    public std::enable_shared_from_this<update_counter_handler>
 {
 public:
 
-    typedef boost::shared_ptr<update_counter_handler> ptr_t;
+    typedef std::shared_ptr<update_counter_handler> ptr_t;
 
     update_counter_handler()
     { }

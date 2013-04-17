@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/request/table_state.hpp"
 #include "samoa/server/table.hpp"
 

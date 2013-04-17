@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/persistence/rolling_hash/element.hpp"
 #include "samoa/persistence/rolling_hash/key_gather_iterator.hpp"
 #include "samoa/persistence/rolling_hash/value_gather_iterator.hpp"
@@ -7,6 +6,7 @@
 #include "samoa/persistence/rolling_hash/value_zci_adapter.hpp"
 #include "samoa/core/protobuf/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
+#include <memory>
 
 namespace samoa {
 namespace persistence {
@@ -47,7 +47,7 @@ std::string py_value(element & elem)
 
 bool py_parse_persisted_record(
     element & elem,
-    const boost::shared_ptr<spb::PersistedRecord> & record)
+    const std::shared_ptr<spb::PersistedRecord> & record)
 {
     //LOG_INFO("parsing element " << elem.head());
 
@@ -57,7 +57,7 @@ bool py_parse_persisted_record(
 
 bool py_write_persisted_record(
     element & elem,
-    const boost::shared_ptr<spb::PersistedRecord> & record)
+    const std::shared_ptr<spb::PersistedRecord> & record)
 {
     rolling_hash::value_zco_adapter zco_adapter(elem);
     bool result = record->SerializeToZeroCopyStream(&zco_adapter);

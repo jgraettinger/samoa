@@ -10,6 +10,7 @@
 #include <boost/unordered_set.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -60,7 +61,7 @@ void peer_set::initialize(const context::ptr_t & context)
         if(entry.second)
             continue;
 
-        entry.second = boost::make_shared<peer_discovery>(
+        entry.second = std::make_shared<peer_discovery>(
             context, entry.first);
 
         if(!_discovery_enabled)

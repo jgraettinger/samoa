@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/client/server_pool.hpp"
@@ -71,7 +70,7 @@ future::ptr_t py_cluster_state_transaction(
             "argument must be a callable");
     }
 
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
 
     c.cluster_state_transaction(
         std::bind(&py_on_cluster_state_transaction,

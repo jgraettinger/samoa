@@ -1,44 +1,28 @@
 #ifndef SAMOA_SPINLOCK_HPP
 #define SAMOA_SPINLOCK_HPP
 
-#include "samoa/error.hpp"
-#include "samoa/log.hpp"
-#include <pthread.h>
+#include <atomic>
 
 namespace samoa {
 
-// Lite RAII wrapper around pthread's spinlock
+// Simple RAII spinlock wrapper around an atomic bool.
 class spinlock
 {
 public:
 
-    spinlock()
-    {
-        SAMOA_ASSERT_ERRNO(pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE));
-    }
-
-    ~spinlock()
-    {
-        if(pthread_spin_destroy(&_lock))
-        {
-            LOG_ERR("pthread_spin_destroy failed");
-        }
-    }
-
     void acquire()
     {
-        SAMOA_ASSERT_ERRNO(pthread_spin_lock(&_lock));
+		while(_lock.exchange(true)) { }
     }
 
     void release()
     {
-        SAMOA_ABORT_ERRNO(pthread_spin_unlock(&_lock));
+		_lock = false;
     }
 
     class guard
     {
     public:
-
         guard(spinlock & sl)
          : _sl(sl)
         {
@@ -51,15 +35,13 @@ public:
         }
 
     private:
-
-        spinlock & _sl;
+        spinlock& _sl;
     };
 
 private:
 
     friend class guard;
-
-    pthread_spinlock_t _lock;
+    std::atomic<bool> _lock = {false};
 };
 
 }

@@ -9,8 +9,7 @@
 #include "samoa/request/route_state.hpp"
 #include "samoa/request/record_state.hpp"
 #include "samoa/request/replication_state.hpp"
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace samoa {
 namespace request {
@@ -23,11 +22,11 @@ class state :
     private route_state,
     private record_state,
     private replication_state,
-    public boost::enable_shared_from_this<state>
+    public std::enable_shared_from_this<state>
 {
 public:
 
-    typedef boost::shared_ptr<state> ptr_t;
+    typedef std::shared_ptr<state> ptr_t;
 
     state();
     virtual ~state();

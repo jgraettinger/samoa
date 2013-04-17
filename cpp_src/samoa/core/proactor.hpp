@@ -6,12 +6,13 @@
 #include <boost/asio.hpp>
 #include <boost/thread/tss.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace core {
 
 class proactor :
-    public boost::enable_shared_from_this<proactor>
+    public std::enable_shared_from_this<proactor>
 {
 public:
 
@@ -106,7 +107,7 @@ private:
 
     proactor();
 
-    static boost::weak_ptr<proactor> _class_instance;
+    static std::weak_ptr<proactor> _class_instance;
     static spinlock _class_lock;
 
     std::vector<io_service_ptr_t> _serial_io_services;

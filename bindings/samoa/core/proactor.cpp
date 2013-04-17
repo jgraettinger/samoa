@@ -1,4 +1,4 @@
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/core/fwd.hpp"
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
@@ -18,7 +18,7 @@ using namespace std;
 
 void py_run_later(proactor & p, const bpl::object & gen, unsigned delay_ms)
 {
-    pysamoa::coroutine::ptr_t coro = boost::make_shared<pysamoa::coroutine>(
+    pysamoa::coroutine::ptr_t coro = std::make_shared<pysamoa::coroutine>(
         gen, p.serial_io_service());
 
     auto on_later = [coro]()
@@ -39,7 +39,7 @@ struct idle_timeout {
 
 pysamoa::future::ptr_t py_wait_until_idle(proactor & p)
 {
-    pysamoa::future::ptr_t f = boost::make_shared<pysamoa::future>();
+    pysamoa::future::ptr_t f = std::make_shared<pysamoa::future>();
 
     auto throw_closure = [f]()
     {
@@ -60,7 +60,7 @@ void py_run(proactor & p, bpl::object generator)
     if(generator)
     {
         pysamoa::future::ptr_t f = py_wait_until_idle(p);
-        f->set_yielding_coroutine(boost::make_shared<pysamoa::coroutine>(
+        f->set_yielding_coroutine(std::make_shared<pysamoa::coroutine>(
             generator, p.serial_io_service()));
     }
 

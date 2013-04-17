@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/server/context.hpp"
 #include "samoa/server/cluster_state.hpp"

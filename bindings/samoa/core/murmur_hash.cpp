@@ -1,4 +1,4 @@
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/core/murmur_hash.hpp"
 //#include "MurmurHash3.h"
 

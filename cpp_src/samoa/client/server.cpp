@@ -5,8 +5,8 @@
 #include "samoa/core/connection_factory.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace client {
@@ -160,7 +160,7 @@ void server::on_connect(
     }
     else
     { 
-        ptr_t self(boost::make_shared<server>(
+        ptr_t self(std::make_shared<server>(
             std::move(sock), std::move(io_srv)));
 
         // start initial response read
@@ -287,7 +287,7 @@ void server::on_request_finish(
     write_interface_t::ptr_t b_self,
     boost::system::error_code ec)
 {
-    ptr_t self = boost::dynamic_pointer_cast<server>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<server>(b_self);
     SAMOA_ASSERT(self);
 
     // this needs to be true, even if the socket's closed:
@@ -335,7 +335,7 @@ void server::on_response_length(
     boost::system::error_code ec,
     core::buffer_regions_t read_body)
 {
-    ptr_t self = boost::dynamic_pointer_cast<server>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<server>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)
@@ -363,7 +363,7 @@ void server::on_response_body(
     boost::system::error_code ec,
     core::buffer_regions_t read_body)
 {
-    ptr_t self = boost::dynamic_pointer_cast<server>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<server>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)
@@ -401,7 +401,7 @@ void server::on_response_data_block(
     core::buffer_regions_t data,
     unsigned ind)
 {
-    ptr_t self = boost::dynamic_pointer_cast<server>(b_self);
+    ptr_t self = std::dynamic_pointer_cast<server>(b_self);
     SAMOA_ASSERT(self);
 
     if(ec)

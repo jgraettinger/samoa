@@ -8,6 +8,7 @@
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace core {
@@ -17,8 +18,8 @@ class stream_protocol_read_interface
 {
 public:
 
-    typedef boost::shared_ptr<stream_protocol_read_interface> ptr_t;
-    typedef boost::weak_ptr<stream_protocol_read_interface> weak_ptr_t;
+    typedef std::shared_ptr<stream_protocol_read_interface> ptr_t;
+    typedef std::weak_ptr<stream_protocol_read_interface> weak_ptr_t;
 
     stream_protocol_read_interface()
      :  _in_read(false)
@@ -51,8 +52,8 @@ class stream_protocol_write_interface
 {
 public:
 
-    typedef boost::shared_ptr<stream_protocol_write_interface> ptr_t;
-    typedef boost::weak_ptr<stream_protocol_write_interface> weak_ptr_t;
+    typedef std::shared_ptr<stream_protocol_write_interface> ptr_t;
+    typedef std::weak_ptr<stream_protocol_write_interface> weak_ptr_t;
 
     stream_protocol_write_interface()
      :  _in_write(false)

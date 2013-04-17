@@ -1,9 +1,9 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/client/server.hpp"
 #include "pysamoa/future.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace client {
@@ -31,7 +31,7 @@ void py_on_connect_to(
 
 future::ptr_t py_connect_to(const std::string & host, unsigned short port)
 {
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     server::connect_to(std::bind(py_on_connect_to, f,
         std::placeholders::_1, std::placeholders::_2), host, port);
     return f;
@@ -57,7 +57,7 @@ void py_on_schedule_request(
 
 future::ptr_t py_schedule_request(server & s)
 {
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     s.schedule_request(std::bind(py_on_schedule_request, f,
         std::placeholders::_1, std::placeholders::_2));
     return f;
@@ -96,7 +96,7 @@ void py_on_server_response(
 
 future::ptr_t py_flush_request(server::request_interface & iface)
 {
-    future::ptr_t f(boost::make_shared<future>());
+    future::ptr_t f(std::make_shared<future>());
     iface.flush_request(std::bind(py_on_server_response, f,
         std::placeholders::_1, std::placeholders::_2));
     return f;

@@ -2,6 +2,7 @@
 #include "samoa/core/proactor.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
+#include <memory>
 
 namespace samoa {
 namespace core {
@@ -10,7 +11,7 @@ namespace core {
 void null_cleanup(boost::asio::io_service *){}
 
 // static initialization
-boost::weak_ptr<proactor> proactor::_class_instance;
+std::weak_ptr<proactor> proactor::_class_instance;
 spinlock proactor::_class_lock;
 
 // boost::asio uses RTTI to establish a common registry of services,
@@ -101,7 +102,7 @@ timer_ptr_t proactor::run_later(const run_later_callback_t & callback,
 {
     io_service_ptr_t io_srv = serial_io_service();
 
-    timer_ptr_t timer = boost::make_shared<boost::asio::deadline_timer>(*io_srv);
+    timer_ptr_t timer = std::make_shared<boost::asio::deadline_timer>(*io_srv);
 
     auto callback_closure = [callback, io_srv, timer](
         const boost::system::error_code & ec)

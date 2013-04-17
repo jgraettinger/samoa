@@ -1,10 +1,10 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/command_handler.hpp"
 #include "samoa/request/request_state.hpp"
 #include "samoa/core/proactor.hpp"
 #include "pysamoa/scoped_python.hpp"
 #include "pysamoa/coroutine.hpp"
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -17,7 +17,7 @@ class py_command_handler :
 {
 public:
 
-    typedef boost::shared_ptr<py_command_handler> ptr_t;
+    typedef std::shared_ptr<py_command_handler> ptr_t;
 
     void handle(const request::state::ptr_t & rstate)
     {
@@ -59,6 +59,9 @@ void make_command_handler_bindings()
     bpl::class_<py_command_handler, py_command_handler::ptr_t,
         boost::noncopyable>("CommandHandler")
         .def("checked_handle", &command_handler::checked_handle);
+	bpl::implicitly_convertible<py_command_handler::ptr_t,
+		command_handler::ptr_t>();
+
 }
 
 }

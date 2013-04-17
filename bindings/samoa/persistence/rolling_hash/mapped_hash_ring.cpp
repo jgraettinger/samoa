@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/persistence/rolling_hash/mapped_hash_ring.hpp"
 #include "samoa/persistence/rolling_hash/hash_ring.hpp"
 

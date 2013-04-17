@@ -1,9 +1,10 @@
 
 #include "samoa/core/connection_factory.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
+#include "samoa/log.hpp"
 #include <boost/lexical_cast.hpp>
 #include <boost/asio.hpp>
 #include <functional>
+#include <memory>
 
 namespace samoa {
 namespace core {
@@ -31,7 +32,7 @@ void connection_factory::connect_to(
     const std::string & host,
     unsigned short port)
 {
-    ptr_t self = boost::make_shared<connection_factory>(
+    ptr_t self = std::make_shared<connection_factory>(
         std::move(callback));
 
     ip::tcp::resolver::query query(host,

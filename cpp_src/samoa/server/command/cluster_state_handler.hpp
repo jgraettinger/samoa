@@ -5,8 +5,7 @@
 #include "samoa/server/command_handler.hpp"
 #include "samoa/request/fwd.hpp"
 #include "samoa/core/protobuf/samoa.pb.h"
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -14,11 +13,11 @@ namespace command {
 
 class cluster_state_handler :
     public command_handler,
-    public boost::enable_shared_from_this<cluster_state_handler>
+    public std::enable_shared_from_this<cluster_state_handler>
 {
 public:
 
-    typedef boost::shared_ptr<cluster_state_handler> ptr_t;
+    typedef std::shared_ptr<cluster_state_handler> ptr_t;
 
     cluster_state_handler()
     { }

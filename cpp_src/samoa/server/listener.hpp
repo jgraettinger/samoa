@@ -3,9 +3,8 @@
 
 #include "samoa/core/fwd.hpp"
 #include "samoa/server/fwd.hpp"
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
+#include <memory>
 #include <unordered_map>
 #include <string>
 
@@ -13,7 +12,7 @@ namespace samoa {
 namespace server {
 
 class listener :
-    public boost::enable_shared_from_this<listener>
+    public std::enable_shared_from_this<listener>
 {
 public:
 

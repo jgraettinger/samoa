@@ -4,8 +4,8 @@
 #include "samoa/server/context.hpp"
 #include "samoa/error.hpp"
 #include "samoa/log.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
 #include <ctime>
+#include <memory>
 
 namespace samoa {
 namespace server {
@@ -42,7 +42,7 @@ table_set::table_set(const spb::ClusterState & state,
                 old_tbl = t_it->second;
         }
 
-        tbl = boost::make_shared<table>(*it, local_uuid, old_tbl);
+        tbl = std::make_shared<table>(*it, local_uuid, old_tbl);
 
         // index table on uuid
         SAMOA_ASSERT(_uuid_index.insert(std::make_pair(tbl_uuid, tbl)).second);

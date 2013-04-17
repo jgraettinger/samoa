@@ -1,5 +1,4 @@
-
-#include <boost/python.hpp>
+#include "pysamoa/boost_python.hpp"
 #include "samoa/server/cluster_state.hpp"
 #include "samoa/server/peer_set.hpp"
 #include "samoa/server/table_set.hpp"
