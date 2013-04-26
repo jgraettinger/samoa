@@ -14,7 +14,7 @@ type MappedRing struct {
 	file *os.File
 }
 
-func MapRing(path string, regionSize, indexSize uint32) (*MappedRing, error) {
+func MapRing(path string, regionSize, indexSize int) (*MappedRing, error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, err
@@ -38,8 +38,11 @@ func MapRing(path string, regionSize, indexSize uint32) (*MappedRing, error) {
 	if err != nil {
 		return nil, err
 	}
-	ring := &MappedRing{Ring{region}, file}
+	ring := &MappedRing{Ring{region: region}, file}
 	runtime.SetFinalizer(ring, finalizeMappedRing)
+	if err := ring.initialize(region, indexSize); err != nil {
+		return nil, err
+	}
 	return ring, nil
 }
 
