@@ -1,7 +1,6 @@
 package rollingHash
 
 import (
-	"fmt"
 	"reflect"
 	"unsafe"
 )
@@ -37,33 +36,33 @@ const (
 	kUint32ByteLength     = int(unsafe.Sizeof(uint32(0)))
 )
 
-// Panics if region is too small for indexSize.
-func (ring *Ring) initialize(region []byte, indexSize int) error {
-	minSize := kRingHeaderByteLength + indexSize*kUint32ByteLength
-	if len(region) < minSize {
-		return fmt.Errorf("Region size %v is insufficient for indexSize %v",
-			len(region), indexSize)
-	}
-	ring.region = region
+func invariant(value bool, context ...interface{}) {
+    if !value {
+        panic(context)
+    }
+}
 
+// Panics if region is too small for indexSize.
+func (ring *Ring) initialize(region []byte, indexSize int) {
+	invariant(len(region) >	kRingHeaderByteLength+indexSize*kUint32ByteLength)
+
+	ring.region = region
 	// Break the type system to re-interpret (as tableHeader)
 	// the beginning of the region.
 	ring.header = (*tableHeader)(unsafe.Pointer(&region[0]))
 
-	// Break the type system to re-interpret (as []uint32) the
-	// portion of region containing the index.
-	indexHeader := *(*reflect.SliceHeader)(
-		unsafe.Pointer(&region[kRingHeaderByteLength]))
+	// Break the type system to assign the appropriate underlying
+	// storage region to the ring.index []uint32 slice.
+	indexHeader := (*reflect.SliceHeader)(unsafe.Pointer(&ring.index))
+	indexHeader.Data = uintptr(unsafe.Pointer(&region[kRingHeaderByteLength]))
 	indexHeader.Len = indexSize
 	indexHeader.Cap = indexSize
-	ring.index = *(*[]uint32)(unsafe.Pointer(&indexHeader))
 
 	if ring.header.initializationState == kNotInitialized {
 		ring.header.begin = ring.storageOffset()
 		ring.header.end = ring.storageOffset()
 		ring.header.initializationState = kInitialized
 	}
-	return nil
 }
 
 func (ring *Ring) head() *packet {
@@ -130,12 +129,8 @@ func (ring *Ring) allocatePackets(capacity int) (head *packet) {
 		}
 		blockLength := nextBoundary - end
 
-		if blockLength < kPacketMinByteLength {
-			panic(blockLength)
-		}
-		if blockLength%kPacketAlignment != 0 {
-			panic(blockLength)
-		}
+        invariant(blockLength >= kPacketMinByteLength)
+        invariant(blockLength%kPacketAlignment == 0)
 
 		// Start with length required to fit remaining capacity, rounded up for alignment.
 		packetLength := kPacketHeaderByteLength + capacity
@@ -197,25 +192,19 @@ func (ring *Ring) reclaimHead() int {
 	firstInSequence := true
 
 	for {
-		if pkt == nil {
-			panic(nil)
-		}
-		if !pkt.isDead() {
-			panic(pkt)
-		}
+        invariant(pkt != nil)
+        invariant(pkt.isDead())
+
 		if firstInSequence {
-			if pkt.continuesSequence() {
-				panic(pkt)
-			}
+            invariant(!pkt.continuesSequence())
 			firstInSequence = false
-		} else if !pkt.continuesSequence() {
-			panic(pkt)
+		} else {
+            invariant(pkt.continuesSequence())
 		}
 
 		ring.header.begin += pkt.packetLength()
-		if ring.header.begin > len(ring.region) {
-			panic(pkt)
-		}
+        invariant(ring.header.begin <= len(ring.region))
+
 		if ring.header.wrapped && ring.header.begin == len(ring.region) {
 			ring.header.begin = ring.storageOffset()
 			ring.header.wrapped = false

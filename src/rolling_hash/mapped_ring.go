@@ -40,9 +40,9 @@ func MapRing(path string, regionSize, indexSize int) (*MappedRing, error) {
 	}
 	ring := &MappedRing{Ring{region: region}, file}
 	runtime.SetFinalizer(ring, finalizeMappedRing)
-	if err := ring.initialize(region, indexSize); err != nil {
-		return nil, err
-	}
+	ring.initialize(region, indexSize)
+
+    // TODO: Size checks. Corruption checks.
 	return ring, nil
 }
 
