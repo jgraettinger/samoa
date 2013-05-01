@@ -29,44 +29,44 @@ func (s *RingTest) TestAllocateAndReclaimWithFixture(c *C) {
 	c.Assert(ring.storageOffset(), Equals, 20)
 	c.Assert(ring.storageSize(), Equals, 16552)
 
-	// Allocation #1: 13 of header, 103 of capacity (3 of padding).
+	// Allocation #1: 17 of header, 103 of capacity (3 of padding).
 	pkt := ring.allocatePackets(100)
-	c.Assert(pkt.packetLength(), Equals, 116)
+	c.Assert(pkt.packetLength(), Equals, 120)
 	c.Assert(pkt.capacity(), Equals, 103)
 	c.Assert(pkt.continuesSequence(), Equals, false)
 	c.Assert(pkt.completesSequence(), Equals, true)
 	c.Assert(ring.nextPacket(pkt), IsNil)
-	c.Assert(ring.header.end, Equals, 136)
+	c.Assert(ring.header.end, Equals, 140)
 
 	// Allocation #2: requires two packets.
-	// First packet has 13 of header, 8191 of capacity.
+	// First packet has 17 of header, 8191 of capacity.
 	pkt = ring.allocatePackets(8193)
-	c.Assert(pkt.packetLength(), Equals, 8204)
+	c.Assert(pkt.packetLength(), Equals, 8208)
 	c.Assert(pkt.capacity(), Equals, 8191)
 	c.Assert(pkt.continuesSequence(), Equals, false)
 	c.Assert(pkt.completesSequence(), Equals, false)
 
-	// Second packet has 13 of header, 3 of capacity (2 of padding).
+	// Second packet has 17 of header, 7 of capacity (5 of padding).
 	pkt = ring.nextPacket(pkt)
-	c.Assert(pkt.packetLength(), Equals, 16)
-	c.Assert(pkt.capacity(), Equals, 3)
+	c.Assert(pkt.packetLength(), Equals, 24)
+	c.Assert(pkt.capacity(), Equals, 7)
 	c.Assert(pkt.continuesSequence(), Equals, true)
 	c.Assert(pkt.completesSequence(), Equals, true)
 	c.Assert(ring.nextPacket(pkt), IsNil)
-	c.Assert(ring.header.end, Equals, 8356)
-	c.Assert(ring.storageUsed(), Equals, 8336)
+	c.Assert(ring.header.end, Equals, 8372)
+	c.Assert(ring.storageUsed(), Equals, 8352)
 
-	// Allocation which fails (one byte to large).
-	c.Assert(ring.allocatePackets(8191), IsNil)
-	c.Assert(ring.header.end, Equals, 8356)
+	// Allocation which fails (one byte to large for remaining ring capacity).
+	c.Assert(ring.allocatePackets(8184), IsNil)
+	c.Assert(ring.header.end, Equals, 8372)
 
 	// Allocation #3: could fit in one packet,
 	// but is split into two so as not to leave a remainder
 	// less than a minimum-length packet in size.
 	// First packet has 13 of header, 8187 of capacity.
-	pkt = ring.allocatePackets(8190)
+	pkt = ring.allocatePackets(8160)
 	c.Assert(pkt.packetLength(), Equals, 8200)
-	c.Assert(pkt.capacity(), Equals, 8187)
+	c.Assert(pkt.capacity(), Equals, 8183)
 	c.Assert(pkt.continuesSequence(), Equals, false)
 	c.Assert(pkt.completesSequence(), Equals, false)
 

@@ -2,15 +2,17 @@ package rollingHash
 
 import (
 	"fmt"
+	"hash"
+	"hash/crc64"
 	"strings"
 	"unsafe"
 )
 
 type packet struct {
-	checksum uint32
-	next     uint32
-	meta     [5]uint8
-	data     [1 << 13]byte
+	crc  uint64
+	next uint32
+	meta [5]uint8
+	data [1 << 13]byte
 }
 
 const (
@@ -46,6 +48,15 @@ const (
 	kPacketValueLengthMask2 = 0xff // meta[4] 0b11111111 (low bits)
 )
 
+var (
+	// Shared table for efficient checksumming.
+	kChecksumTable *crc64.Table
+)
+
+func init() {
+	kChecksumTable = crc64.MakeTable(crc64.ECMA)
+}
+
 // Initializes the packet by setting capacity and zeroing all other metadata.
 // Packet data itself is not zeroed. If the requested length is more than
 // kPacketMaxByteLength, or if the resulting packet wouldn't be aligned,
@@ -54,10 +65,10 @@ func (p *packet) initialize(packetLength int) {
 	if packetLength > kPacketMaxByteLength {
 		panic(fmt.Errorf("%v overflows max packet length.", packetLength))
 	}
-	if packetLength % kPacketAlignment != 0 {
+	if packetLength%kPacketAlignment != 0 {
 		panic(fmt.Errorf("Length of %v is not packet aligned.", packetLength))
 	}
-	p.checksum = 0
+	p.crc = 0
 	p.next = 0
 	p.meta = [5]uint8{0, 0, 0, 0, 0}
 
@@ -155,7 +166,6 @@ func (p *packet) markDead() {
 func (p *packet) continuesSequence() bool {
 	return p.meta[0]&kPacketContinuesMask != 0
 }
-
 func (p *packet) markContinuesSequence() {
 	p.meta[0] |= kPacketContinuesMask
 }
@@ -169,9 +179,53 @@ func (p *packet) markCompletesSequence() {
 	p.meta[0] |= kPacketCompletesMask
 }
 
+// Asserts the combined metadata and content checksum is correct.
+func (p *packet) checkIntegrity(contentSummer hash.Hash64) {
+	invariant(p.keyLength()+p.valueLength() < p.capacity())
+	invariant(p.computeCombinedChecksum(contentSummer) == p.crc)
+}
+
+// Computes the running checksum of this packet's key and value content.
+// contentSummer is expected to be a running checksum of all antecedent
+// packet content. As packets always arrange key content first, followed by
+// value content, any arrangement of specific packet sequences will produce
+// identical completed checksum.
+func (p *packet) computeContentChecksum(contentSummer hash.Hash64) uint64 {
+	contentSummer.Write(p.key())
+	contentSummer.Write(p.value())
+	return contentSummer.Sum64()
+}
+
+// Computes the checksum of this packet's meta-data. Specifically:
+// packet.next, isDead(), continuesSequence(), and completesSequence().
+func (p *packet) computeMetaChecksum() uint64 {
+	var buf [kPacketHeaderByteLength]byte
+	buf[0] = byte(p.next)
+	buf[1] = byte(p.next >> 8)
+	buf[2] = byte(p.next >> 16)
+	buf[3] = byte(p.next >> 24)
+	for i, v := range p.meta {
+		buf[i+4] = byte(v)
+	}
+	metaSummer := crc64.New(kChecksumTable)
+	metaSummer.Write(buf[:])
+	return metaSummer.Sum64()
+}
+
+// Efficient updates of the packet's checksum to reflect changes to metadata.
+func (p *packet) updateMetaOfCombinedChecksum(oldMetaChecksum uint64) {
+	p.crc ^= oldMetaChecksum
+	p.crc ^= p.computeMetaChecksum()
+}
+
+// Combined (xor) checksum of the running content sum, plus meta-data.
+func (p *packet) computeCombinedChecksum(contentSummer hash.Hash64) uint64 {
+	return p.computeMetaChecksum() ^ p.computeContentChecksum(contentSummer)
+}
+
 func (p *packet) String() string {
 	fields := append([]string{},
-		fmt.Sprint("checksum = ", p.checksum),
+		fmt.Sprint("crc = ", p.crc),
 		fmt.Sprint("next = ", p.next),
 		fmt.Sprint("capacity = ", p.capacity()),
 		fmt.Sprint("available = ", p.availableCapacity()),

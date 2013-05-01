@@ -9,18 +9,19 @@ type PacketTest struct {
 }
 
 func (s *PacketTest) TestConstants(c *C) {
-	c.Check(4, Equals, kPacketAlignment)
-	c.Check(13, Equals, kPacketHeaderByteLength)
+	c.Check(8, Equals, kPacketAlignment)
+	c.Check(17, Equals, kPacketHeaderByteLength)
 	c.Check(1, Equals, kPacketHeaderAlignment)
-	c.Check(3, Equals, kPacketAlignmentAdjustment)
+	c.Check(7, Equals, kPacketAlignmentAdjustment)
 	c.Check(8191, Equals, kPacketMaxCapacity)
-	c.Check(16, Equals, kPacketMinByteLength)
-	c.Check(8204, Equals, kPacketMaxByteLength)
+	c.Check(24, Equals, kPacketMinByteLength)
+	c.Check(8208, Equals, kPacketMaxByteLength)
 }
 
 func (s *PacketTest) TestInitializeAndFlags(c *C) {
 	var p packet
-	c.Check(p.capacity(), Equals, kPacketAlignmentAdjustment)
+	// Two lowest bits of packet are implicit.
+	c.Check(p.capacity(), Equals, 3)
 
 	c.Check(func() { p.initialize(kPacketMinByteLength + 1) },
 		PanicMatches, "Length of \\d+ is not packet aligned.")
