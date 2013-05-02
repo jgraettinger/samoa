@@ -9,13 +9,13 @@ type PacketTest struct {
 }
 
 func (s *PacketTest) TestConstants(c *C) {
-	c.Check(8, Equals, kPacketAlignment)
-	c.Check(17, Equals, kPacketHeaderByteLength)
-	c.Check(1, Equals, kPacketHeaderAlignment)
-	c.Check(7, Equals, kPacketAlignmentAdjustment)
-	c.Check(8191, Equals, kPacketMaxCapacity)
-	c.Check(24, Equals, kPacketMinByteLength)
-	c.Check(8208, Equals, kPacketMaxByteLength)
+	c.Check(kPacketAlignment, Equals, 8)
+	c.Check(kPacketHeaderByteLength, Equals, 17)
+	c.Check(kPacketHeaderAlignment, Equals, 1)
+	c.Check(kPacketAlignmentAdjustment, Equals, 7)
+	c.Check(kPacketMaxCapacity, Equals, 8191)
+	c.Check(kPacketMinByteLength, Equals, 24)
+	c.Check(kPacketMaxByteLength, Equals, 8208)
 }
 
 func (s *PacketTest) TestInitializeAndFlags(c *C) {

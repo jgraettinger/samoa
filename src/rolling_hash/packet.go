@@ -230,7 +230,8 @@ func (p *packet) String() string {
 		fmt.Sprint("capacity = ", p.capacity()),
 		fmt.Sprint("available = ", p.availableCapacity()),
 		fmt.Sprint("keyLength = ", p.keyLength()),
-		fmt.Sprint("valueLength = ", p.valueLength()))
+		fmt.Sprint("valueLength = ", p.valueLength()),
+		fmt.Sprint("packetLength = ", p.packetLength()))
 	if p.isDead() {
 		fields = append(fields, "dead")
 	}
