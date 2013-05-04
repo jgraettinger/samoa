@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"unsafe"
 )
@@ -41,7 +42,8 @@ const (
 
 func invariant(value bool, context ...interface{}) {
 	if !value {
-		panic(context)
+		panic(fmt.Errorf("Invariant failure.\nContext:%v\nStack:\n%v",
+			context, string(debug.Stack())))
 	}
 }
 

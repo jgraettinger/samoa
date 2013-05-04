@@ -1,6 +1,7 @@
 package rollingHash
 
 import (
+	"errors"
 	"fmt"
 	"hash"
 	"hash/crc64"
@@ -50,11 +51,11 @@ const (
 
 var (
 	// Shared table for efficient checksumming.
-	kChecksumTable *crc64.Table
+	kPacketChecksumTable *crc64.Table
 )
 
 func init() {
-	kChecksumTable = crc64.MakeTable(crc64.ECMA)
+	kPacketChecksumTable = crc64.MakeTable(crc64.ECMA)
 }
 
 // Initializes the packet by setting capacity and zeroing all other metadata.
@@ -180,9 +181,14 @@ func (p *packet) markCompletesSequence() {
 }
 
 // Asserts the combined metadata and content checksum is correct.
-func (p *packet) checkIntegrity(contentSummer hash.Hash64) {
-	invariant(p.keyLength()+p.valueLength() < p.capacity())
-	invariant(p.computeCombinedChecksum(contentSummer) == p.crc)
+func (p *packet) checkIntegrity(contentSummer hash.Hash64) error {
+	if p.keyLength()+p.valueLength() > p.capacity() {
+		return errors.New("Invalid key/value length")
+	}
+	if p.computeCombinedChecksum(contentSummer) != p.crc {
+		return errors.New("Checksum mismatch")
+	}
+	return nil
 }
 
 // Computes the running checksum of this packet's key and value content.
@@ -207,7 +213,7 @@ func (p *packet) computeMetaChecksum() uint64 {
 	for i, v := range p.meta {
 		buf[i+4] = byte(v)
 	}
-	metaSummer := crc64.New(kChecksumTable)
+	metaSummer := crc64.New(kPacketChecksumTable)
 	metaSummer.Write(buf[:])
 	return metaSummer.Sum64()
 }
